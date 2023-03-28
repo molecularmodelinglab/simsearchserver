@@ -1,0 +1,7 @@
+[workspace] 
+
+members = [
+	"kd_tree",
+	"builder",
+	"server",
+]
