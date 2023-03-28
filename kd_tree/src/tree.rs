@@ -109,6 +109,21 @@ impl TopHits {
 
         return self.distances[self.max_length - 1];
     }
+
+    pub fn to_json(&self) -> Vec<u8> {
+
+        let mut s = String::new();
+        s += "{";
+        for i in 0..self.records.len() {
+            s = s + &format!("  \"{}\": {{\n", &self.records[i].as_ref().unwrap().compound_identifier.0);
+            s = s + &format!("  \"distance\": \"{}\"", &self.distances[i]).to_string();
+            s = s + "," + "\n";
+        s += "},\n";
+        }
+        s += "}";
+        return s.as_bytes().to_vec();
+
+    }
 }
 
 pub enum Direction {
