@@ -139,6 +139,28 @@ pub enum NodeAction {
 
 impl Tree {
 
+    pub fn from_filenames(node_filename: String, record_filename: String) -> Self {
+
+        dbg!(&node_filename);
+        dbg!(&record_filename);
+        let mut node_pager = Pager::new(Path::new(&node_filename), false).unwrap();
+        let mut record_pager = Pager::new(Path::new(&record_filename), false).unwrap();
+
+        let free_node_pages = VecDeque::from([PageAddress(0)]);
+              
+        return Self {
+            node_pager,
+            record_pager, 
+            dirname: "not implemented".to_string(),
+            free_node_pages,
+            root: Some(PagePointer {
+                page_type: PageType::Node,
+                page_address: PageAddress(0),
+                node_offset: NodeOffset(0),
+            }),
+            };
+    }
+
     ///Given a target directory, either use the existing files in that directory for querying or
     ///construction of a new tree 
     pub fn new(directory_name: String, create: bool) -> Self {
@@ -146,6 +168,7 @@ impl Tree {
         let node_filename = directory_name.clone() + "/" + "node";
         let record_filename = directory_name.clone() + "/" + "record";
 
+        dbg!(&node_filename);
         let mut node_pager = Pager::new(Path::new(&node_filename), create).unwrap();
         let mut record_pager = Pager::new(Path::new(&record_filename), create).unwrap();
 
@@ -252,6 +275,9 @@ impl Tree {
 
         let mut hits = TopHits::new(n);
 
+        let mut num_nodes_visited: usize = 0;
+        let mut num_record_pages_visited: usize = 0;
+
         //direction is the one we go if we pass!!!
         let mut nodes_to_check: VecDeque<(PagePointer, NodeAction, Option<Direction>)> = VecDeque::new();
 
@@ -281,8 +307,11 @@ impl Tree {
 
                 NodeAction::Descend => {
 
+
                     match curr_pointer.page_type {
                         PageType::Leaf => {
+
+                            num_record_pages_visited += 1;
 
                             let page: LeafPage = self.record_pager.get_record_page(&curr_pointer.page_address.clone()).unwrap();
 
@@ -295,6 +324,8 @@ impl Tree {
 
                         },
                         PageType::Node => {
+
+                            num_nodes_visited += 1;
 
                             let page = self.node_pager.get_node_page(&curr_pointer.page_address).unwrap();
                             let node = page.get_node_at(curr_pointer.node_offset.clone()).unwrap();
@@ -386,6 +417,9 @@ impl Tree {
                 },
             }
         }
+
+        println!("NODES VISITED: {:?}", num_nodes_visited);
+        println!("RECORD PAGES VISITED: {:?}", num_record_pages_visited);
 
         return hits;
 
@@ -1308,6 +1342,32 @@ mod tests {
 
 
 
+    #[test]
+    fn bil_test_speed(){
+
+        //let db_filename = "/home/josh/db/1_bil_test/".to_string();
+        //let node_filename = "/home/josh/db/1_bil_test/node".to_string();
+        let node_filename = "/home/josh/tmpfs_mount_point/node".to_string();
+        //let record_filename = "/home/josh/db/1_bil_test/record".to_string();
+        let record_filename = "/home/josh/big_tmpfs/record".to_string();
+        //let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone())));
+        let mut tree = Tree::from_filenames(node_filename.clone(), record_filename.clone());
+        //pretty_env_logger::init();
+
+
+        let random_arr: [f32; 8] = rand::random();
+        let descriptor = Descriptor { data: random_arr };
+        dbg!(&descriptor);
+
+
+        //let descriptor = Descriptor::from_vec(vec![0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]);
+        println!("HERE");
+        println!("HERE2");
+        let nn = tree.get_nearest_neighbors(&descriptor, 10);
+
+        dbg!(&nn);
+     
+    }
 
 
 

@@ -8,3 +8,4 @@ kd_tree = { path = "../kd_tree" }
 hyper = {version = "0.14", features = ["full"]}
 tokio = {version = "*", features = ["full"]}
 bytes = "*"
+rand = "*"

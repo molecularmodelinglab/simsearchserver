@@ -4,6 +4,8 @@ use kd_tree::node::Descriptor;
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 
+use rand::prelude::*;
+
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use hyper::server::Server;
@@ -11,7 +13,12 @@ use hyper::server::Server;
 async fn hello(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Response<Body>, Infallible> {
     println!("{:?}", req.uri().path());
 
-    let descriptor = Descriptor::from_vec(vec![1.0,2.0,3.0,4.0,5.0,6.0,7.0,8.0]);
+    let random_arr: [f32; 8] = rand::random();
+    let descriptor = Descriptor { data: random_arr };
+    dbg!(&descriptor);
+
+
+    //let descriptor = Descriptor::from_vec(vec![0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]);
     println!("HERE");
     let mut mg = tree.lock().unwrap();
     println!("HERE2");
@@ -26,8 +33,12 @@ async fn hello(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Respo
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     
-    let db_filename = "/home/josh/db/chembl_8/".to_string();
-    let mut tree = Arc::new(Mutex::new(tree::Tree::new(db_filename.clone(), false)));
+    //let db_filename = "/home/josh/db/1_bil_test/".to_string();
+    //let node_filename = "/home/josh/db/1_bil_test/node".to_string();
+    let node_filename = "/home/josh/tmpfs_mount_point/node".to_string();
+    //let record_filename = "/home/josh/db/1_bil_test/record".to_string();
+    let record_filename = "/home/josh/big_tmpfs/record".to_string();
+    let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone())));
     //pretty_env_logger::init();
 
     // For every connection, we must make a `Service` to handle all

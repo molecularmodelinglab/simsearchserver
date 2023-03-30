@@ -5,3 +5,11 @@ members = [
 	"builder",
 	"server",
 ]
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
+[profile.release]
+lto = true
+codegen-units = 1

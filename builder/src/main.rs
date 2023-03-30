@@ -1,4 +1,6 @@
 use kd_tree::node::{CompoundIdentifier, Descriptor, CompoundRecord};
+use rand::prelude::*;
+use rand::distributions::Alphanumeric;
 use kdam::tqdm;
 use kd_tree::tree;
 use std::fs::File;
@@ -7,6 +9,34 @@ use std::path::Path;
 
 fn main() {
 
+    fn get_random_record() -> CompoundRecord {
+
+        let random_arr: [f32; 8] = rand::random();
+        let mut rng = thread_rng();
+        let chars: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
+
+        let descriptor = Descriptor { data: random_arr };
+
+        let identifier = CompoundIdentifier::from_string(chars);
+
+        let cr = CompoundRecord {
+            dataset_identifier: 0,
+            compound_identifier: identifier,
+            descriptor,
+        };
+
+        return cr;
+    }
+
+
+    let db_filename = "/home/josh/db/1_bil_test/".to_string();
+    let mut tree = tree::Tree::new(db_filename.clone(), true);
+    for _ in tqdm!(0..1e9 as usize) {
+        let rec = get_random_record();
+        tree.add_record(&rec).unwrap();
+    }
+
+    /*
     let db_filename = "/home/josh/db/chembl_8/".to_string();
     let input_filename = "/home/josh/db/chembl_8.csv".to_string();
     let mut tree = tree::Tree::new(db_filename.clone(), true);
@@ -48,6 +78,7 @@ fn main() {
             }
         }
     }
+    */
 }
 
 fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
