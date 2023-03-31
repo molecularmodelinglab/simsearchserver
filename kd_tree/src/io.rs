@@ -425,13 +425,13 @@ impl CachedPager {
         let mut address_map: HashMap<(usize, usize), usize> = HashMap::new();
 
         for i in 0..node_pager.cursor.0 {
-            println!("I: {}", i);
+            //println!("I: {}", i);
 
             let page = node_pager.get_node_page(&PageAddress(i)).unwrap();
             let nodes = page.get_nodes();
 
             for (j, node) in nodes.iter().enumerate() {
-                println!("\tJ: {}", j);
+                //println!("\tJ: {}", j);
                 let key = (i as usize, j as usize); 
 
                 all_nodes.push(node.clone());

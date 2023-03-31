@@ -3,6 +3,7 @@ extern crate test;
 use crate::node::{InternalNode, CompoundRecord, PageAddress, Descriptor, NodeOffset};
 use crate::page::{LeafPage, NodePage, PageType };
 use crate::io::{Pager, PagePointer, CachedPager};
+use ascii::{AsAsciiStr, AsciiString};
 
 use std::path::Path;
 use std::collections::VecDeque;
@@ -118,7 +119,15 @@ impl TopHits {
         let mut s = String::new();
         s += "{";
         for i in 0..self.records.len() {
-            s = s + &format!("  \"{:?}\": {{\n", &self.records[i].as_ref().unwrap().compound_identifier.0);
+
+            let record = match &self.records[i] {
+                None => {panic!()},
+                Some(x) => x.clone(),
+            };
+            //let identifier_str: AsciiString = AsciiString::from_ascii(record.compound_identifier.0.clone()).unwrap();
+            //let identifier_str: AsciiString = AsciiString::from_ascii(record.compound_identifier.0.clone()).unwrap();
+            let identifier_string = record.compound_identifier.to_string();
+            s = s + &format!("  \"{:?}\": {{\n", identifier_string);
             s = s + &format!("  \"distance\": \"{}\"", &self.distances[i]).to_string();
             s = s + "," + "\n";
         s += "},\n";

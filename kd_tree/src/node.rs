@@ -134,6 +134,14 @@ impl CompoundIdentifier {
         return Self(bytes);
     }
 
+    pub fn to_string(&self) -> String {
+
+        let identifier_str: AsciiString = AsciiString::from_ascii(self.0.clone()).unwrap();
+        let identifier_string = String::from(identifier_str);
+        
+        return identifier_string;
+    }
+
 }
 
 #[derive(Debug, PartialEq, Clone)]
