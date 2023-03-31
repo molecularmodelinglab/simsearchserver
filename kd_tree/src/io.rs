@@ -4,7 +4,7 @@
 
 use crate::error::Error;
 //use crate::node::{PageAddress, InternalNode, NodeOffset, Descriptor, CompoundRecord, CompoundIdentifier};
-use crate::node::{PageAddress, NodeOffset, CompoundIdentifier};
+use crate::node::{PageAddress, NodeOffset, CompoundIdentifier, InternalNode};
 use crate::page::{NodePage, LeafPage, Pageable, PageType};
 use byteorder::{ByteOrder, BigEndian};
 use crate::layout;
@@ -12,6 +12,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
+use std::collections::HashMap;
 
 use std::fmt;
 
@@ -118,9 +119,14 @@ impl Pager {
     }
 
     pub fn get_node_page(&mut self, offset: &PageAddress) -> Result<NodePage, Error> {
+        //dbg!(&offset);
         let mut page: [u8; layout::PAGE_SIZE] = [0x00; layout::PAGE_SIZE];
+
+        let start = self.calc_offset(offset.as_actual_address());
+        //dbg!(&start);
         self.file.seek(SeekFrom::Start(self.calc_offset(offset.as_actual_address())))?;
         self.file.read_exact(&mut page)?;
+        //dbg!(&page[0..10]);
 
         let page = NodePage::from_arr(page);
 
@@ -190,6 +196,7 @@ impl Pager {
     pub fn write_page(&mut self, page: &impl Pageable) -> Result<PageAddress, Error> {
         self.file.seek(SeekFrom::Start(self.calc_offset(self.cursor.as_actual_address())))?;
         let data = page.get_data();
+        //dbg!(&data[0..10]);
         //self.file.write_all(data)?;
         self.file.write(data)?;
 
@@ -302,7 +309,7 @@ mod tests {
                                         [1.1,2.2,3.3,4.4,5.5,6.6,7.7,8.8];
         let cr = CompoundRecord {
             dataset_identifier: 0,
-            compound_identifier: CompoundIdentifier("ZINC1234".to_string()),
+            compound_identifier: CompoundIdentifier::from_str("ZINC1234"),
             descriptor: Descriptor{data: descriptor_array},
         };
 
@@ -337,13 +344,13 @@ mod tests {
                                         [1.1,2.2,3.3,4.4,5.5,6.6,7.7,8.8];
         let cr1 = CompoundRecord {
             dataset_identifier: 0,
-            compound_identifier: CompoundIdentifier("ZINC1234".to_string()),
+            compound_identifier: CompoundIdentifier::from_str("ZINC1234"),
             descriptor: Descriptor{data: descriptor_array},
         };
                           [1.1,2.2,3.3,4.4,5.5,6.6,7.7,8.8];
         let cr2 = CompoundRecord {
             dataset_identifier: 0,
-            compound_identifier: CompoundIdentifier("ENAMINE1234".to_string()),
+            compound_identifier: CompoundIdentifier::from_str("ENAMINE1234"),
             descriptor: Descriptor{data: descriptor_array},
         };
 
@@ -397,3 +404,56 @@ mod tests {
 
 
 }
+
+
+
+#[derive(Debug)]
+pub struct CachedPager {
+    pub nodes: Vec<InternalNode>,
+    pub address_map: HashMap<(usize, usize), usize>,
+}
+
+impl CachedPager {
+
+    pub fn from_filename(filename: &Path) -> Result<CachedPager, Error> {
+
+        dbg!(filename);
+        let mut node_pager = Pager::new(filename, false)?;
+
+        //TODO: make this capacity calculation correct
+        let mut all_nodes: Vec<InternalNode> = Vec::with_capacity(node_pager.cursor.0 * 300);
+        let mut address_map: HashMap<(usize, usize), usize> = HashMap::new();
+
+        for i in 0..node_pager.cursor.0 {
+            println!("I: {}", i);
+
+            let page = node_pager.get_node_page(&PageAddress(i)).unwrap();
+            let nodes = page.get_nodes();
+
+            for (j, node) in nodes.iter().enumerate() {
+                println!("\tJ: {}", j);
+                let key = (i as usize, j as usize); 
+
+                all_nodes.push(node.clone());
+
+                address_map.insert(key, all_nodes.len() - 1);
+
+            }
+        }
+
+        Ok(CachedPager {
+            nodes: all_nodes,
+            address_map,
+        })
+    }
+
+    pub fn get_node_from_address(&self, address: &PageAddress, offset: &NodeOffset) -> Result<InternalNode, String> {
+        let address = address.0 as usize;
+        let offset = offset.0 as usize;
+
+        return Ok(self.nodes[self.address_map[&(address, offset)]].clone());
+
+    }
+
+}
+

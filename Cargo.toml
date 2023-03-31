@@ -4,6 +4,7 @@ members = [
 	"kd_tree",
 	"builder",
 	"server",
+	"query_test",
 ]
 
 [profile.release-with-debug]

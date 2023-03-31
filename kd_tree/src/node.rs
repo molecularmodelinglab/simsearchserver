@@ -1,6 +1,9 @@
 //! Holds structs and methods for representing nodes (both internal and leaf) of kd tree.
 //!
 //! Structs can be sent to and from fixed-length byte arrays to be swapped back and forth from disk
+//!
+
+use rand::prelude::*;
 
 use crate::error::Error;
 use crate::page::PageType;
@@ -60,7 +63,7 @@ impl Descriptor {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct InternalNode {
 
     pub parent_page_address: PageAddress,
@@ -79,28 +82,58 @@ pub struct InternalNode {
 pub const IDENTIFIER_SIZE: usize = 16;
 pub const DESCRIPTOR_SIZE: usize = 32;
 
+//pub struct CompoundIdentifier(pub String);
+
 #[derive(Debug, PartialEq, Clone)]
-pub struct CompoundIdentifier(pub String);
+pub struct CompoundIdentifier(pub [u8; IDENTIFIER_SIZE]);
+
+
 impl CompoundIdentifier {
 
     pub fn from_string(s: String) -> Self {
 
         assert!(s.len() <= 16);
+
+        return Self::from_str(&s);
+    }
+
+    pub fn from_str(data: &str) -> Self {
+
+        let mut fill_arr = [0u8; IDENTIFIER_SIZE];
+
+        let bytes = data.as_bytes();
+
+        
+        fill_arr[..bytes.len()].copy_from_slice(bytes);
+        //dbg!(&bytes.len());
+        let s: [u8;IDENTIFIER_SIZE] = fill_arr.try_into().expect("slice with incorrect length");
+
         return Self(s);
     }
 
-    fn from_ascii_array(data: &[u8], offset: usize, length: usize) -> Self {
+    pub fn from_ascii_array(data: &[u8], offset: usize, length: usize) -> Self {
 
         let bytes = &data[offset..offset + length];
-        let ascii_str = bytes.as_ascii_str().unwrap();
-        let ascii_string = ascii_str.to_string();
+        let s: [u8;IDENTIFIER_SIZE] = bytes.try_into().expect("slice with incorrect length");
+        return Self(s);
 
-        //if there's a \0 that means it's left over from array initialization
-        //probably not the correct way to handle this
-        let clean_str = ascii_string.chars().filter(|x| *x != '\0').collect();
-
-        return Self::from_string(clean_str);
     }
+
+    pub fn random() -> Self {
+
+        let mut rng = rand::thread_rng();
+        let mut bytes = [0u8; IDENTIFIER_SIZE];
+
+
+        for x in &mut bytes {
+            *x = rng.gen_range(60..80);
+        }
+
+        //rng.fill(&mut bytes[..]);
+
+        return Self(bytes);
+    }
+
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -109,6 +142,11 @@ pub struct CompoundRecord {
     pub compound_identifier: CompoundIdentifier,
     pub descriptor: Descriptor,
 }
+
+pub fn coerce_(value: &[u8]) -> [u8; 1] {
+    value.try_into().expect("slice with incorrect length")
+}
+
 pub fn coerce_byte(value: &[u8]) -> [u8; 1] {
     value.try_into().expect("slice with incorrect length")
 }
@@ -155,16 +193,19 @@ pub fn get_usize_from_array(data: &[u8], offset: usize, length: usize) -> Result
         let num_iters = layout::DESCRIPTOR_LENGTH;
 
         let mut curr_offset: usize = offset;
-        let mut values: Vec<f32> = Vec::new();
-        for _ in 0..num_iters {
+        //let mut values: Vec<f32> = Vec::new();
+        let mut arr: [f32; layout::DESCRIPTOR_LENGTH] = [0.0; layout::DESCRIPTOR_LENGTH];
+        //let mut values: Vec<f32> = Vec::with_capacity(layout::DESCRIPTOR_LENGTH);
+        for i in 0..num_iters {
             let bytes = &data[curr_offset..curr_offset + 4];
             let known_size_array = coerce_f32(bytes);
             let attempted_f32 = BigEndian::read_f32(&known_size_array);
-            values.push(attempted_f32);
+            //values.push(attempted_f32);
+            arr[i] = attempted_f32;
             curr_offset += 4;
         }
 
-        let arr: [f32; layout::DESCRIPTOR_LENGTH] = vec_to_array(values);
+        //let arr: [f32; layout::DESCRIPTOR_LENGTH] = vec_to_array(values);
 
         let desc = Descriptor { data: arr };
         Ok(desc)
@@ -184,7 +225,7 @@ impl CompoundRecord {
 
         return Self {
             dataset_identifier: 0,
-            compound_identifier: CompoundIdentifier::from_string("default name".to_string()),
+            compound_identifier: CompoundIdentifier::from_str("defaultname"),
             descriptor: Descriptor {data: [0.0; layout::DESCRIPTOR_LENGTH]},
         }
     }
@@ -452,7 +493,7 @@ mod tests {
 
         let true_cr = CompoundRecord {
             dataset_identifier: 1,
-            compound_identifier: CompoundIdentifier("ABCDEFGHIJKLMNOP".to_string()),
+            compound_identifier: CompoundIdentifier::from_str("ABCDEFGHIJKLMNOP"),
             descriptor: Descriptor {
                 data:  [6.9,6.9,6.9,6.9,
                         6.9,6.9,6.9,6.9],
@@ -472,7 +513,7 @@ mod tests {
                                         [1.1,2.2,3.3,4.4,5.5,6.6,7.7,8.8];
         let cr = CompoundRecord {
             dataset_identifier: 0,
-            compound_identifier: CompoundIdentifier("ayy".to_string()),
+            compound_identifier: CompoundIdentifier::from_str("ayy"),
             descriptor: Descriptor{data: descriptor_array},
         };
 

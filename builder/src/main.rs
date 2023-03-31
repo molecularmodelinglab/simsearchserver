@@ -1,3 +1,4 @@
+use kd_tree::layout;
 use kd_tree::node::{CompoundIdentifier, Descriptor, CompoundRecord};
 use rand::prelude::*;
 use rand::distributions::Alphanumeric;
@@ -12,12 +13,12 @@ fn main() {
     fn get_random_record() -> CompoundRecord {
 
         let random_arr: [f32; 8] = rand::random();
-        let mut rng = thread_rng();
-        let chars: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
+        //let mut rng = thread_rng();
+        //let chars: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
 
         let descriptor = Descriptor { data: random_arr };
 
-        let identifier = CompoundIdentifier::from_string(chars);
+        let identifier = CompoundIdentifier::random();
 
         let cr = CompoundRecord {
             dataset_identifier: 0,
@@ -29,7 +30,8 @@ fn main() {
     }
 
 
-    let db_filename = "/home/josh/db/1_bil_test/".to_string();
+    let db_filename = "/home/josh/db/1_bil_8k_page/".to_string();
+    dbg!(layout::PAGE_SIZE);
     let mut tree = tree::Tree::new(db_filename.clone(), true);
     for _ in tqdm!(0..1e9 as usize) {
         let rec = get_random_record();

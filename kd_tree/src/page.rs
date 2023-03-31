@@ -138,6 +138,8 @@ impl NodePage {
             Some(x) => Some(NodeOffset(x.0 + 1)),
         };
 
+        //dbg!(&self.tail);
+
         //ensure tail value is updated
         self.data[layout::TAIL_OFFSET] = self.tail.clone().unwrap().0 as u8;
 
@@ -166,6 +168,8 @@ impl NodePage {
     }
 
     pub fn get_node_at(&self, offset: NodeOffset) -> Result<InternalNode, String> {
+
+        //dbg!(&self.get_data()[0..10]);
         //println!("CURR TAIL: {:?}", self.tail);
 
         let tail = match &self.tail {
@@ -173,12 +177,15 @@ impl NodePage {
             Some(x) => x,
         };
 
+        //dbg!(&offset);
+        //dbg!(&tail);
         if offset.0 > tail.0 {
             return Err("You're asking too much".to_string());
         }
         //dbg!(&offset);
         let mut start = layout::PAGE_DATA_START;
         start += offset.0 * layout::NODE_SIZE;
+        //dbg!(layout::NODE_SIZE);
         //dbg!(&start);
         let slice = &self.data[start..start + layout::NODE_SIZE];
 
@@ -197,7 +204,8 @@ impl NodePage {
 
     pub fn get_nodes(&self) -> Vec::<InternalNode> {
 
-        let mut v: Vec::<InternalNode> = Vec::new();
+        //let mut v: Vec::<InternalNode> = Vec::new();
+        let mut v: Vec::<InternalNode> = Vec::with_capacity(self.get_capacity());
 
         for offset in 0..1000 {
 
@@ -387,7 +395,8 @@ impl LeafPage {
 
     pub fn get_records(&self) -> Vec::<CompoundRecord> {
 
-        let mut v: Vec::<CompoundRecord> = Vec::new();
+        //let mut v: Vec::<CompoundRecord> = Vec::new();
+        let mut v: Vec::<CompoundRecord> = Vec::with_capacity(self.get_capacity());
 
         for offset in 0..200 {
 

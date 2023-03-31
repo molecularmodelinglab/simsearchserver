@@ -2,7 +2,7 @@
 extern crate test;
 use crate::node::{InternalNode, CompoundRecord, PageAddress, Descriptor, NodeOffset};
 use crate::page::{LeafPage, NodePage, PageType };
-use crate::io::{Pager, PagePointer};
+use crate::io::{Pager, PagePointer, CachedPager};
 
 use std::path::Path;
 use std::collections::VecDeque;
@@ -12,12 +12,15 @@ use std::collections::VecDeque;
 /// Can be either for reading or just querying given a directory on disk. Internal nodes and leaf
 /// nodes are stored in separate files and paged separately.
 #[derive(Debug)]
+
 pub struct Tree {
     pub node_pager: Pager,
     pub record_pager: Pager,
+    pub cached_node_pager: Option<CachedPager>,
     pub dirname: String,
     pub free_node_pages: VecDeque<PageAddress>,
     pub root: Option<PagePointer>,
+    pub use_cached_nodes: bool,
 
 }
 
@@ -115,7 +118,7 @@ impl TopHits {
         let mut s = String::new();
         s += "{";
         for i in 0..self.records.len() {
-            s = s + &format!("  \"{}\": {{\n", &self.records[i].as_ref().unwrap().compound_identifier.0);
+            s = s + &format!("  \"{:?}\": {{\n", &self.records[i].as_ref().unwrap().compound_identifier.0);
             s = s + &format!("  \"distance\": \"{}\"", &self.distances[i]).to_string();
             s = s + "," + "\n";
         s += "},\n";
@@ -139,7 +142,7 @@ pub enum NodeAction {
 
 impl Tree {
 
-    pub fn from_filenames(node_filename: String, record_filename: String) -> Self {
+    pub fn from_filenames(node_filename: String, record_filename: String, cache: bool) -> Self {
 
         dbg!(&node_filename);
         dbg!(&record_filename);
@@ -147,6 +150,16 @@ impl Tree {
         let mut record_pager = Pager::new(Path::new(&record_filename), false).unwrap();
 
         let free_node_pages = VecDeque::from([PageAddress(0)]);
+
+        let (cached_node_pager, use_cached_nodes) : (Option<CachedPager>, bool) = match cache {
+            
+            true => {
+
+                (Some(CachedPager::from_filename(Path::new(&node_filename)).unwrap()), true)
+
+            },
+            false => (None, false),
+        };
               
         return Self {
             node_pager,
@@ -158,6 +171,8 @@ impl Tree {
                 page_address: PageAddress(0),
                 node_offset: NodeOffset(0),
             }),
+            cached_node_pager,
+            use_cached_nodes,
             };
     }
 
@@ -192,6 +207,8 @@ impl Tree {
                     free_node_pages,
                     //free_record_pages: free_record_pages,
                     root: None,
+                    cached_node_pager: None,
+                    use_cached_nodes: false,
                 };
             },
             false => {
@@ -205,9 +222,89 @@ impl Tree {
                         page_address: PageAddress(0),
                         node_offset: NodeOffset(0),
                     }),
+                    cached_node_pager: None,
+                    use_cached_nodes: false,
                     };
                 },
             };
+
+    }
+
+    fn get_node_from_address(&self, address: &PageAddress, offset: &NodeOffset) -> Result<InternalNode, String> {
+
+        match self.use_cached_nodes {
+            
+            true => {
+                match &self.cached_node_pager {
+                    None => panic!(),
+                    Some(x) => {
+                        x.get_node_from_address(&address, &offset)
+                    }
+                }
+            }
+            false => {
+
+                Err("ayy".to_string())
+
+            }
+        }
+
+    }
+
+
+    pub fn output_depths(&mut self) {
+
+        let mut nodes_to_check: VecDeque<(PagePointer, usize)> = VecDeque::new();
+
+        let root_pointer: PagePointer = match &self.root {
+
+            None => { panic!() },
+            Some(x) => x.clone(),
+        };
+
+        nodes_to_check.push_back((root_pointer, 0));
+
+        loop {
+
+            let popped_val = nodes_to_check.pop_back();
+
+            let curr_tup = match popped_val {
+                None => {break;},
+                Some(x) => {x},
+            };
+
+            let (curr_pointer, count_so_far) = curr_tup;
+
+            match curr_pointer.page_type {
+                PageType::Leaf => {
+                    println!("{}", count_so_far + 1);
+                },
+                PageType::Node => {
+                    let page = self.node_pager.get_node_page(&curr_pointer.page_address).unwrap();
+                    let node = page.get_node_at(curr_pointer.node_offset.clone()).unwrap();
+
+                    let left_pointer = PagePointer {
+                                page_type: node.left_child_type,
+                                page_address: node.left_child_page_address,
+                                node_offset: node.left_child_node_offset,
+                    };
+
+ 
+                    let right_pointer = PagePointer {
+                                page_type: node.right_child_type,
+                                page_address: node.right_child_page_address,
+                                node_offset: node.right_child_node_offset,
+
+                    };
+
+                    nodes_to_check.push_back((left_pointer, count_so_far + 1));
+                    nodes_to_check.push_back((right_pointer, count_so_far + 1));
+                },
+            }
+        }
+
+
+
 
     }
 
@@ -461,6 +558,9 @@ impl Tree {
                     let mut page: LeafPage = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
 
                     page.add_record(record)?;
+                    //dbg!(page.get_capacity());
+                    //dbg!(page.tail);
+                    //dbg!("ADDING RECORD");
 
 
                     match page.is_full() {
@@ -565,8 +665,11 @@ impl Tree {
 
         assert_eq!(left_record_idxs.len() + right_record_idxs.len(), records.len());
 
-        let mut left_records: Vec<CompoundRecord> = Vec::new();
-        let mut right_records: Vec<CompoundRecord> = Vec::new();
+        //let mut left_records: Vec<CompoundRecord> = Vec::new();
+        //let mut right_records: Vec<CompoundRecord> = Vec::new();
+
+        let mut left_records: Vec<CompoundRecord> = Vec::with_capacity((records.len() / 2) + 1);
+        let mut right_records: Vec<CompoundRecord> = Vec::with_capacity((records.len() / 2) + 1);
 
         //consume records and allocate into left and right pages
         for x in records.into_iter() {
@@ -744,7 +847,7 @@ mod tests {
 
             let descriptor = Descriptor { data: random_arr };
 
-            let identifier = CompoundIdentifier::from_string(chars);
+            let identifier = CompoundIdentifier::random();
 
             let cr = CompoundRecord {
                 dataset_identifier: 0,
@@ -940,7 +1043,7 @@ mod tests {
             }
 
             let mut s = line.split(",");
-            let identifier = CompoundIdentifier(s.next().unwrap().to_string());
+            let identifier = CompoundIdentifier::from_string(s.next().unwrap().to_string());
             let s: Vec<_> = s.collect();
 
             //let s: Vec<f32> = s.into_iter().map(|x| x.try_into().unwrap()).collect();
@@ -1100,13 +1203,15 @@ mod tests {
             "QZILPO1CS5JLY4VZ",
         ];
 
+        let correct_answer: Vec<_> = correct_answer.into_iter().map(|x| CompoundIdentifier::from_string(x.to_string())).collect();
+
 
         let mut tree = Tree::new("test_data/bvnnacc/".to_string(), false);
 
         let nn = tree.get_nearest_neighbors(&descriptor, 50);
         dbg!(&nn);
         dbg!(&nn.distances);
-        let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.0.clone()).collect();
+        let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
         dbg!(&identifiers);
 
         assert_eq!(identifiers, correct_answer);
@@ -1136,7 +1241,7 @@ mod tests {
             }
 
             let mut s = line.split(",");
-            let identifier = CompoundIdentifier(s.next().unwrap().to_string());
+            let identifier = CompoundIdentifier::from_string(s.next().unwrap().to_string());
             let s: Vec<_> = s.collect();
 
             //let s: Vec<f32> = s.into_iter().map(|x| x.try_into().unwrap()).collect();
@@ -1221,6 +1326,8 @@ mod tests {
             "QZILPO1CS5JLY4VZ",
         ];
 
+        let correct_answer: Vec<_> = correct_answer.into_iter().map(|x| CompoundIdentifier::from_string(x.to_string())).collect();
+
         use rand::thread_rng;
         use rand::seq::SliceRandom;
 
@@ -1240,7 +1347,7 @@ mod tests {
             let mut query_tree = Tree::new("test_data/nn_validation/".to_string(), false);
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
-            let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.0.clone()).collect();
+            let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
 
             assert_eq!(identifiers, correct_answer);
         }
@@ -1267,7 +1374,7 @@ mod tests {
             }
 
             let mut s = line.split(",");
-            let identifier = CompoundIdentifier(s.next().unwrap().to_string());
+            let identifier = CompoundIdentifier::from_string(s.next().unwrap().to_string());
             let s: Vec<_> = s.collect();
 
             //let s: Vec<f32> = s.into_iter().map(|x| x.try_into().unwrap()).collect();
@@ -1315,6 +1422,8 @@ mod tests {
            "W6B4IXXKHP0JRYU4", "X0K3MXLDSU2L0KFN", "JEHVACT7QJ8D81CI",
            "E0NO9UXRAV6PQEUQ", "LLOA71UE951B3IRE"];
 
+        let correct_answer = correct_answer.into_iter().map(|x| CompoundIdentifier::from_string(x.to_string())).collect::<Vec<_>>();
+
         use rand::thread_rng;
         use rand::seq::SliceRandom;
 
@@ -1334,7 +1443,8 @@ mod tests {
             let mut query_tree = Tree::new("test_data/qf/".to_string(), false);
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
-            let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.0.clone()).collect();
+            //let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.0.clone()).collect();
+            let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
 
             assert_eq!(identifiers, correct_answer);
         }
@@ -1346,12 +1456,12 @@ mod tests {
     fn bil_test_speed(){
 
         //let db_filename = "/home/josh/db/1_bil_test/".to_string();
-        //let node_filename = "/home/josh/db/1_bil_test/node".to_string();
-        let node_filename = "/home/josh/tmpfs_mount_point/node".to_string();
-        //let record_filename = "/home/josh/db/1_bil_test/record".to_string();
-        let record_filename = "/home/josh/big_tmpfs/record".to_string();
+        let node_filename = "/home/josh/db/100mil_test_fixed_strings/node".to_string();
+        //let node_filename = "/home/josh/tmpfs_mount_point/node".to_string();
+        let record_filename = "/home/josh/db/100mil_test_fixed_strings/record".to_string();
+        //let record_filename = "/home/josh/big_tmpfs/record".to_string();
         //let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone())));
-        let mut tree = Tree::from_filenames(node_filename.clone(), record_filename.clone());
+        let mut tree = Tree::from_filenames(node_filename.clone(), record_filename.clone(), false);
         //pretty_env_logger::init();
 
 
@@ -1368,6 +1478,14 @@ mod tests {
         dbg!(&nn);
      
     }
+
+
+    #[test]
+    fn slow_memtree_load() {
+
+        let tree = Tree::from_filenames("/home/josh/db/100mil_8k_page/node".to_string(), "/home/josh/db/100mil_8k_page/record".to_string(), true);
+
+    }   
 
 
 

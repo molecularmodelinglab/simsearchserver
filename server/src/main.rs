@@ -22,7 +22,7 @@ async fn hello(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Respo
     println!("HERE");
     let mut mg = tree.lock().unwrap();
     println!("HERE2");
-    let nn = mg.get_nearest_neighbors(&descriptor, 10);
+    let nn = mg.get_nearest_neighbors(&descriptor, 100);
     //let s = format!("{:?}", nn.records[0]);
     //let s = format!("{:?}", nn.to_json());
     let s = nn.to_json();
@@ -34,11 +34,16 @@ async fn hello(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Respo
 pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     
     //let db_filename = "/home/josh/db/1_bil_test/".to_string();
-    //let node_filename = "/home/josh/db/1_bil_test/node".to_string();
-    let node_filename = "/home/josh/tmpfs_mount_point/node".to_string();
-    //let record_filename = "/home/josh/db/1_bil_test/record".to_string();
-    let record_filename = "/home/josh/big_tmpfs/record".to_string();
-    let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone())));
+    //let node_filename = "/home/josh/db/1_bil_test_fixed_strings/node".to_string();
+    //let node_filename = "/home/josh/db/100mil_8k_page/node".to_string();
+    let node_filename = "/home/josh/db/1_bil_8k_page/node".to_string();
+    //let node_filename = "/home/josh/tmpfs_mount_point/node".to_string();
+    //let record_filename = "/home/josh/db/1_bil_test_fixed_strings/record".to_string();
+    //let record_filename = "/home/josh/db/100mil_8k_page/record".to_string();
+    //let record_filename = "/home/josh/big_tmpfs/record".to_string();
+    let record_filename = "/home/josh/db/1_bil_8k_page/record".to_string();
+    //let record_filename = "/home/josh/big_tmpfs/record".to_string();
+    let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone(), true)));
     //pretty_env_logger::init();
 
     // For every connection, we must make a `Service` to handle all
