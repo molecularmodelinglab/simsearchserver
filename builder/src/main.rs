@@ -12,7 +12,7 @@ fn main() {
 
     fn get_random_record() -> CompoundRecord {
 
-        let random_arr: [f32; 8] = rand::random();
+        let random_arr: [f32; layout::DESCRIPTOR_LENGTH] = rand::random();
         //let mut rng = thread_rng();
         //let chars: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
 
@@ -30,8 +30,9 @@ fn main() {
     }
 
 
-    let db_filename = "/home/josh/db/1_bil_8k_page/".to_string();
-    dbg!(layout::PAGE_SIZE);
+    let db_filename = "/home/josh/db/1_bil_8k_node_64k_record/".to_string();
+    dbg!(layout::NODE_PAGE_SIZE);
+    dbg!(layout::RECORD_PAGE_SIZE);
     let mut tree = tree::Tree::new(db_filename.clone(), true);
     for _ in tqdm!(0..1e9 as usize) {
         let rec = get_random_record();

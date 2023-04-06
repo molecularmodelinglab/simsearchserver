@@ -6,12 +6,21 @@ use crate::error::Error;
 use std::convert::TryFrom;
 
 //pub const PAGE_SIZE: usize = 4096;
-pub const PAGE_SIZE: usize = 8192;
+//pub const PAGE_SIZE: usize = 8192;
 //pub const PAGE_SIZE: usize = 8192;
 pub const PTR_SIZE: usize = size_of::<usize>(); 
 
+pub const NODE_PAGE_SIZE: usize = 8192;
+//aub const NODE_PAGE_SIZE: usize = 4096;
+
+//pub const RECORD_PAGE_SIZE: usize = 16384;
+//jpub const RECORD_PAGE_SIZE: usize = 32768;
+pub const RECORD_PAGE_SIZE: usize = 65536;
+//pub const RECORD_PAGE_SIZE: usize = 8192;
+
 //TODO: allow different values
 pub const DESCRIPTOR_LENGTH: usize = 8;
+//pub const DESCRIPTOR_LENGTH: usize = 16;
 
 pub struct Value (pub usize);
 
@@ -90,7 +99,8 @@ pub const PAGE_TYPE_OFFSET: usize = 0;
 pub const PAGE_TYPE_SIZE: usize = 1;
 
 pub const TAIL_OFFSET: usize = PAGE_TYPE_OFFSET + PAGE_TYPE_SIZE;
-pub const TAIL_SIZE: usize = 1;
+//pub const TAIL_SIZE: usize = 2; //2 bytes supports up to 65535 records
+pub const TAIL_SIZE: usize = 4; //2 bytes supports up to 65535 records, but 4 is easier to implement lol
 
 pub const IS_EMPTY_OFFSET: usize = TAIL_OFFSET + TAIL_SIZE;
 pub const IS_EMPTY_SIZE: usize = 1;

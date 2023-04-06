@@ -1,4 +1,4 @@
-use kd_tree::tree;
+use kd_tree::{tree, layout};
 use kd_tree::node::Descriptor;
 
 use std::convert::Infallible;
@@ -13,7 +13,7 @@ use hyper::server::Server;
 async fn hello(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Response<Body>, Infallible> {
     println!("{:?}", req.uri().path());
 
-    let random_arr: [f32; 8] = rand::random();
+    let random_arr: [f32; layout::DESCRIPTOR_LENGTH] = rand::random();
     let descriptor = Descriptor { data: random_arr };
     dbg!(&descriptor);
 
@@ -35,13 +35,16 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     
     //let db_filename = "/home/josh/db/1_bil_test/".to_string();
     //let node_filename = "/home/josh/db/1_bil_test_fixed_strings/node".to_string();
-    //let node_filename = "/home/josh/db/100mil_8k_page/node".to_string();
-    let node_filename = "/home/josh/db/1_bil_8k_page/node".to_string();
+    //let node_filename = "/home/josh/db/100mil_layout::DESCRIPTOR_LENGTHk_page/node".to_string();
+    //let node_filename = "/home/josh/db/1_bil_layout::DESCRIPTOR_LENGTHk_node_32k_record/node".to_string();
+    //let node_filename = "/home/josh/db/1_bil_layout::DESCRIPTOR_LENGTHk_node_64k_record/node".to_string();
+    let node_filename = "/home/josh/db/1_bil_8k_node_64k_record/node".to_string();
     //let node_filename = "/home/josh/tmpfs_mount_point/node".to_string();
     //let record_filename = "/home/josh/db/1_bil_test_fixed_strings/record".to_string();
-    //let record_filename = "/home/josh/db/100mil_8k_page/record".to_string();
+    //let record_filename = "/home/josh/db/100mil_layout::DESCRIPTOR_LENGTHk_page/record".to_string();
     //let record_filename = "/home/josh/big_tmpfs/record".to_string();
-    let record_filename = "/home/josh/db/1_bil_8k_page/record".to_string();
+    //let record_filename = "/home/josh/db/1_bil_layout::DESCRIPTOR_LENGTHk_node_32k_record/record".to_string();
+    let record_filename = "/home/josh/db/1_bil_8k_node_64k_record/record".to_string();
     //let record_filename = "/home/josh/big_tmpfs/record".to_string();
     let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone(), true)));
     //pretty_env_logger::init();
@@ -61,7 +64,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     let addr = ([127, 0, 0, 1], 3000).into();
-    //let addr = ([127, 0, 0, 1], 80).into();
+    //let addr = ([127, 0, 0, 1], layout::DESCRIPTOR_LENGTH0).into();
 
     let server = Server::bind(&addr).serve(make_svc);
 
