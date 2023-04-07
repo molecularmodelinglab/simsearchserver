@@ -18,15 +18,16 @@ use std::fmt;
 
 
 #[derive(Debug)]
-pub struct NodePager<const N: usize> {
+pub struct NodePager {
     file: File,
     pub cursor: PageAddress, //this is the next available slot
 }
 
 #[derive(Debug)]
-pub struct RecordPager<const N: usize> {
+pub struct RecordPager {
     file: File,
     pub cursor: PageAddress, //this is the next available slot
+    pub desc_length: usize,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -57,7 +58,7 @@ impl fmt::Display for PagePointer {
     }
 }
 
-impl<const N: usize> NodePager<N> {
+impl NodePager {
 
     pub fn new(path: &Path, create: bool) -> Result<Self, Error> {
 
@@ -110,7 +111,7 @@ impl<const N: usize> NodePager<N> {
 
     }
 
-    pub fn get_node_page(&mut self, address: &PageAddress) -> Result<NodePage<N>, Error> {
+    pub fn get_node_page(&mut self, address: &PageAddress) -> Result<NodePage, Error> {
 
         let mut page: [u8; layout::NODE_PAGE_SIZE] = [0x00; layout::NODE_PAGE_SIZE];
 
@@ -134,7 +135,7 @@ impl<const N: usize> NodePager<N> {
                 break
             }
 
-            let page: NodePage<N> = self.get_node_page(&PageAddress(curr_address)).unwrap();
+            let page: NodePage = self.get_node_page(&PageAddress(curr_address)).unwrap();
 
             let this_nodes = page.get_nodes();
 
@@ -149,7 +150,7 @@ impl<const N: usize> NodePager<N> {
         }
     }
 
-    pub fn write_page(&mut self, page: &NodePage<N>) -> Result<PageAddress, Error> {
+    pub fn write_page(&mut self, page: &NodePage) -> Result<PageAddress, Error> {
 
         let start = self.calc_offset(&self.cursor);
         self.file.seek(SeekFrom::Start(start))?;
@@ -172,7 +173,7 @@ impl<const N: usize> NodePager<N> {
         Ok(res)
     }
 
-    pub fn write_page_at_offset(&mut self, page: &NodePage<N>, address: &PageAddress) -> Result<PageAddress, Error> {
+    pub fn write_page_at_offset(&mut self, page: &NodePage, address: &PageAddress) -> Result<PageAddress, Error> {
         let start = self.calc_offset(address);
         self.file.seek(SeekFrom::Start(start))?;
 
@@ -194,7 +195,7 @@ mod tests {
     #[test]
     fn quick_nodepage_to_file_and_back_works() {
         const N: usize = 8;
-        let mut pager = NodePager::<N>::new(Path::new("test_data/kdtree.nodes"), true).unwrap();
+        let mut pager = NodePager::new(Path::new("test_data/kdtree.nodes"), true).unwrap();
 
         let mut node1 = InternalNode::default();
 
@@ -367,20 +368,20 @@ mod tests {
 
 
 #[derive(Debug)]
-pub struct CachedPager<const N: usize> {
-    pub nodes: Vec<InternalNode<N>>,
+pub struct CachedPager {
+    pub nodes: Vec<InternalNode>,
     pub address_map: HashMap<(usize, usize), usize>,
 }
 
-impl<const N: usize> CachedPager<N> {
+impl CachedPager {
 
-    pub fn from_filename(filename: &Path) -> Result<CachedPager<N>, Error> {
+    pub fn from_filename(filename: &Path) -> Result<CachedPager, Error> {
 
         dbg!(filename);
         let mut node_pager = NodePager::new(filename, false)?;
 
         //TODO: make this capacity calculation correct
-        let mut all_nodes: Vec<InternalNode<N>> = Vec::with_capacity(node_pager.cursor.0 * 300);
+        let mut all_nodes: Vec<InternalNode> = Vec::with_capacity(node_pager.cursor.0 * 300);
         let mut address_map: HashMap<(usize, usize), usize> = HashMap::new();
 
         for i in 0..node_pager.cursor.0 {
@@ -406,7 +407,7 @@ impl<const N: usize> CachedPager<N> {
         })
     }
 
-    pub fn get_node_from_address(&self, address: &PageAddress, offset: &ItemOffset) -> Result<InternalNode<N>, String> {
+    pub fn get_node_from_address(&self, address: &PageAddress, offset: &ItemOffset) -> Result<InternalNode, String> {
         let address = address.0 as usize;
         let offset = offset.0 as usize;
 
@@ -416,9 +417,9 @@ impl<const N: usize> CachedPager<N> {
 
 }
 
-impl<const N: usize> RecordPager<N> {
+impl RecordPager {
 
-    pub fn new(path: &Path, create: bool) -> Result<Self, Error> {
+    pub fn new(path: &Path, desc_length: usize, create: bool) -> Result<Self, Error> {
 
         match create {
             true => {
@@ -432,6 +433,7 @@ impl<const N: usize> RecordPager<N> {
                 return Ok(Self {
                     file: fd,
                     cursor: PageAddress(0),
+                    desc_length,
                 })
             },
             false => {
@@ -455,6 +457,7 @@ impl<const N: usize> RecordPager<N> {
                     return Ok(Self {
                         file: fd,
                         cursor: PageAddress(value),
+                        desc_length,
                     })
 
             }
@@ -470,7 +473,7 @@ impl<const N: usize> RecordPager<N> {
 
     }
 
-    pub fn get_record_page(&mut self, address: &PageAddress) -> Result<RecordPage<N>, Error> {
+    pub fn get_record_page(&mut self, address: &PageAddress) -> Result<RecordPage, Error> {
 
         let mut page: [u8; layout::RECORD_PAGE_SIZE] = [0x00; layout::RECORD_PAGE_SIZE];
 
@@ -478,7 +481,7 @@ impl<const N: usize> RecordPager<N> {
         self.file.seek(SeekFrom::Start(start))?;
         self.file.read_exact(&mut page).unwrap();
 
-        let page = RecordPage::from_arr(page);
+        let page = RecordPage::from_arr(page, self.desc_length);
 
         return Ok(page);
     }
@@ -494,7 +497,7 @@ impl<const N: usize> RecordPager<N> {
                 break
             }
 
-            let page: RecordPage<N> = self.get_record_page(&PageAddress(curr_address)).unwrap();
+            let page: RecordPage = self.get_record_page(&PageAddress(curr_address)).unwrap();
 
             let this_records = page.get_records();
 
@@ -516,7 +519,7 @@ impl<const N: usize> RecordPager<N> {
 
     }
 
-    pub fn write_page(&mut self, page: &RecordPage<N>) -> Result<PageAddress, Error> {
+    pub fn write_page(&mut self, page: &RecordPage) -> Result<PageAddress, Error> {
 
         let start = self.calc_offset(&self.cursor);
         self.file.seek(SeekFrom::Start(start))?;
@@ -539,7 +542,7 @@ impl<const N: usize> RecordPager<N> {
         Ok(res)
     }
 
-    pub fn write_page_at_offset(&mut self, page: &RecordPage<N>, address: &PageAddress) -> Result<PageAddress, Error> {
+    pub fn write_page_at_offset(&mut self, page: &RecordPage, address: &PageAddress) -> Result<PageAddress, Error> {
         let start = self.calc_offset(address);
         self.file.seek(SeekFrom::Start(start))?;
 

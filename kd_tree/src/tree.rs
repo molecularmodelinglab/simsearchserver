@@ -16,14 +16,15 @@ use std::collections::VecDeque;
 /// nodes are stored in separate files and paged separately.
 #[derive(Debug)]
 
-pub struct Tree<const N: usize> {
-    pub node_pager: NodePager<N>,
-    pub record_pager: RecordPager<N>,
-    pub cached_node_pager: Option<CachedPager<N>>,
+pub struct Tree {
+    pub node_pager: NodePager,
+    pub record_pager: RecordPager,
+    pub cached_node_pager: Option<CachedPager>,
     pub dirname: String,
     pub free_node_pages: VecDeque<PageAddress>,
     pub root: Option<PagePointer>,
     pub use_cached_nodes: bool,
+    pub desc_length: usize,
 
 }
 
@@ -31,14 +32,14 @@ pub struct Tree<const N: usize> {
 ///
 ///handles distance sorting and truncating to N items
 #[derive(Debug)]
-pub struct TopHits<const N: usize> {
+pub struct TopHits {
     pub max_length: usize,
     pub distances: Vec<f32>,
-    pub records: Vec<Option<CompoundRecord<N>>>,
+    pub records: Vec<Option<CompoundRecord>>,
     pub pointers: Vec<Option<PagePointer>>,
 }
 
-impl<const N: usize> TopHits<N> {
+impl TopHits {
 
     ///Distances are initially set to max f32 value
     ///
@@ -46,7 +47,7 @@ impl<const N: usize> TopHits<N> {
     pub fn new(max_length: usize) -> Self {
 
         let mut distances: Vec<f32> = Vec::new();
-        let mut records: Vec<Option<CompoundRecord<N>>> = Vec::new();
+        let mut records: Vec<Option<CompoundRecord>> = Vec::new();
         let mut pointers: Vec<Option<PagePointer>> = Vec::new();
         for _ in 0..max_length {
             distances.push(f32::MAX);
@@ -64,7 +65,7 @@ impl<const N: usize> TopHits<N> {
     ///Internal method for adding a record to the list
     ///
     ///Undefined if called without checking if we can via `try_add`
-    fn _add(&mut self, distance: f32, record: &CompoundRecord<N>, page_pointer: &PagePointer) -> Result<(), String> {
+    fn _add(&mut self, distance: f32, record: &CompoundRecord, page_pointer: &PagePointer) -> Result<(), String> {
         //println!("ADDING");
 
         //find insertion point
@@ -94,7 +95,7 @@ impl<const N: usize> TopHits<N> {
     }
 
     ///Public method to be called on every record for consideration as a neighbor
-    pub fn try_add(&mut self, distance: f32, record: &CompoundRecord<N>, page_pointer: &PagePointer) -> Result<(), String> {
+    pub fn try_add(&mut self, distance: f32, record: &CompoundRecord, page_pointer: &PagePointer) -> Result<(), String> {
 
         //println!("ATTEMPTING TO ADD: {:?}", record.compound_identifier);
         let worst_best_distance = self.get_highest_dist();
@@ -151,18 +152,18 @@ pub enum NodeAction {
 
 }
 
-impl<const N: usize> Tree<N> {
+impl Tree {
 
-    pub fn from_filenames(node_filename: String, record_filename: String, cache: bool) -> Self {
+    pub fn from_filenames(node_filename: String, record_filename: String, desc_length: usize, cache: bool) -> Self {
 
         dbg!(&node_filename);
         dbg!(&record_filename);
         let mut node_pager = NodePager::new(Path::new(&node_filename), false).unwrap();
-        let mut record_pager = RecordPager::new(Path::new(&record_filename), false).unwrap();
+        let mut record_pager = RecordPager::new(Path::new(&record_filename), desc_length, false).unwrap();
 
         let free_node_pages = VecDeque::from([PageAddress(0)]);
 
-        let (cached_node_pager, use_cached_nodes) : (Option<CachedPager<N>>, bool) = match cache {
+        let (cached_node_pager, use_cached_nodes) : (Option<CachedPager>, bool) = match cache {
             
             true => {
 
@@ -184,26 +185,27 @@ impl<const N: usize> Tree<N> {
             }),
             cached_node_pager,
             use_cached_nodes,
+            desc_length,
             };
     }
 
     ///Given a target directory, either use the existing files in that directory for querying or
     ///construction of a new tree 
-    pub fn new(directory_name: String, create: bool) -> Self {
+    pub fn new(directory_name: String, desc_length: usize, create: bool) -> Self {
 
         let node_filename = directory_name.clone() + "/" + "node";
         let record_filename = directory_name.clone() + "/" + "record";
 
         dbg!(&node_filename);
         let mut node_pager = NodePager::new(Path::new(&node_filename), create).unwrap();
-        let mut record_pager = RecordPager::new(Path::new(&record_filename), create).unwrap();
+        let mut record_pager = RecordPager::new(Path::new(&record_filename), desc_length, create).unwrap();
 
         let free_node_pages = VecDeque::from([PageAddress(0)]);
               
         match create {
             true => {
          
-                let first_page = RecordPage::new();
+                let first_page = RecordPage::new(desc_length);
 
                 record_pager.write_page(&first_page).unwrap();
 
@@ -220,6 +222,7 @@ impl<const N: usize> Tree<N> {
                     root: None,
                     cached_node_pager: None,
                     use_cached_nodes: false,
+                    desc_length,
                 };
             },
             false => {
@@ -235,13 +238,14 @@ impl<const N: usize> Tree<N> {
                     }),
                     cached_node_pager: None,
                     use_cached_nodes: false,
+                    desc_length,
                     };
                 },
             };
 
     }
 
-    fn get_node_from_address(&self, address: &PageAddress, offset: &ItemOffset) -> Result<InternalNode<N>, String> {
+    fn get_node_from_address(&self, address: &PageAddress, offset: &ItemOffset) -> Result<InternalNode, String> {
 
         match self.use_cached_nodes {
             
@@ -320,7 +324,7 @@ impl<const N: usize> Tree<N> {
     }
 
     ///Returns whether or not the exact provided descriptor is in the tree
-    pub fn record_in_tree(&mut self, record: &CompoundRecord<N>) -> Result<bool, String> {
+    pub fn record_in_tree(&mut self, record: &CompoundRecord) -> Result<bool, String> {
         let mut curr_pointer: PagePointer = match &self.root {
 
             None => { PagePointer {
@@ -337,7 +341,7 @@ impl<const N: usize> Tree<N> {
             match curr_pointer.page_type {
                 PageType::Leaf => {
 
-                    let page: RecordPage<N> = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
+                    let page: RecordPage = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
                     return Ok(page.descriptor_in_page(&record.descriptor));
 
                 },
@@ -375,7 +379,7 @@ impl<const N: usize> Tree<N> {
         }
     }
 
-    fn dist_to_axis(&self, split_axis: usize, split_value: f32, descriptor: &Descriptor<N>) -> f32 {
+    fn dist_to_axis(&self, split_axis: usize, split_value: f32, descriptor: &Descriptor) -> f32 {
 
         return (descriptor.data[split_axis] - split_value).abs()
 
@@ -386,7 +390,7 @@ impl<const N: usize> Tree<N> {
     ///
     ///Performance should worsen as `n` grows larger, as fewer branches of the tree can be pruned
     ///with more distant already-found points
-    pub fn get_nearest_neighbors(&mut self, query_descriptor: &Descriptor<N>, n: usize) -> TopHits<N> {
+    pub fn get_nearest_neighbors(&mut self, query_descriptor: &Descriptor, n: usize) -> TopHits {
 
         let mut hits = TopHits::new(n);
 
@@ -428,7 +432,7 @@ impl<const N: usize> Tree<N> {
 
                             num_record_pages_visited += 1;
 
-                            let page: RecordPage<N> = self.record_pager.get_record_page(&curr_pointer.page_address.clone()).unwrap();
+                            let page: RecordPage = self.record_pager.get_record_page(&curr_pointer.page_address.clone()).unwrap();
 
                             for record in page.get_records() {
                                 let dist = query_descriptor.distance(&record.descriptor);
@@ -538,7 +542,7 @@ impl<const N: usize> Tree<N> {
     ///the records to that node. If this fills the node, the node is split at its median and two
     ///half-filled leaf nodes are created. A new internal node is created to point to these two
     ///children.
-    pub fn add_record(&mut self, record: &CompoundRecord<N>) -> Result<(), String> {
+    pub fn add_record(&mut self, record: &CompoundRecord) -> Result<(), String> {
 
         let mut curr_pointer: PagePointer = match &self.root {
 
@@ -567,7 +571,7 @@ impl<const N: usize> Tree<N> {
             match curr_pointer.page_type {
                 PageType::Leaf => {
 
-                    let mut page: RecordPage<N> = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
+                    let mut page: RecordPage = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
 
                     page.add_record(record)?;
                     //dbg!(page.get_capacity());
@@ -630,7 +634,7 @@ impl<const N: usize> Tree<N> {
     ///Internal method to take a single full RecordPage, find its median at the "next" axis, and
     ///split the records along that median. This is really the only place where new internal nodes
     ///are created.
-    pub fn split(&mut self, page: RecordPage<N>, this_pointer: &PagePointer, parent_pointer: &PagePointer, last_was_left: bool) -> Result<(), String> {
+    pub fn split(&mut self, page: RecordPage, this_pointer: &PagePointer, parent_pointer: &PagePointer, last_was_left: bool) -> Result<(), String> {
 
         //println!("SPLITTING");
         //dbg!(&this_pointer.page_address);
@@ -642,7 +646,7 @@ impl<const N: usize> Tree<N> {
             Some(_) => {
                     let parent_page = self.node_pager.get_node_page(&parent_pointer.page_address).unwrap();
                     let parent_node = parent_page.get_node_at(parent_pointer.node_offset.clone()).unwrap();
-                    (parent_node.split_axis + 1) % N
+                    (parent_node.split_axis + 1) % self.desc_length
             },
         };
 
@@ -680,8 +684,8 @@ impl<const N: usize> Tree<N> {
         //let mut left_records: Vec<CompoundRecord> = Vec::new();
         //let mut right_records: Vec<CompoundRecord> = Vec::new();
 
-        let mut left_records: Vec<CompoundRecord<N>> = Vec::with_capacity((records.len() / 2) + 1);
-        let mut right_records: Vec<CompoundRecord<N>> = Vec::with_capacity((records.len() / 2) + 1);
+        let mut left_records: Vec<CompoundRecord> = Vec::with_capacity((records.len() / 2) + 1);
+        let mut right_records: Vec<CompoundRecord> = Vec::with_capacity((records.len() / 2) + 1);
 
         //consume records and allocate into left and right pages
         for x in records.into_iter() {
@@ -693,7 +697,7 @@ impl<const N: usize> Tree<N> {
         }
 
         //make new left record page at current offset
-        let mut left_record_page = RecordPage::new();
+        let mut left_record_page = RecordPage::new(self.desc_length);
         for record in left_records.iter() {
             left_record_page.add_record(record)?;
         }
@@ -701,7 +705,7 @@ impl<const N: usize> Tree<N> {
         self.record_pager.write_page_at_offset(&left_record_page, &this_pointer.page_address).unwrap();
         
         //make new right record page at next offset
-        let mut right_record_page = RecordPage::new();
+        let mut right_record_page = RecordPage::new(self.desc_length);
         for record in right_records.iter() {
             right_record_page.add_record(record)?;
         }
@@ -766,7 +770,7 @@ impl<const N: usize> Tree<N> {
     ///Internal method that's called during the split procedure. The new node needs to be assigned
     ///to a node page with free space, or assigned to a newly allocated node page. Returns a
     ///pointer to the newly created node wherever it's placed.
-    pub fn add_new_node(&mut self, node: &InternalNode<N>) -> Result<PagePointer, String> {
+    pub fn add_new_node(&mut self, node: &InternalNode) -> Result<PagePointer, String> {
 
         //find a page with space for nodes
         //
@@ -849,37 +853,18 @@ mod tests {
     #[test]
     fn quick_tree_new() {
 
-        const N: usize = 8;
-        let mut tree = Tree::new("test_data/tree_new/".to_string(), true);
+        let n: usize = 8;
+        let mut tree = Tree::new("test_data/tree_new/".to_string(), n, true);
 
-        fn get_random_record() -> CompoundRecord::<N> {
-
-            let random_arr: [f32; N] = rand::random();
-            let mut rng = thread_rng();
-            let chars: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
-
-            let descriptor = Descriptor { data: random_arr };
-
-            let identifier = CompoundIdentifier::random();
-
-            let cr = CompoundRecord {
-                dataset_identifier: 0,
-                compound_identifier: identifier,
-                descriptor,
-            };
-
-            return cr;
-        }
-
-        let cr = get_random_record();
+        let cr = CompoundRecord::random(n);
         tree.add_record(&cr).unwrap();
 
-        let cr = get_random_record();
+        let cr = CompoundRecord::random(n);
         tree.add_record(&cr).unwrap();
 
         for _ in 0..2000 {
 
-            let cr = get_random_record();
+            let cr = CompoundRecord::random(n);
             tree.add_record(&cr).unwrap();
         }
     }
@@ -887,148 +872,112 @@ mod tests {
     #[test]
     fn quick_tree_find() {
 
-        const N: usize = 16;
-        let mut tree = Tree::<N>::new("test_data/aaab/".to_string(), true);
-        //dbg!(&tree);
+        for n in [8,12,16] {
+            let mut tree = Tree::new("test_data/aaab/".to_string(), n, true);
+            //dbg!(&tree);
 
 
-        let cr_to_find = get_random_record();
+            let cr_to_find = CompoundRecord::random(n);();
 
-        fn get_random_record() -> CompoundRecord::<N> {
 
-            let random_arr: [f32; N] = rand::random();
-            let mut rng = thread_rng();
-            let chars: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
-
-            let descriptor = Descriptor { data: random_arr };
-
-            let identifier = CompoundIdentifier::from_string(chars);
-
-            let cr = CompoundRecord {
-                dataset_identifier: 0,
-                compound_identifier: identifier,
-                descriptor,
-            };
-
-            return cr;
-        }
-
-        let cr = get_random_record();
-        tree.add_record(&cr).unwrap();
-
-        let bad_record = get_random_record();
-        let answer = tree.record_in_tree(&bad_record).unwrap();
-        assert_eq!(answer, false);
-
-        let cr = get_random_record();
-        tree.add_record(&cr).unwrap();
-
-        let bad_record = get_random_record();
-        let answer = tree.record_in_tree(&bad_record).unwrap();
-        assert_eq!(answer, false);
-
-        for _ in 0..2000 {
-
-            let cr = get_random_record();
-            //dbg!(&cr);
+            let cr = CompoundRecord::random(n);();
             tree.add_record(&cr).unwrap();
-        }
 
-        let answer = tree.record_in_tree(&cr_to_find).unwrap();
-        assert_eq!(answer, false);
+            let bad_record = CompoundRecord::random(n);();
+            let answer = tree.record_in_tree(&bad_record).unwrap();
+            assert_eq!(answer, false);
 
-        tree.add_record(&cr_to_find).unwrap();
-
-        let answer = tree.record_in_tree(&cr_to_find).unwrap();
-        assert_eq!(answer, true);
-
-        for _ in 0..2000 {
-
-            let cr = get_random_record();
+            let cr = CompoundRecord::random(n);();
             tree.add_record(&cr).unwrap();
+
+            let bad_record = CompoundRecord::random(n);();
+            let answer = tree.record_in_tree(&bad_record).unwrap();
+            assert_eq!(answer, false);
+
+            for _ in 0..2000 {
+
+                let cr = CompoundRecord::random(n);();
+                //dbg!(&cr);
+                tree.add_record(&cr).unwrap();
+            }
+
+            let answer = tree.record_in_tree(&cr_to_find).unwrap();
+            assert_eq!(answer, false);
+
+            tree.add_record(&cr_to_find).unwrap();
+
+            let answer = tree.record_in_tree(&cr_to_find).unwrap();
+            assert_eq!(answer, true);
+
+            for _ in 0..2000 {
+
+                let cr = CompoundRecord::random(n);();
+                tree.add_record(&cr).unwrap();
+            }
+
+            let answer = tree.record_in_tree(&cr_to_find).unwrap();
+            assert_eq!(answer, true);
+
+            let bad_record = CompoundRecord::random(n);();
+            let answer = tree.record_in_tree(&bad_record).unwrap();
+            assert_eq!(answer, false);
         }
-
-        let answer = tree.record_in_tree(&cr_to_find).unwrap();
-        assert_eq!(answer, true);
-
-        let bad_record = get_random_record();
-        let answer = tree.record_in_tree(&bad_record).unwrap();
-        assert_eq!(answer, false);
-
-
     }
 
     #[test]
     fn quick_tree_nn() {
 
-        let mut tree = Tree::new("test_data/aaaa/".to_string(), true);
-        //dbg!(&tree);
+        for n in [8,12,16] {
+
+            let mut tree = Tree::new("test_data/aaaa/".to_string(), n, true);
+            //dbg!(&tree);
 
 
-        const N: usize = 8;
-        let cr_to_find = get_random_record();
+            let cr_to_find = CompoundRecord::random(n);
 
-        fn get_random_record() -> CompoundRecord::<8> {
-
-            let random_arr: [f32; N] = rand::random();
-            let mut rng = thread_rng();
-            let chars: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
-
-            let descriptor = Descriptor { data: random_arr };
-
-            let identifier = CompoundIdentifier::from_string(chars);
-
-            let cr = CompoundRecord {
-                dataset_identifier: 0,
-                compound_identifier: identifier,
-                descriptor,
-            };
-
-            return cr;
-        }
-
-        let cr = get_random_record();
-        tree.add_record(&cr).unwrap();
-
-        let bad_record = get_random_record();
-        let answer = tree.record_in_tree(&bad_record).unwrap();
-        assert_eq!(answer, false);
-
-        let cr = get_random_record();
-        tree.add_record(&cr).unwrap();
-
-        let bad_record = get_random_record();
-        let answer = tree.record_in_tree(&bad_record).unwrap();
-        assert_eq!(answer, false);
-
-        for _ in tqdm!(0..20000) {
-
-            let cr = get_random_record();
+            let cr = CompoundRecord::random(n);
             tree.add_record(&cr).unwrap();
-        }
 
-        let answer = tree.record_in_tree(&cr_to_find).unwrap();
-        assert_eq!(answer, false);
+            let bad_record = CompoundRecord::random(n);
+            let answer = tree.record_in_tree(&bad_record).unwrap();
+            assert_eq!(answer, false);
 
-        tree.add_record(&cr_to_find).unwrap();
-
-        let answer = tree.record_in_tree(&cr_to_find).unwrap();
-        assert_eq!(answer, true);
-
-        for _ in 0..2000 {
-
-            let cr = get_random_record();
+            let cr = CompoundRecord::random(n);();
             tree.add_record(&cr).unwrap();
+
+            let bad_record = CompoundRecord::random(n);
+            let answer = tree.record_in_tree(&bad_record).unwrap();
+            assert_eq!(answer, false);
+
+            for _ in tqdm!(0..20000) {
+
+                let cr = CompoundRecord::random(n);
+                tree.add_record(&cr).unwrap();
+            }
+
+            let answer = tree.record_in_tree(&cr_to_find).unwrap();
+            assert_eq!(answer, false);
+
+            tree.add_record(&cr_to_find).unwrap();
+
+            let answer = tree.record_in_tree(&cr_to_find).unwrap();
+            assert_eq!(answer, true);
+
+            for _ in 0..2000 {
+
+                let cr = CompoundRecord::random(n);();
+                tree.add_record(&cr).unwrap();
+            }
+
+            let answer = tree.record_in_tree(&cr_to_find).unwrap();
+            assert_eq!(answer, true);
+
+            let bad_record = CompoundRecord::random(n);
+            let answer = tree.record_in_tree(&bad_record).unwrap();
+            assert_eq!(answer, false);
+
+            let _nn = tree.get_nearest_neighbors(&bad_record.descriptor, 1);
         }
-
-        let answer = tree.record_in_tree(&cr_to_find).unwrap();
-        assert_eq!(answer, true);
-
-        let bad_record = get_random_record();
-        let answer = tree.record_in_tree(&bad_record).unwrap();
-        assert_eq!(answer, false);
-
-        let _nn = tree.get_nearest_neighbors(&bad_record.descriptor, 1);
 
     }
 
@@ -1036,7 +985,7 @@ mod tests {
     #[test]
     fn build_verify_nn_accuracy() {
 
-        const N: usize = 8;
+        let n = 8;
 
         use::std::fs::File;
         use std::io::prelude::*;
@@ -1045,7 +994,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord<N>> = Vec::new();
+        let mut records: Vec<CompoundRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1062,14 +1011,15 @@ mod tests {
 
             //let s: Vec<f32> = s.into_iter().map(|x| x.try_into().unwrap()).collect();
             let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
-            let descriptor = Descriptor::from_vec(s.clone());
+            let descriptor = Descriptor{data: s.clone(), length: n};
 
-            assert_eq!(s.len(), N);
+            assert_eq!(s.len(), n);
 
             let cr = CompoundRecord {
                 compound_identifier: identifier,
                 descriptor,
                 dataset_identifier: 1,
+                length: n,
             };
 
             records.push(cr);
@@ -1078,7 +1028,7 @@ mod tests {
         dbg!(records.len());
 
 
-        let mut tree = Tree::new("test_data/bvnnacc/".to_string(), true);
+        let mut tree = Tree::new("test_data/bvnnacc/".to_string(), n, true);
 
         for record in tqdm!(records.iter()) {
 
@@ -1091,16 +1041,15 @@ mod tests {
     #[bench]
     fn benchmark_query_speed(b: &mut Bencher) {
 
-        const N: usize = 8;
-        fn make_random_query(tree: &mut Tree<N>) {
+        let n = 8;
+        fn make_random_query(tree: &mut Tree) {
 
-            let data: [f32; N] = random();
-            let descriptor: Descriptor<N> = Descriptor::<N> {data};
+            let descriptor = Descriptor::random(tree.desc_length);
 
             let _nn = tree.get_nearest_neighbors(&descriptor, 20);
         }
 
-        let mut tree = Tree::new("test_data/bqs/".to_string(), false);
+        let mut tree = Tree::new("test_data/bqs/".to_string(), n, false);
         b.iter(|| make_random_query(&mut tree));
 
 
@@ -1112,14 +1061,14 @@ mod tests {
     #[test]
     fn query_verify_nn_accuracy(){
 
-        const N: usize = 8;
+        let n = 8;
         use::std::fs::File;
         use std::io::prelude::*;
         let mut file = File::open("test_data/random_descriptors.txt").unwrap();
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord<N>> = Vec::new();
+        let mut records: Vec<CompoundRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1136,22 +1085,23 @@ mod tests {
 
             //let s: Vec<f32> = s.into_iter().map(|x| x.try_into().unwrap()).collect();
             let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
-            let descriptor = Descriptor::from_vec(s.clone());
+            let descriptor = Descriptor{data: s.clone(), length: 8};
 
-            assert_eq!(s.len(), N);
+            assert_eq!(s.len(), n);
 
             let cr = CompoundRecord {
                 compound_identifier: identifier,
                 descriptor,
                 dataset_identifier: 1,
+                length: n
             };
 
             records.push(cr);
         }
 
         dbg!(records.len());
-        let descriptor = Descriptor::<N>::from_vec(
-            vec![
+        let descriptor = Descriptor {
+            data: vec![
             0.8598341,
             0.6338788,
             0.68099475,
@@ -1160,9 +1110,10 @@ mod tests {
             0.84688795,
             0.61008036,
             0.88481283,
-            ]
+            ],
+            length: n,
+        };
 
-        );
 
         let correct_answer = vec![
             "5ZLD00MOT36ZK6DX",
@@ -1220,7 +1171,7 @@ mod tests {
         let correct_answer: Vec<_> = correct_answer.into_iter().map(|x| CompoundIdentifier::from_string(x.to_string())).collect();
 
 
-        let mut tree = Tree::new("test_data/bvnnacc/".to_string(), false);
+        let mut tree = Tree::new("test_data/bvnnacc/".to_string(), n, false);
 
         let nn = tree.get_nearest_neighbors(&descriptor, 50);
         dbg!(&nn);
@@ -1236,14 +1187,14 @@ mod tests {
     #[test]
     fn slow_fuzzed_verify_nn_accuracy(){
 
-        const N: usize = 8;
+        let n = 8;
         use::std::fs::File;
         use std::io::prelude::*;
         let mut file = File::open("test_data/random_descriptors.txt").unwrap();
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord<N>> = Vec::new();
+        let mut records: Vec<CompoundRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1260,21 +1211,22 @@ mod tests {
 
             //let s: Vec<f32> = s.into_iter().map(|x| x.try_into().unwrap()).collect();
             let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
-            let descriptor = Descriptor::from_vec(s.clone());
+            let descriptor = Descriptor{ data: s.clone(), length: 8};
 
-            assert_eq!(s.len(), N);
+            assert_eq!(s.len(), n);
 
             let cr = CompoundRecord {
                 compound_identifier: identifier,
                 descriptor,
                 dataset_identifier: 1,
+                length: n,
             };
 
             records.push(cr);
         }
 
-        let descriptor = Descriptor::<N>::from_vec(
-            vec![
+        let descriptor = Descriptor {
+            data: vec![
             0.8598341,
             0.6338788,
             0.68099475,
@@ -1283,9 +1235,10 @@ mod tests {
             0.84688795,
             0.61008036,
             0.88481283,
-            ]
+            ],
+            length: n,
 
-        );
+        };
 
         let correct_answer = vec![
             "5ZLD00MOT36ZK6DX",
@@ -1350,7 +1303,7 @@ mod tests {
             records.shuffle(&mut thread_rng());
 
 
-            let mut build_tree = Tree::new("test_data/nn_validation/".to_string(), true);
+            let mut build_tree = Tree::new("test_data/nn_validation/".to_string(), n, true);
 
             for record in tqdm!(records.iter()) {
 
@@ -1358,7 +1311,7 @@ mod tests {
             }
 
 
-            let mut query_tree = Tree::new("test_data/nn_validation/".to_string(), false);
+            let mut query_tree = Tree::new("test_data/nn_validation/".to_string(), n, false);
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
             let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
@@ -1370,7 +1323,7 @@ mod tests {
     #[test]
     fn quick_fuzzed_verify_nn_accuracy(){
 
-        const N: usize = 8;
+        let n = 8;
 
         use::std::fs::File;
         use std::io::prelude::*;
@@ -1378,7 +1331,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord<N>> = Vec::new();
+        let mut records: Vec<CompoundRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1395,29 +1348,31 @@ mod tests {
 
             //let s: Vec<f32> = s.into_iter().map(|x| x.try_into().unwrap()).collect();
             let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
-            let descriptor = Descriptor::from_vec(s.clone());
+            let descriptor = Descriptor {data: s.clone(), length: n};
 
-            assert_eq!(s.len(), 8);
+            assert_eq!(s.len(), n);
 
             let cr = CompoundRecord {
                 compound_identifier: identifier,
                 descriptor,
                 dataset_identifier: 1,
+                length: n,
             };
 
             records.push(cr);
         }
 
-        let descriptor = Descriptor::<N>::from_vec(
-            vec![0.5613212933959323,
+        let descriptor = Descriptor {
+            data: vec![0.5613212933959323,
                  0.5027493566508184,
                  0.7390574788950892,
                  0.4562167305584901,
                  0.02413149926370306,
                  0.8082303147232089,
                  0.762055388982211,
-                 0.34713323654674944]
-        );
+                 0.34713323654674944],
+            length: n,
+        };
 
         let correct_answer = vec![
            "VDSYOSB36FAKWD2A", "011KIZEK6CTTETKF", "X0ZDKRU5TVHI3WWH",
@@ -1448,7 +1403,7 @@ mod tests {
             records.shuffle(&mut thread_rng());
 
 
-            let mut build_tree = Tree::new("test_data/qf/".to_string(), true);
+            let mut build_tree = Tree::new("test_data/qf/".to_string(), n, true);
 
             for record in tqdm!(records.iter()) {
 
@@ -1456,7 +1411,7 @@ mod tests {
             }
 
 
-            let mut query_tree = Tree::new("test_data/qf/".to_string(), false);
+            let mut query_tree = Tree::new("test_data/qf/".to_string(), n, false);
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
             //let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.0.clone()).collect();
@@ -1477,12 +1432,12 @@ mod tests {
         let record_filename = "/home/josh/db/100mil_test_fixed_strings/record".to_string();
         //let record_filename = "/home/josh/big_tmpfs/record".to_string();
         //let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone())));
-        let mut tree = Tree::from_filenames(node_filename.clone(), record_filename.clone(), false);
+        let mut tree = Tree::from_filenames(node_filename.clone(), record_filename.clone(), 8, false);
         //pretty_env_logger::init();
 
 
         let random_arr: [f32; 8] = rand::random();
-        let descriptor = Descriptor { data: random_arr };
+        let descriptor = Descriptor { data: Vec::from(random_arr), length: 8 };
         dbg!(&descriptor);
 
 
@@ -1500,7 +1455,8 @@ mod tests {
     #[test]
     fn slow_memtree_load() {
 
-        let tree = Tree::<8>::from_filenames("/home/josh/db/100mil_8k_page/node".to_string(), "/home/josh/db/100mil_8k_page/record".to_string(), true);
+        let n = 8;
+        let tree = Tree::from_filenames("/home/josh/db/100mil_8k_page/node".to_string(), "/home/josh/db/100mil_8k_page/record".to_string(), n, true);
 
     }   
 

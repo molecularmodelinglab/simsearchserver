@@ -41,15 +41,17 @@ pub enum NodeType{
 
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Descriptor<const N: usize> {
-    pub data: [f32; N],
+pub struct Descriptor {
+    pub data: Vec<f32>,
+    pub length: usize,
+    //pub data: [f32; N],
 }
-impl<const N: usize> Descriptor<N> {
+impl Descriptor {
 
-    pub fn distance(&self, other: &Descriptor<N>) -> f32 {
+    pub fn distance(&self, other: &Descriptor) -> f32 {
 
         let mut sum: f32 = 0.0;
-        for i in 0..N {
+        for i in 0..self.length {
             sum += f32::powf(self.data[i] - other.data[i], 2.0);
 
         }
@@ -60,16 +62,26 @@ impl<const N: usize> Descriptor<N> {
     
     }
 
-    pub fn from_vec(v: Vec<f32>) -> Self {
+    pub fn random(length: usize) -> Self {
 
+        let random_vec: Vec::<f32> = (0..length).map(|_| rand::random::<f32>()).collect();
+        return Self { data: random_vec, length: length };
+
+
+    }
+
+    pub fn from_vec(v: Vec<f32>, length: usize) -> Self {
+
+        assert!(v.len() == length);
         return Self {
             data: v.try_into().unwrap(),
+            length,
         }
     }
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct InternalNode<const N: usize> {
+pub struct InternalNode {
 
     pub parent_page_address: PageAddress,
     pub parent_node_offset: ItemOffset,
@@ -150,10 +162,11 @@ impl CompoundIdentifier {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct CompoundRecord<const N: usize> {
+pub struct CompoundRecord {
     pub dataset_identifier: u8,
     pub compound_identifier: CompoundIdentifier,
-    pub descriptor: Descriptor<N>,
+    pub descriptor: Descriptor,
+    pub length: usize,
 }
 
 pub fn coerce_(value: &[u8]) -> [u8; 1] {
@@ -172,10 +185,10 @@ pub fn coerce_f32(value: &[u8]) -> [u8; 4] {
     value.try_into().expect("slice with incorrect length")
 }
 
-struct Parser<const N: usize> {
+struct Parser {
 }
 
-impl<const N: usize> Parser<N>{
+impl Parser{
 
     pub fn get_usize_from_array(data: &[u8], offset: usize, length: usize) -> Result<usize, Error> {
 
@@ -205,23 +218,25 @@ impl<const N: usize> Parser<N>{
             Ok(attempted_f32)
         }
 
-     pub fn get_descriptor_from_array(data: &[u8], offset: usize, _length: usize) -> Result<Descriptor<N>, Error> {
+     pub fn get_descriptor_from_array(data: &[u8], offset: usize, length: usize) -> Result<Descriptor, Error> {
 
 
             let mut curr_offset: usize = offset;
             //let mut values: Vec<f32> = Vec::new();
-            let mut arr: [f32; N] = [0.0; N];
+            //let mut arr: [f32; length] = [0.0; length];
+            let mut vec: Vec<f32> = Vec::with_capacity(length);
             //let mut values: Vec<f32> = Vec::with_capacity(layout::DESCRIPTOR_LENGTH);
-            for i in 0..N {
+            for i in 0..length {
                 let bytes = &data[curr_offset..curr_offset + 4];
                 let known_size_array = coerce_f32(bytes);
                 let attempted_f32 = BigEndian::read_f32(&known_size_array);
                 //values.push(attempted_f32);
-                arr[i] = attempted_f32;
+                //arr[i] = attempted_f32;
+                vec.push(attempted_f32);
                 curr_offset += 4;
             }
 
-            let desc = Descriptor { data: arr };
+            let desc = Descriptor { data: vec, length: length};
             Ok(desc)
         }
 
@@ -233,31 +248,54 @@ impl<const N: usize> Parser<N>{
 
 }
 
-impl<const N: usize> CompoundRecord<N> {
+impl CompoundRecord {
 
 
-    pub fn default() -> Self {
+    pub fn default(length: usize) -> Self {
 
         return Self {
             dataset_identifier: 0,
             compound_identifier: CompoundIdentifier::from_str("defaultname"),
-            descriptor: Descriptor {data: [0.0; N]},
-        }
+            descriptor: Descriptor {data: vec![0.0; length], length},
+            length: length
+        };
+    }
+    
+    pub fn random(length: usize) -> CompoundRecord {
+
+        let descriptor = Descriptor::random(length);
+        let identifier = CompoundIdentifier::random();
+
+        let cr = CompoundRecord {
+            dataset_identifier: 0,
+            compound_identifier: identifier,
+            descriptor,
+            length,
+        };
+
+        return cr;
     }
 
-    pub const fn get_descriptor_size() -> usize {
-        let descriptor_size: usize = N * 4;
+    pub fn get_descriptor_size(&self) -> usize {
+        let descriptor_size: usize = self.length * 4;
         return descriptor_size;
     }
 
-    pub const fn get_record_size() -> usize {
-        let record_size = layout::DATASET_IDENTIFIER_SIZE + layout::COMPOUND_IDENTIFIER_SIZE + Self::get_descriptor_size();
+    pub fn get_record_size(&self) -> usize {
+        let record_size = layout::DATASET_IDENTIFIER_SIZE + layout::COMPOUND_IDENTIFIER_SIZE + self.get_descriptor_size();
         return record_size;
 
     }
 
+    pub fn compute_record_size(length: usize) -> usize {
+        let record_size = layout::DATASET_IDENTIFIER_SIZE + layout::COMPOUND_IDENTIFIER_SIZE + (length * 4);
+        return record_size;
+
+    }
+
+
     //TODO: handle trailing whitespace
-    pub fn from_slice(record_slice: &[u8]) -> Result<Self, String> {
+    pub fn from_slice(record_slice: &[u8], length: usize) -> Result<Self, String> {
 
         /*
         const DATASET_IDENTIFIER_START: usize = 0;
@@ -271,22 +309,23 @@ impl<const N: usize> CompoundRecord<N> {
         const COMPOUND_RECORD_SIZE: usize = DESCRIPTOR_START + DESCRIPTOR_SIZE;
         */
 
-        let dataset_identifier = Parser::<N>::get_usize_from_array(record_slice, layout::DATASET_IDENTIFIER_START, layout::DATASET_IDENTIFIER_SIZE).unwrap();
+        let dataset_identifier = Parser::get_usize_from_array(record_slice, layout::DATASET_IDENTIFIER_START, layout::DATASET_IDENTIFIER_SIZE).unwrap();
         let compound_identifier = CompoundIdentifier::from_ascii_array(record_slice, layout::COMPOUND_IDENTIFIER_START, layout::COMPOUND_IDENTIFIER_SIZE);
         //let compound_identifier = CompoundIdentifier("ayy".to_string());
-        let descriptor = Parser::<N>::get_descriptor_from_array(record_slice, layout::DESCRIPTOR_START, Self::get_descriptor_size()).unwrap();
+        let descriptor = Parser::get_descriptor_from_array(record_slice, layout::DESCRIPTOR_START, length).unwrap();
 
         return Ok (Self {
             dataset_identifier: dataset_identifier as u8,
             compound_identifier,
             descriptor,
+            length,
         })
     }
 
 
     pub fn to_vec(&self) -> Vec<u8> {
 
-        let mut vec: Vec<u8> = Vec::with_capacity(Self::get_record_size());
+        let mut vec: Vec<u8> = Vec::with_capacity(self.get_record_size());
 
         vec.push(self.dataset_identifier as u8);
 
@@ -299,7 +338,7 @@ impl<const N: usize> CompoundRecord<N> {
         vec.extend_from_slice(&arr);
 
         let mut curr_offset = layout::DESCRIPTOR_START;
-        for i in 0..N {
+        for i in 0..self.length {
 
             let mut slice = [0u8; 4];
             BigEndian::write_f32(&mut slice, self.descriptor.data[i]);
@@ -307,7 +346,7 @@ impl<const N: usize> CompoundRecord<N> {
 
         }
 
-        assert!(vec.len() == Self::get_record_size());
+        assert!(vec.len() == self.get_record_size());
         
         return vec;
     }
@@ -349,7 +388,7 @@ impl<const N: usize> CompoundRecord<N> {
 
 }
 
-impl<const N: usize> InternalNode<N> {
+impl InternalNode {
 
     pub fn default() -> Self {
 
@@ -384,22 +423,22 @@ impl<const N: usize> InternalNode<N> {
                         self.split_value);
     }
 
-    pub fn from_slice(node_slice: &[u8]) -> Result<InternalNode<N>, String> {
+    pub fn from_slice(node_slice: &[u8]) -> Result<InternalNode, String> {
 
         //let node_type = get_usize_from_array(node_slice, layout::NODE_TYPE_OFFSET, layout::NODE_TYPE_SIZE);
-        let parent_page_address = Parser::<N>::get_usize_from_array(node_slice, layout::PARENT_PAGE_START, layout::PARENT_PAGE_SIZE);
-        let parent_node_offset = Parser::<N>::get_usize_from_array(node_slice, layout::PARENT_NODE_OFFSET_START, layout::PARENT_NODE_OFFSET_SIZE);
+        let parent_page_address = Parser::get_usize_from_array(node_slice, layout::PARENT_PAGE_START, layout::PARENT_PAGE_SIZE);
+        let parent_node_offset = Parser::get_usize_from_array(node_slice, layout::PARENT_NODE_OFFSET_START, layout::PARENT_NODE_OFFSET_SIZE);
 
-        let left_child_page_address = Parser::<N>::get_usize_from_array(node_slice, layout::LEFT_CHILD_PAGE_START, layout::LEFT_CHILD_PAGE_SIZE);
-        let left_child_node_offset = Parser::<N>::get_usize_from_array(node_slice, layout::LEFT_CHILD_NODE_OFFSET_START, layout::LEFT_CHILD_NODE_OFFSET_SIZE);
-        let left_child_type = Parser::<N>::get_usize_from_array(node_slice, layout::LEFT_CHILD_TYPE_START, layout::LEFT_CHILD_TYPE_SIZE);
+        let left_child_page_address = Parser::get_usize_from_array(node_slice, layout::LEFT_CHILD_PAGE_START, layout::LEFT_CHILD_PAGE_SIZE);
+        let left_child_node_offset = Parser::get_usize_from_array(node_slice, layout::LEFT_CHILD_NODE_OFFSET_START, layout::LEFT_CHILD_NODE_OFFSET_SIZE);
+        let left_child_type = Parser::get_usize_from_array(node_slice, layout::LEFT_CHILD_TYPE_START, layout::LEFT_CHILD_TYPE_SIZE);
 
-        let right_child_page_address = Parser::<N>::get_usize_from_array(node_slice, layout::RIGHT_CHILD_PAGE_START, layout::RIGHT_CHILD_PAGE_SIZE);
-        let right_child_node_offset = Parser::<N>::get_usize_from_array(node_slice, layout::RIGHT_CHILD_NODE_OFFSET_START, layout::RIGHT_CHILD_NODE_OFFSET_SIZE);
-        let right_child_type = Parser::<N>::get_usize_from_array(node_slice, layout::RIGHT_CHILD_TYPE_START, layout::RIGHT_CHILD_TYPE_SIZE);
+        let right_child_page_address = Parser::get_usize_from_array(node_slice, layout::RIGHT_CHILD_PAGE_START, layout::RIGHT_CHILD_PAGE_SIZE);
+        let right_child_node_offset = Parser::get_usize_from_array(node_slice, layout::RIGHT_CHILD_NODE_OFFSET_START, layout::RIGHT_CHILD_NODE_OFFSET_SIZE);
+        let right_child_type = Parser::get_usize_from_array(node_slice, layout::RIGHT_CHILD_TYPE_START, layout::RIGHT_CHILD_TYPE_SIZE);
 
-        let split_axis = Parser::<N>::get_usize_from_array(node_slice, layout::SPLIT_AXIS_OFFSET, layout::SPLIT_AXIS_SIZE);
-        let split_value = Parser::<N>::get_f32_from_array(node_slice, layout::SPLIT_VALUE_OFFSET);
+        let split_axis = Parser::get_usize_from_array(node_slice, layout::SPLIT_AXIS_OFFSET, layout::SPLIT_AXIS_SIZE);
+        let split_value = Parser::get_f32_from_array(node_slice, layout::SPLIT_VALUE_OFFSET);
 
         let mut node = InternalNode::default();
 
@@ -608,10 +647,11 @@ mod tests {
     fn generic_descriptor() {
 
     const n: usize = 8;
-    let d = Descriptor::<n> {
+    let d = Descriptor {
                 //data:  [6.9,6.9,6.9,6.9,
                 //        6.9,6.9,6.9,6.9],
-                data: [6.9; n],
+                data: vec![6.9; n], 
+                length: n
             };
     }
 
