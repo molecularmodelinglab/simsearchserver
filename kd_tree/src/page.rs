@@ -410,11 +410,8 @@ impl RecordPage {
             false => {},
         }
 
-        //let start = layout::PAGE_DATA_START + (self.tail.as_ref().unwrap().0 as usize * layout::COMPOUND_RECORD_SIZE);
         let start = layout::PAGE_DATA_START + (self.tail.as_ref().unwrap().0 as usize * record.get_record_size());
-        dbg!(start);
         let size = record.get_record_size();
-        dbg!(size);
 
         let slice = &mut self.data[start..start + size];
 
@@ -449,16 +446,12 @@ impl RecordPage {
 
     pub fn is_full(&self) -> bool {
 
-        dbg!(self.desc_length);
-        dbg!(self.get_capacity());
         return self.tail.as_ref().unwrap().0 as usize >= self.get_capacity();
 
     }
 
     pub fn get_capacity(&self) -> usize {
 
-        //return (layout::RECORD_PAGE_SIZE - layout::PAGE_DATA_START) / layout::COMPOUND_RECORD_SIZE;
-        dbg!(CompoundRecord::compute_record_size(self.desc_length));
         return (layout::RECORD_PAGE_SIZE - layout::PAGE_DATA_START) / CompoundRecord::compute_record_size(self.desc_length);
 
     }

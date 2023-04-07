@@ -13,14 +13,13 @@ use hyper::server::Server;
 async fn hello(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Response<Body>, Infallible> {
     println!("{:?}", req.uri().path());
 
-    let random_arr: [f32; layout::DESCRIPTOR_LENGTH] = rand::random();
-    let descriptor = Descriptor { data: random_arr };
-    dbg!(&descriptor);
 
 
     //let descriptor = Descriptor::from_vec(vec![0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]);
     println!("HERE");
     let mut mg = tree.lock().unwrap();
+    let descriptor = Descriptor::random(mg.desc_length);
+    dbg!(&descriptor);
     println!("HERE2");
     let nn = mg.get_nearest_neighbors(&descriptor, 100);
     //let s = format!("{:?}", nn.records[0]);
@@ -33,20 +32,10 @@ async fn hello(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Respo
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     
-    //let db_filename = "/home/josh/db/1_bil_test/".to_string();
-    //let node_filename = "/home/josh/db/1_bil_test_fixed_strings/node".to_string();
-    //let node_filename = "/home/josh/db/100mil_layout::DESCRIPTOR_LENGTHk_page/node".to_string();
-    //let node_filename = "/home/josh/db/1_bil_layout::DESCRIPTOR_LENGTHk_node_32k_record/node".to_string();
-    //let node_filename = "/home/josh/db/1_bil_layout::DESCRIPTOR_LENGTHk_node_64k_record/node".to_string();
-    let node_filename = "/home/josh/db/1_bil_8k_node_64k_record/node".to_string();
-    //let node_filename = "/home/josh/tmpfs_mount_point/node".to_string();
-    //let record_filename = "/home/josh/db/1_bil_test_fixed_strings/record".to_string();
-    //let record_filename = "/home/josh/db/100mil_layout::DESCRIPTOR_LENGTHk_page/record".to_string();
-    //let record_filename = "/home/josh/big_tmpfs/record".to_string();
-    //let record_filename = "/home/josh/db/1_bil_layout::DESCRIPTOR_LENGTHk_node_32k_record/record".to_string();
-    let record_filename = "/home/josh/db/1_bil_8k_node_64k_record/record".to_string();
-    //let record_filename = "/home/josh/big_tmpfs/record".to_string();
-    let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone(), true)));
+    let n = 8;
+    let node_filename = "/home/josh/db/param_test/node".to_string();
+    let record_filename = "/home/josh/db/param_test/record".to_string();
+    let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone(), n, true)));
     //pretty_env_logger::init();
 
     // For every connection, we must make a `Service` to handle all
