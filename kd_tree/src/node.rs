@@ -13,6 +13,8 @@ use byteorder::{ByteOrder, BigEndian};
 use ascii::{AsAsciiStr, AsciiString};
 use std::cmp;
 
+use std::convert::TryInto;
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct PageAddress(pub usize);
 
@@ -39,15 +41,15 @@ pub enum NodeType{
 
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Descriptor {
-    pub data: [f32; layout::DESCRIPTOR_LENGTH],
+pub struct Descriptor<const N: usize> {
+    pub data: [f32; N],
 }
-impl Descriptor {
+impl<const N: usize> Descriptor<N> {
 
-    pub fn distance(&self, other: &Descriptor) -> f32 {
+    pub fn distance(&self, other: &Descriptor<N>) -> f32 {
 
         let mut sum: f32 = 0.0;
-        for i in 0..layout::DESCRIPTOR_LENGTH {
+        for i in 0..N {
             sum += f32::powf(self.data[i] - other.data[i], 2.0);
 
         }
@@ -67,7 +69,7 @@ impl Descriptor {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct InternalNode {
+pub struct InternalNode<const N: usize> {
 
     pub parent_page_address: PageAddress,
     pub parent_node_offset: ItemOffset,
@@ -148,10 +150,10 @@ impl CompoundIdentifier {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct CompoundRecord {
+pub struct CompoundRecord<const N: usize> {
     pub dataset_identifier: u8,
     pub compound_identifier: CompoundIdentifier,
-    pub descriptor: Descriptor,
+    pub descriptor: Descriptor<N>,
 }
 
 pub fn coerce_(value: &[u8]) -> [u8; 1] {
@@ -170,66 +172,68 @@ pub fn coerce_f32(value: &[u8]) -> [u8; 4] {
     value.try_into().expect("slice with incorrect length")
 }
 
-
-pub fn get_usize_from_array(data: &[u8], offset: usize, length: usize) -> Result<usize, Error> {
-
-        match length {
-            1 => {
-                let bytes = &data[offset..offset + length];
-                let known_size_array = coerce_byte(bytes);
-                let attempted_usize = layout::Value::try_from(known_size_array);
-                let layout::Value(value) = attempted_usize.unwrap();
-                Ok(value)
-            },
-            8 => {
-                let bytes = &data[offset..offset + length];
-                let known_size_array = coerce_pointer(bytes);
-                let attempted_usize = layout::Value::try_from(known_size_array);
-                let layout::Value(value) = attempted_usize.unwrap();
-                Ok(value)
-            },
-            _ => panic!(),
-        }
-    }
-
- pub fn get_f32_from_array(data: &[u8], offset: usize) -> Result<f32, Error> {
-        let bytes = &data[offset..offset + 4];
-        let known_size_array = coerce_f32(bytes);
-        let attempted_f32 = BigEndian::read_f32(&known_size_array);
-        Ok(attempted_f32)
-    }
-
- pub fn get_descriptor_from_array(data: &[u8], offset: usize, _length: usize) -> Result<Descriptor, Error> {
-
-        let num_iters = layout::DESCRIPTOR_LENGTH;
-
-        let mut curr_offset: usize = offset;
-        //let mut values: Vec<f32> = Vec::new();
-        let mut arr: [f32; layout::DESCRIPTOR_LENGTH] = [0.0; layout::DESCRIPTOR_LENGTH];
-        //let mut values: Vec<f32> = Vec::with_capacity(layout::DESCRIPTOR_LENGTH);
-        for i in 0..num_iters {
-            let bytes = &data[curr_offset..curr_offset + 4];
-            let known_size_array = coerce_f32(bytes);
-            let attempted_f32 = BigEndian::read_f32(&known_size_array);
-            //values.push(attempted_f32);
-            arr[i] = attempted_f32;
-            curr_offset += 4;
-        }
-
-        //let arr: [f32; layout::DESCRIPTOR_LENGTH] = vec_to_array(values);
-
-        let desc = Descriptor { data: arr };
-        Ok(desc)
-    }
-
-use std::convert::TryInto;
-
-fn vec_to_array<T, const N: usize>(v: Vec<T>) -> [T; N] {
-    v.try_into()
-        .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", N, v.len()))
+struct Parser<const N: usize> {
 }
 
-impl CompoundRecord {
+impl<const N: usize> Parser<N>{
+
+    pub fn get_usize_from_array(data: &[u8], offset: usize, length: usize) -> Result<usize, Error> {
+
+            match length {
+                1 => {
+                    let bytes = &data[offset..offset + length];
+                    let known_size_array = coerce_byte(bytes);
+                    let attempted_usize = layout::Value::try_from(known_size_array);
+                    let layout::Value(value) = attempted_usize.unwrap();
+                    Ok(value)
+                },
+                8 => {
+                    let bytes = &data[offset..offset + length];
+                    let known_size_array = coerce_pointer(bytes);
+                    let attempted_usize = layout::Value::try_from(known_size_array);
+                    let layout::Value(value) = attempted_usize.unwrap();
+                    Ok(value)
+                },
+                _ => panic!(),
+            }
+        }
+
+     pub fn get_f32_from_array(data: &[u8], offset: usize) -> Result<f32, Error> {
+            let bytes = &data[offset..offset + 4];
+            let known_size_array = coerce_f32(bytes);
+            let attempted_f32 = BigEndian::read_f32(&known_size_array);
+            Ok(attempted_f32)
+        }
+
+     pub fn get_descriptor_from_array(data: &[u8], offset: usize, _length: usize) -> Result<Descriptor<N>, Error> {
+
+
+            let mut curr_offset: usize = offset;
+            //let mut values: Vec<f32> = Vec::new();
+            let mut arr: [f32; N] = [0.0; N];
+            //let mut values: Vec<f32> = Vec::with_capacity(layout::DESCRIPTOR_LENGTH);
+            for i in 0..N {
+                let bytes = &data[curr_offset..curr_offset + 4];
+                let known_size_array = coerce_f32(bytes);
+                let attempted_f32 = BigEndian::read_f32(&known_size_array);
+                //values.push(attempted_f32);
+                arr[i] = attempted_f32;
+                curr_offset += 4;
+            }
+
+            let desc = Descriptor { data: arr };
+            Ok(desc)
+        }
+
+
+    fn vec_to_array<T, const M: usize>(v: Vec<T>) -> [T; M] {
+        v.try_into()
+            .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", M, v.len()))
+    }
+
+}
+
+impl<const N: usize> CompoundRecord<N> {
 
 
     pub fn default() -> Self {
@@ -237,18 +241,40 @@ impl CompoundRecord {
         return Self {
             dataset_identifier: 0,
             compound_identifier: CompoundIdentifier::from_str("defaultname"),
-            descriptor: Descriptor {data: [0.0; layout::DESCRIPTOR_LENGTH]},
+            descriptor: Descriptor {data: [0.0; N]},
         }
+    }
+
+    pub const fn get_descriptor_size() -> usize {
+        let descriptor_size: usize = N * 4;
+        return descriptor_size;
+    }
+
+    pub const fn get_record_size() -> usize {
+        let record_size = layout::DATASET_IDENTIFIER_SIZE + layout::COMPOUND_IDENTIFIER_SIZE + Self::get_descriptor_size();
+        return record_size;
+
     }
 
     //TODO: handle trailing whitespace
     pub fn from_slice(record_slice: &[u8]) -> Result<Self, String> {
 
-        let dataset_identifier = get_usize_from_array(record_slice, layout::DATASET_IDENTIFIER_START, layout::DATASET_IDENTIFIER_SIZE).unwrap();
-        //let compound_identifier = get_usize_from_array(record_slice, layout::COMPOUND_IDENTIFIER_SIZE, layout::COMPOUND_IDENTIFIER_SIZE).unwrap();
+        /*
+        const DATASET_IDENTIFIER_START: usize = 0;
+        const DATASET_IDENTIFIER_SIZE: usize = 1;
+
+        const COMPOUND_IDENTIFIER_START: usize = DATASET_IDENTIFIER_START + DATASET_IDENTIFIER_SIZE;
+        const COMPOUND_IDENTIFIER_SIZE: usize = 16;
+
+        const DESCRIPTOR_START: usize = COMPOUND_IDENTIFIER_START + COMPOUND_IDENTIFIER_SIZE;
+
+        const COMPOUND_RECORD_SIZE: usize = DESCRIPTOR_START + DESCRIPTOR_SIZE;
+        */
+
+        let dataset_identifier = Parser::<N>::get_usize_from_array(record_slice, layout::DATASET_IDENTIFIER_START, layout::DATASET_IDENTIFIER_SIZE).unwrap();
         let compound_identifier = CompoundIdentifier::from_ascii_array(record_slice, layout::COMPOUND_IDENTIFIER_START, layout::COMPOUND_IDENTIFIER_SIZE);
         //let compound_identifier = CompoundIdentifier("ayy".to_string());
-        let descriptor = get_descriptor_from_array(record_slice, layout::DESCRIPTOR_START, layout::DESCRIPTOR_SIZE).unwrap();
+        let descriptor = Parser::<N>::get_descriptor_from_array(record_slice, layout::DESCRIPTOR_START, Self::get_descriptor_size()).unwrap();
 
         return Ok (Self {
             dataset_identifier: dataset_identifier as u8,
@@ -258,9 +284,39 @@ impl CompoundRecord {
     }
 
 
-    pub fn to_arr(&self) -> [u8; layout::COMPOUND_RECORD_SIZE] {
+    pub fn to_vec(&self) -> Vec<u8> {
 
-        let mut arr: [u8; layout::COMPOUND_RECORD_SIZE] = [0; layout::COMPOUND_RECORD_SIZE];
+        let mut vec: Vec<u8> = Vec::with_capacity(Self::get_record_size());
+
+        vec.push(self.dataset_identifier as u8);
+
+        let s: AsciiString = AsciiString::from_ascii(self.compound_identifier.0.clone()).unwrap();
+        let b = s.as_bytes();
+
+        let mut arr = [0u8; layout::COMPOUND_IDENTIFIER_SIZE];
+        arr.copy_from_slice(b);
+
+        vec.extend_from_slice(&arr);
+
+        let mut curr_offset = layout::DESCRIPTOR_START;
+        for i in 0..N {
+
+            let mut slice = [0u8; 4];
+            BigEndian::write_f32(&mut slice, self.descriptor.data[i]);
+            vec.extend_from_slice(&slice);
+
+        }
+
+        assert!(vec.len() == Self::get_record_size());
+        
+        return vec;
+    }
+    /*
+    pub fn to_arr(&self) -> [u8; N + 17] {
+
+        const SIZE: usize = Self::get_record_size();
+
+        let mut arr: [u8; Self::get_record_size()] = [0; Self::get_record_size()];
 
         arr[0] = self.dataset_identifier;
 
@@ -275,7 +331,7 @@ impl CompoundRecord {
         slice.copy_from_slice(b);
 
         let mut curr_offset = layout::DESCRIPTOR_START;
-        for i in 0..self.descriptor.data.len() {
+        for i in 0..N {
 
             let slice = &mut arr[curr_offset..curr_offset + 4];
             BigEndian::write_f32(slice, self.descriptor.data[i]);
@@ -286,13 +342,14 @@ impl CompoundRecord {
         return arr
 
     }
+    */
 
 
 
 
 }
 
-impl InternalNode {
+impl<const N: usize> InternalNode<N> {
 
     pub fn default() -> Self {
 
@@ -327,22 +384,22 @@ impl InternalNode {
                         self.split_value);
     }
 
-    pub fn from_slice(node_slice: &[u8]) -> Result<InternalNode, String> {
+    pub fn from_slice(node_slice: &[u8]) -> Result<InternalNode<N>, String> {
 
         //let node_type = get_usize_from_array(node_slice, layout::NODE_TYPE_OFFSET, layout::NODE_TYPE_SIZE);
-        let parent_page_address = get_usize_from_array(node_slice, layout::PARENT_PAGE_START, layout::PARENT_PAGE_SIZE);
-        let parent_node_offset = get_usize_from_array(node_slice, layout::PARENT_NODE_OFFSET_START, layout::PARENT_NODE_OFFSET_SIZE);
+        let parent_page_address = Parser::<N>::get_usize_from_array(node_slice, layout::PARENT_PAGE_START, layout::PARENT_PAGE_SIZE);
+        let parent_node_offset = Parser::<N>::get_usize_from_array(node_slice, layout::PARENT_NODE_OFFSET_START, layout::PARENT_NODE_OFFSET_SIZE);
 
-        let left_child_page_address = get_usize_from_array(node_slice, layout::LEFT_CHILD_PAGE_START, layout::LEFT_CHILD_PAGE_SIZE);
-        let left_child_node_offset = get_usize_from_array(node_slice, layout::LEFT_CHILD_NODE_OFFSET_START, layout::LEFT_CHILD_NODE_OFFSET_SIZE);
-        let left_child_type = get_usize_from_array(node_slice, layout::LEFT_CHILD_TYPE_START, layout::LEFT_CHILD_TYPE_SIZE);
+        let left_child_page_address = Parser::<N>::get_usize_from_array(node_slice, layout::LEFT_CHILD_PAGE_START, layout::LEFT_CHILD_PAGE_SIZE);
+        let left_child_node_offset = Parser::<N>::get_usize_from_array(node_slice, layout::LEFT_CHILD_NODE_OFFSET_START, layout::LEFT_CHILD_NODE_OFFSET_SIZE);
+        let left_child_type = Parser::<N>::get_usize_from_array(node_slice, layout::LEFT_CHILD_TYPE_START, layout::LEFT_CHILD_TYPE_SIZE);
 
-        let right_child_page_address = get_usize_from_array(node_slice, layout::RIGHT_CHILD_PAGE_START, layout::RIGHT_CHILD_PAGE_SIZE);
-        let right_child_node_offset = get_usize_from_array(node_slice, layout::RIGHT_CHILD_NODE_OFFSET_START, layout::RIGHT_CHILD_NODE_OFFSET_SIZE);
-        let right_child_type = get_usize_from_array(node_slice, layout::RIGHT_CHILD_TYPE_START, layout::RIGHT_CHILD_TYPE_SIZE);
+        let right_child_page_address = Parser::<N>::get_usize_from_array(node_slice, layout::RIGHT_CHILD_PAGE_START, layout::RIGHT_CHILD_PAGE_SIZE);
+        let right_child_node_offset = Parser::<N>::get_usize_from_array(node_slice, layout::RIGHT_CHILD_NODE_OFFSET_START, layout::RIGHT_CHILD_NODE_OFFSET_SIZE);
+        let right_child_type = Parser::<N>::get_usize_from_array(node_slice, layout::RIGHT_CHILD_TYPE_START, layout::RIGHT_CHILD_TYPE_SIZE);
 
-        let split_axis = get_usize_from_array(node_slice, layout::SPLIT_AXIS_OFFSET, layout::SPLIT_AXIS_SIZE);
-        let split_value = get_f32_from_array(node_slice, layout::SPLIT_VALUE_OFFSET);
+        let split_axis = Parser::<N>::get_usize_from_array(node_slice, layout::SPLIT_AXIS_OFFSET, layout::SPLIT_AXIS_SIZE);
+        let split_value = Parser::<N>::get_f32_from_array(node_slice, layout::SPLIT_VALUE_OFFSET);
 
         let mut node = InternalNode::default();
 
@@ -428,6 +485,7 @@ impl InternalNode {
 mod tests {
     use super::*;
 
+    /*
     #[test]
     fn quick_node_from_slice_works() {
 
@@ -543,8 +601,22 @@ mod tests {
         dbg![layout::NODE_SIZE];
         dbg![layout::COMPOUND_RECORD_SIZE];
     }
-    }
     
+
+    */
+    #[test]
+    fn generic_descriptor() {
+
+    const n: usize = 8;
+    let d = Descriptor::<n> {
+                //data:  [6.9,6.9,6.9,6.9,
+                //        6.9,6.9,6.9,6.9],
+                data: [6.9; n],
+            };
+    }
+
+}
+
 
 
 

@@ -82,6 +82,7 @@ pub const NODE_SIZE: usize = SPLIT_VALUE_OFFSET + SPLIT_VALUE_SIZE;
 
 //for CompoundRecord
 //TODO: make generic over different descriptor lengths
+//
 pub const DATASET_IDENTIFIER_START: usize = 0;
 pub const DATASET_IDENTIFIER_SIZE: usize = 1;
 
@@ -89,10 +90,9 @@ pub const COMPOUND_IDENTIFIER_START: usize = DATASET_IDENTIFIER_START + DATASET_
 pub const COMPOUND_IDENTIFIER_SIZE: usize = 16;
 
 pub const DESCRIPTOR_START: usize = COMPOUND_IDENTIFIER_START + COMPOUND_IDENTIFIER_SIZE;
-pub const DESCRIPTOR_SIZE: usize = 32;
+//pub const DESCRIPTOR_SIZE: usize = 32;
 
-pub const COMPOUND_RECORD_SIZE: usize = DESCRIPTOR_START + DESCRIPTOR_SIZE;
-
+//pub const COMPOUND_RECORD_SIZE: usize = DESCRIPTOR_START + DESCRIPTOR_SIZE;
 
 //for generic Page
 pub const PAGE_TYPE_OFFSET: usize = 0;

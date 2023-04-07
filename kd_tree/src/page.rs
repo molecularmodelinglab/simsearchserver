@@ -20,13 +20,14 @@ pub trait Pageable {
 */
 
 #[derive(Debug)]
-pub struct NodePage {
+pub struct NodePage<const N: usize> {
 
     pub data: Box<[u8; layout::NODE_PAGE_SIZE]>,
     pub tail: Option<ItemOffset>,
 }
 
-impl NodePage {
+//TODO: strip const generic? why does it care about descriptor length?
+impl<const N: usize> NodePage<N> {
 
     pub fn new() -> Self {
 
@@ -98,7 +99,7 @@ impl NodePage {
 
     }
 
-    pub fn add_node(&mut self, node: &InternalNode) -> Result<ItemOffset, String> {
+    pub fn add_node(&mut self, node: &InternalNode<N>) -> Result<ItemOffset, String> {
 
         match self.push_node(node) {
             Ok(_) => {return Ok(ItemOffset(self.tail.clone().unwrap().0)) },
@@ -108,7 +109,7 @@ impl NodePage {
 
     }
 
-    pub fn push_node(&mut self, node: &InternalNode) ->Result<(), String> {
+    pub fn push_node(&mut self, node: &InternalNode<N>) ->Result<(), String> {
 
         match self.is_full() {
             true => return Err("Node is full".to_string()),
@@ -165,7 +166,7 @@ impl NodePage {
 
     }
 
-    pub fn get_node_at(&self, offset: ItemOffset) -> Result<InternalNode, String> {
+    pub fn get_node_at(&self, offset: ItemOffset) -> Result<InternalNode<N>, String> {
 
         //dbg!(&self.get_data()[0..10]);
         //println!("CURR TAIL: {:?}", self.tail);
@@ -191,7 +192,7 @@ impl NodePage {
 
     }
 
-    pub fn write_node_at(&mut self, node: InternalNode, offset: ItemOffset) -> Result<(), String> {
+    pub fn write_node_at(&mut self, node: InternalNode<N>, offset: ItemOffset) -> Result<(), String> {
         let mut start = layout::PAGE_DATA_START;
         start += offset.0 as usize * layout::NODE_SIZE;
         let slice = &mut self.data[start..start + layout::NODE_SIZE];
@@ -200,10 +201,10 @@ impl NodePage {
         Ok(())
     }
 
-    pub fn get_nodes(&self) -> Vec::<InternalNode> {
+    pub fn get_nodes(&self) -> Vec::<InternalNode<N>> {
 
         //let mut v: Vec::<InternalNode> = Vec::new();
-        let mut v: Vec::<InternalNode> = Vec::with_capacity(self.get_capacity());
+        let mut v: Vec::<InternalNode<N>> = Vec::with_capacity(self.get_capacity());
 
         for offset in 0..10000 {
 
@@ -232,20 +233,20 @@ mod tests {
 
     #[test]
     fn quick_new_nodepage_works() {
-        let _np = NodePage::new();
+        let _np = NodePage::<8>::new();
     }
 
     #[test]
     fn nodepage_capacity() {
-        let np = NodePage::new();
+        let np = NodePage::<8>::new();
         dbg!(np.get_capacity());
     }
 
 
     #[test]
     fn quick_add_node_trivial_works() {
-        let mut np = NodePage::new();
-        let node = InternalNode::default();
+        let mut np = NodePage::<8>::new();
+        let node = InternalNode::<8>::default();
 
         assert_eq!(np.num_nodes(), 0);
         np.add_node(&node).unwrap();
@@ -257,7 +258,7 @@ mod tests {
 
     #[test]
     fn quick_panic_node_full_works() {
-        let mut np = NodePage::new();
+        let mut np = NodePage::<8>::new();
         let node = InternalNode::default();
 
         for i in 0..1024 {
@@ -273,12 +274,12 @@ mod tests {
 
     #[test]
     fn quick_test_new_leafpage_works() {
-        let _lp = RecordPage::new();
+        let _lp = RecordPage::<8>::new();
     }
 
     #[test]
     fn quick_add_compound_record() {
-        let mut lp = RecordPage::new();
+        let mut lp = RecordPage::<8>::new();
 
         let cr = CompoundRecord::default();
 
@@ -299,7 +300,7 @@ mod tests {
     #[test]
     fn quick_test_get_capacity() {
 
-        let mut lp = RecordPage::new();
+        let mut lp = RecordPage::<8>::new();
         dbg!(&lp.get_capacity());
         //dbg!(lp.get_capacity());
 
@@ -322,7 +323,7 @@ mod tests {
 }
 
 #[derive(Debug)]
-pub struct RecordPage {
+pub struct RecordPage<const N: usize> {
 
     pub data: Box<[u8; layout::RECORD_PAGE_SIZE]>,
     pub tail: Option<ItemOffset>,
@@ -340,7 +341,7 @@ impl Pageable for RecordPage {
 }
 */
 
-impl RecordPage {
+impl<const N: usize> RecordPage<N> {
 
     pub fn new() -> Self {
         
@@ -385,7 +386,7 @@ impl RecordPage {
 
     }
 
-    pub fn descriptor_in_page(&self, query_desc: &Descriptor) -> bool {
+    pub fn descriptor_in_page(&self, query_desc: &Descriptor<N>) -> bool {
 
         for record in self.get_records() {
             if record.descriptor == *query_desc {
@@ -399,10 +400,10 @@ impl RecordPage {
     }
 
 
-    pub fn get_records(&self) -> Vec::<CompoundRecord> {
+    pub fn get_records(&self) -> Vec::<CompoundRecord<N>> {
 
         //let mut v: Vec::<CompoundRecord> = Vec::new();
-        let mut v: Vec::<CompoundRecord> = Vec::with_capacity(self.get_capacity());
+        let mut v: Vec::<CompoundRecord<N>> = Vec::with_capacity(self.get_capacity());
 
         for offset in 0..10000 {
 
@@ -420,19 +421,21 @@ impl RecordPage {
     }
 
 
-    pub fn add_record(&mut self, record: &CompoundRecord) -> Result<(), String> {
+    pub fn add_record(&mut self, record: &CompoundRecord<N>) -> Result<(), String> {
 
         match self.is_full() {
             true => return Err("Node is full".to_string()),
             false => {},
         }
 
-        let start = layout::PAGE_DATA_START + (self.tail.as_ref().unwrap().0 as usize * layout::COMPOUND_RECORD_SIZE);
-        let size = layout::COMPOUND_RECORD_SIZE;
+        //let start = layout::PAGE_DATA_START + (self.tail.as_ref().unwrap().0 as usize * layout::COMPOUND_RECORD_SIZE);
+        let start = layout::PAGE_DATA_START + (self.tail.as_ref().unwrap().0 as usize * CompoundRecord::<N>::get_record_size());
+        let size = CompoundRecord::<N>::get_record_size();
 
         let slice = &mut self.data[start..start + size];
 
-        slice.copy_from_slice(&record.to_arr());
+        //slice.copy_from_slice(&record.to_arr());
+        slice.copy_from_slice(&record.to_vec());
         self.tail.as_mut().unwrap().0 += 1;
 
         //ensure tail value is updated
@@ -443,14 +446,14 @@ impl RecordPage {
         Ok(())
     }
 
-    pub fn get_record_at(&self, offset: usize) -> Result<CompoundRecord, String> {
+    pub fn get_record_at(&self, offset: usize) -> Result<CompoundRecord<N>, String> {
 
         if offset >= self.tail.as_ref().unwrap().0 as usize {
             return Err("Provided offset greater than number of nodes".to_string());
         }
         else {
-            let start = layout::PAGE_DATA_START + (offset * layout::COMPOUND_RECORD_SIZE);
-            let size = layout::COMPOUND_RECORD_SIZE;
+            let start = layout::PAGE_DATA_START + (offset * CompoundRecord::<N>::get_record_size()); 
+            let size = CompoundRecord::<N>::get_record_size();
             let slice = &self.data[start..start + size];
 
             let cr = CompoundRecord::from_slice(slice);
@@ -468,7 +471,8 @@ impl RecordPage {
 
     pub fn get_capacity(&self) -> usize {
 
-        return (layout::RECORD_PAGE_SIZE - layout::PAGE_DATA_START) / layout::COMPOUND_RECORD_SIZE;
+        //return (layout::RECORD_PAGE_SIZE - layout::PAGE_DATA_START) / layout::COMPOUND_RECORD_SIZE;
+        return (layout::RECORD_PAGE_SIZE - layout::PAGE_DATA_START) / CompoundRecord::<N>::get_record_size();
 
     }
 

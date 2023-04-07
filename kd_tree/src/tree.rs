@@ -16,10 +16,10 @@ use std::collections::VecDeque;
 /// nodes are stored in separate files and paged separately.
 #[derive(Debug)]
 
-pub struct Tree {
-    pub node_pager: NodePager,
-    pub record_pager: RecordPager,
-    pub cached_node_pager: Option<CachedPager>,
+pub struct Tree<const N: usize> {
+    pub node_pager: NodePager<N>,
+    pub record_pager: RecordPager<N>,
+    pub cached_node_pager: Option<CachedPager<N>>,
     pub dirname: String,
     pub free_node_pages: VecDeque<PageAddress>,
     pub root: Option<PagePointer>,
@@ -31,14 +31,14 @@ pub struct Tree {
 ///
 ///handles distance sorting and truncating to N items
 #[derive(Debug)]
-pub struct TopHits {
+pub struct TopHits<const N: usize> {
     pub max_length: usize,
     pub distances: Vec<f32>,
-    pub records: Vec<Option<CompoundRecord>>,
+    pub records: Vec<Option<CompoundRecord<N>>>,
     pub pointers: Vec<Option<PagePointer>>,
 }
 
-impl TopHits {
+impl<const N: usize> TopHits<N> {
 
     ///Distances are initially set to max f32 value
     ///
@@ -46,7 +46,7 @@ impl TopHits {
     pub fn new(max_length: usize) -> Self {
 
         let mut distances: Vec<f32> = Vec::new();
-        let mut records: Vec<Option<CompoundRecord>> = Vec::new();
+        let mut records: Vec<Option<CompoundRecord<N>>> = Vec::new();
         let mut pointers: Vec<Option<PagePointer>> = Vec::new();
         for _ in 0..max_length {
             distances.push(f32::MAX);
@@ -64,7 +64,7 @@ impl TopHits {
     ///Internal method for adding a record to the list
     ///
     ///Undefined if called without checking if we can via `try_add`
-    fn _add(&mut self, distance: f32, record: &CompoundRecord, page_pointer: &PagePointer) -> Result<(), String> {
+    fn _add(&mut self, distance: f32, record: &CompoundRecord<N>, page_pointer: &PagePointer) -> Result<(), String> {
         //println!("ADDING");
 
         //find insertion point
@@ -94,7 +94,7 @@ impl TopHits {
     }
 
     ///Public method to be called on every record for consideration as a neighbor
-    pub fn try_add(&mut self, distance: f32, record: &CompoundRecord, page_pointer: &PagePointer) -> Result<(), String> {
+    pub fn try_add(&mut self, distance: f32, record: &CompoundRecord<N>, page_pointer: &PagePointer) -> Result<(), String> {
 
         //println!("ATTEMPTING TO ADD: {:?}", record.compound_identifier);
         let worst_best_distance = self.get_highest_dist();
@@ -151,7 +151,7 @@ pub enum NodeAction {
 
 }
 
-impl Tree {
+impl<const N: usize> Tree<N> {
 
     pub fn from_filenames(node_filename: String, record_filename: String, cache: bool) -> Self {
 
@@ -162,7 +162,7 @@ impl Tree {
 
         let free_node_pages = VecDeque::from([PageAddress(0)]);
 
-        let (cached_node_pager, use_cached_nodes) : (Option<CachedPager>, bool) = match cache {
+        let (cached_node_pager, use_cached_nodes) : (Option<CachedPager<N>>, bool) = match cache {
             
             true => {
 
@@ -241,7 +241,7 @@ impl Tree {
 
     }
 
-    fn get_node_from_address(&self, address: &PageAddress, offset: &ItemOffset) -> Result<InternalNode, String> {
+    fn get_node_from_address(&self, address: &PageAddress, offset: &ItemOffset) -> Result<InternalNode<N>, String> {
 
         match self.use_cached_nodes {
             
@@ -320,7 +320,7 @@ impl Tree {
     }
 
     ///Returns whether or not the exact provided descriptor is in the tree
-    pub fn record_in_tree(&mut self, record: &CompoundRecord) -> Result<bool, String> {
+    pub fn record_in_tree(&mut self, record: &CompoundRecord<N>) -> Result<bool, String> {
         let mut curr_pointer: PagePointer = match &self.root {
 
             None => { PagePointer {
@@ -337,7 +337,7 @@ impl Tree {
             match curr_pointer.page_type {
                 PageType::Leaf => {
 
-                    let page: RecordPage = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
+                    let page: RecordPage<N> = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
                     return Ok(page.descriptor_in_page(&record.descriptor));
 
                 },
@@ -375,11 +375,18 @@ impl Tree {
         }
     }
 
+    fn dist_to_axis(&self, split_axis: usize, split_value: f32, descriptor: &Descriptor<N>) -> f32 {
+
+        return (descriptor.data[split_axis] - split_value).abs()
+
+    }
+
+
     ///Returns the `n` nearest neighbors of the provided `query_descriptor`
     ///
     ///Performance should worsen as `n` grows larger, as fewer branches of the tree can be pruned
     ///with more distant already-found points
-    pub fn get_nearest_neighbors(&mut self, query_descriptor: &Descriptor, n: usize) -> TopHits {
+    pub fn get_nearest_neighbors(&mut self, query_descriptor: &Descriptor<N>, n: usize) -> TopHits<N> {
 
         let mut hits = TopHits::new(n);
 
@@ -421,7 +428,7 @@ impl Tree {
 
                             num_record_pages_visited += 1;
 
-                            let page: RecordPage = self.record_pager.get_record_page(&curr_pointer.page_address.clone()).unwrap();
+                            let page: RecordPage<N> = self.record_pager.get_record_page(&curr_pointer.page_address.clone()).unwrap();
 
                             for record in page.get_records() {
                                 let dist = query_descriptor.distance(&record.descriptor);
@@ -487,14 +494,7 @@ impl Tree {
                     let split_value = node.split_value;
 
                     //calc_distance to this axis and check it
-                    
-                    fn dist_to_axis(split_axis: usize, split_value: f32, descriptor: &Descriptor) -> f32 {
-
-                        return (descriptor.data[split_axis] - split_value).abs()
-                 
-                    }
-
-                    let dist = dist_to_axis(split_axis, split_value, query_descriptor);
+                                       let dist = self.dist_to_axis(split_axis, split_value, query_descriptor);
                     let threshold = hits.get_highest_dist();
                     //println!("DIST TO AXIS: {:?}", dist);
 
@@ -538,7 +538,7 @@ impl Tree {
     ///the records to that node. If this fills the node, the node is split at its median and two
     ///half-filled leaf nodes are created. A new internal node is created to point to these two
     ///children.
-    pub fn add_record(&mut self, record: &CompoundRecord) -> Result<(), String> {
+    pub fn add_record(&mut self, record: &CompoundRecord<N>) -> Result<(), String> {
 
         let mut curr_pointer: PagePointer = match &self.root {
 
@@ -567,7 +567,7 @@ impl Tree {
             match curr_pointer.page_type {
                 PageType::Leaf => {
 
-                    let mut page: RecordPage = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
+                    let mut page: RecordPage<N> = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
 
                     page.add_record(record)?;
                     //dbg!(page.get_capacity());
@@ -630,7 +630,7 @@ impl Tree {
     ///Internal method to take a single full RecordPage, find its median at the "next" axis, and
     ///split the records along that median. This is really the only place where new internal nodes
     ///are created.
-    pub fn split(&mut self, page: RecordPage, this_pointer: &PagePointer, parent_pointer: &PagePointer, last_was_left: bool) -> Result<(), String> {
+    pub fn split(&mut self, page: RecordPage<N>, this_pointer: &PagePointer, parent_pointer: &PagePointer, last_was_left: bool) -> Result<(), String> {
 
         //println!("SPLITTING");
         //dbg!(&this_pointer.page_address);
@@ -642,7 +642,7 @@ impl Tree {
             Some(_) => {
                     let parent_page = self.node_pager.get_node_page(&parent_pointer.page_address).unwrap();
                     let parent_node = parent_page.get_node_at(parent_pointer.node_offset.clone()).unwrap();
-                    (parent_node.split_axis + 1) % layout::DESCRIPTOR_LENGTH
+                    (parent_node.split_axis + 1) % N
             },
         };
 
@@ -680,8 +680,8 @@ impl Tree {
         //let mut left_records: Vec<CompoundRecord> = Vec::new();
         //let mut right_records: Vec<CompoundRecord> = Vec::new();
 
-        let mut left_records: Vec<CompoundRecord> = Vec::with_capacity((records.len() / 2) + 1);
-        let mut right_records: Vec<CompoundRecord> = Vec::with_capacity((records.len() / 2) + 1);
+        let mut left_records: Vec<CompoundRecord<N>> = Vec::with_capacity((records.len() / 2) + 1);
+        let mut right_records: Vec<CompoundRecord<N>> = Vec::with_capacity((records.len() / 2) + 1);
 
         //consume records and allocate into left and right pages
         for x in records.into_iter() {
@@ -766,7 +766,7 @@ impl Tree {
     ///Internal method that's called during the split procedure. The new node needs to be assigned
     ///to a node page with free space, or assigned to a newly allocated node page. Returns a
     ///pointer to the newly created node wherever it's placed.
-    pub fn add_new_node(&mut self, node: &InternalNode) -> Result<PagePointer, String> {
+    pub fn add_new_node(&mut self, node: &InternalNode<N>) -> Result<PagePointer, String> {
 
         //find a page with space for nodes
         //
@@ -849,11 +849,12 @@ mod tests {
     #[test]
     fn quick_tree_new() {
 
+        const N: usize = 8;
         let mut tree = Tree::new("test_data/tree_new/".to_string(), true);
 
-        fn get_random_record() -> CompoundRecord {
+        fn get_random_record() -> CompoundRecord::<N> {
 
-            let random_arr: [f32; layout::DESCRIPTOR_LENGTH] = rand::random();
+            let random_arr: [f32; N] = rand::random();
             let mut rng = thread_rng();
             let chars: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
 
@@ -886,16 +887,16 @@ mod tests {
     #[test]
     fn quick_tree_find() {
 
-        let mut tree = Tree::new("test_data/aaab/".to_string(), true);
+        const N: usize = 16;
+        let mut tree = Tree::<N>::new("test_data/aaab/".to_string(), true);
         //dbg!(&tree);
 
 
         let cr_to_find = get_random_record();
 
-        fn get_random_record() -> CompoundRecord {
+        fn get_random_record() -> CompoundRecord::<N> {
 
-            let random_arr: [f32; layout::DESCRIPTOR_LENGTH] = rand::random();
-            //let random_chars: [ulayout::DESCRIPTOR_LENGTH; 16] = rand::random();
+            let random_arr: [f32; N] = rand::random();
             let mut rng = thread_rng();
             let chars: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
 
@@ -964,12 +965,12 @@ mod tests {
         //dbg!(&tree);
 
 
+        const N: usize = 8;
         let cr_to_find = get_random_record();
 
-        fn get_random_record() -> CompoundRecord {
+        fn get_random_record() -> CompoundRecord::<8> {
 
-            let random_arr: [f32; layout::DESCRIPTOR_LENGTH] = rand::random();
-            //let random_chars: [ulayout::DESCRIPTOR_LENGTH; 16] = rand::random();
+            let random_arr: [f32; N] = rand::random();
             let mut rng = thread_rng();
             let chars: String = (0..16).map(|_| rng.sample(Alphanumeric) as char).collect();
 
@@ -1035,6 +1036,7 @@ mod tests {
     #[test]
     fn build_verify_nn_accuracy() {
 
+        const N: usize = 8;
 
         use::std::fs::File;
         use std::io::prelude::*;
@@ -1043,7 +1045,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord> = Vec::new();
+        let mut records: Vec<CompoundRecord<N>> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1062,7 +1064,7 @@ mod tests {
             let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
             let descriptor = Descriptor::from_vec(s.clone());
 
-            assert_eq!(s.len(), layout::DESCRIPTOR_LENGTH);
+            assert_eq!(s.len(), N);
 
             let cr = CompoundRecord {
                 compound_identifier: identifier,
@@ -1089,10 +1091,11 @@ mod tests {
     #[bench]
     fn benchmark_query_speed(b: &mut Bencher) {
 
-        fn make_random_query(tree: &mut Tree) {
+        const N: usize = 8;
+        fn make_random_query(tree: &mut Tree<N>) {
 
-            let data: [f32; layout::DESCRIPTOR_LENGTH] = random();
-            let descriptor: Descriptor = Descriptor {data};
+            let data: [f32; N] = random();
+            let descriptor: Descriptor<N> = Descriptor::<N> {data};
 
             let _nn = tree.get_nearest_neighbors(&descriptor, 20);
         }
@@ -1106,17 +1109,17 @@ mod tests {
     }
 
 
-        /*
     #[test]
     fn query_verify_nn_accuracy(){
 
+        const N: usize = 8;
         use::std::fs::File;
         use std::io::prelude::*;
         let mut file = File::open("test_data/random_descriptors.txt").unwrap();
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord> = Vec::new();
+        let mut records: Vec<CompoundRecord<N>> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1128,14 +1131,14 @@ mod tests {
             }
 
             let mut s = line.split(",");
-            let identifier = CompoundIdentifier(s.next().unwrap().to_string());
+            let identifier = CompoundIdentifier::from_string(s.next().unwrap().to_string());
             let s: Vec<_> = s.collect();
 
             //let s: Vec<f32> = s.into_iter().map(|x| x.try_into().unwrap()).collect();
             let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
             let descriptor = Descriptor::from_vec(s.clone());
 
-            assert_eq!(s.len(), layout::DESCRIPTOR_LENGTH);
+            assert_eq!(s.len(), N);
 
             let cr = CompoundRecord {
                 compound_identifier: identifier,
@@ -1147,36 +1150,36 @@ mod tests {
         }
 
         dbg!(records.len());
-        let descriptor = Descriptor::from_vec(
+        let descriptor = Descriptor::<N>::from_vec(
             vec![
-            0.layout::DESCRIPTOR_LENGTH59layout::DESCRIPTOR_LENGTH341,
-            0.633layout::DESCRIPTOR_LENGTH7layout::DESCRIPTOR_LENGTHlayout::DESCRIPTOR_LENGTH,
-            0.6layout::DESCRIPTOR_LENGTH099475,
-            0.layout::DESCRIPTOR_LENGTH503layout::DESCRIPTOR_LENGTH34,
-            0.5layout::DESCRIPTOR_LENGTH941144,
-            0.layout::DESCRIPTOR_LENGTH46layout::DESCRIPTOR_LENGTHlayout::DESCRIPTOR_LENGTH795,
-            0.6100layout::DESCRIPTOR_LENGTH036,
-            0.layout::DESCRIPTOR_LENGTHlayout::DESCRIPTOR_LENGTH4layout::DESCRIPTOR_LENGTH12layout::DESCRIPTOR_LENGTH3,
+            0.8598341,
+            0.6338788,
+            0.68099475,
+            0.8503834,
+            0.58941144,
+            0.84688795,
+            0.61008036,
+            0.88481283,
             ]
 
         );
 
         let correct_answer = vec![
             "5ZLD00MOT36ZK6DX",
-            "WYE97K70U1layout::DESCRIPTOR_LENGTHY9SAlayout::DESCRIPTOR_LENGTH",
+            "WYE97K70U18Y9SA8",
             "ZID354YZTEAEWOZC",
-            "DDlayout::DESCRIPTOR_LENGTHHKDRP2N4CPUO6",
+            "DD8HKDRP2N4CPUO6",
             "PTFLJ2OZHFOG2DYL",
-            "IPWJNLZNC0Playout::DESCRIPTOR_LENGTH79Q2",
+            "IPWJNLZNC0P879Q2",
             "WVLV4I96MD0LNN3N",
             "U7TSZERO313NXQ4U",
             "MBGRRIRL213LQFUO",
-            "MJ255VPHOK7HW55layout::DESCRIPTOR_LENGTH",
+            "MJ255VPHOK7HW558",
             "HH7M5H7BGC3KYE6I",
             "NXSYU67FL5SUZPBZ",
-            "ARDU41VA315KNZlayout::DESCRIPTOR_LENGTH3",
-            "TVLSWP3H7GZlayout::DESCRIPTOR_LENGTHHKRW",
-            "Blayout::DESCRIPTOR_LENGTHOSVJGNI69DBHKC",
+            "ARDU41VA315KNZ83",
+            "TVLSWP3H7GZ8HKRW",
+            "B8OSVJGNI69DBHKC",
             "0G3FS1H1MAFCMAQP",
             "BKSQDVKLXK93DWN6",
             "VL6P6BBJQ9VT0CCH",
@@ -1186,27 +1189,27 @@ mod tests {
             "ERWUTVVNZOVNHO7B",
             "MWV7OONG9Q4H3V1A",
             "AJ9A47HXJ30EXTVG",
-            "OOCZMI2layout::DESCRIPTOR_LENGTHYAZBZ0LO",
-            "ID22JZRXE1XZCWMlayout::DESCRIPTOR_LENGTH",
+            "OOCZMI28YAZBZ0LO",
+            "ID22JZRXE1XZCWM8",
             "RN7XN70ESJW1IAUF",
-            "Rlayout::DESCRIPTOR_LENGTH7OPQE6O5XDR0BG",
+            "R87OPQE6O5XDR0BG",
             "7PHMBEBZ0W4GNUCU",
             "9MAHZ2P344HVHHGC",
-            "Z0GHGZAHYLMElayout::DESCRIPTOR_LENGTHYXA",
+            "Z0GHGZAHYLME8YXA",
             "AKHK9V00BIIVD1EY",
             "LJFEPE6VYX5PL9NV",
             "34Y7VBX74LKDMOEH",
-            "HVVLlayout::DESCRIPTOR_LENGTHPGOTA4WNVF2",
+            "HVVL8PGOTA4WNVF2",
             "X6LGJ1VGB2B4PIUD",
             "LS560FKNAVULNIZG",
             "JYO0U92T1J0G72I1",
-            "16NZY2Zlayout::DESCRIPTOR_LENGTHD5FAACKT",
+            "16NZY2Z8D5FAACKT",
             "PJDZGXQ9XCK7YRCN",
             "6BMGSLFBFFUJZ2BE",
             "GFUT7B5EO34ZV7L5",
             "RYF3P46R6ZI0I9LK",
             "LAXTER0MXHK4IDV4",
-            "XAWlayout::DESCRIPTOR_LENGTH40BTPR7UG7TR",
+            "XAW840BTPR7UG7TR",
             "JUA6LNX66CC66AZ7",
             "OL7RKTO4PIT1XPER",
             "PO4QNRJU4K5N19IP",
@@ -1230,19 +1233,17 @@ mod tests {
         //tree.node_pager.print_nodes();
     }
 
-        */
-
-    /*
     #[test]
     fn slow_fuzzed_verify_nn_accuracy(){
 
+        const N: usize = 8;
         use::std::fs::File;
         use std::io::prelude::*;
         let mut file = File::open("test_data/random_descriptors.txt").unwrap();
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord> = Vec::new();
+        let mut records: Vec<CompoundRecord<N>> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1261,7 +1262,7 @@ mod tests {
             let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
             let descriptor = Descriptor::from_vec(s.clone());
 
-            assert_eq!(s.len(), layout::DESCRIPTOR_LENGTH);
+            assert_eq!(s.len(), N);
 
             let cr = CompoundRecord {
                 compound_identifier: identifier,
@@ -1272,36 +1273,36 @@ mod tests {
             records.push(cr);
         }
 
-        let descriptor = Descriptor::from_vec(
+        let descriptor = Descriptor::<N>::from_vec(
             vec![
-            0.layout::DESCRIPTOR_LENGTH59layout::DESCRIPTOR_LENGTH341,
-            0.633layout::DESCRIPTOR_LENGTH7layout::DESCRIPTOR_LENGTHlayout::DESCRIPTOR_LENGTH,
-            0.6layout::DESCRIPTOR_LENGTH099475,
-            0.layout::DESCRIPTOR_LENGTH503layout::DESCRIPTOR_LENGTH34,
-            0.5layout::DESCRIPTOR_LENGTH941144,
-            0.layout::DESCRIPTOR_LENGTH46layout::DESCRIPTOR_LENGTHlayout::DESCRIPTOR_LENGTH795,
-            0.6100layout::DESCRIPTOR_LENGTH036,
-            0.layout::DESCRIPTOR_LENGTHlayout::DESCRIPTOR_LENGTH4layout::DESCRIPTOR_LENGTH12layout::DESCRIPTOR_LENGTH3,
+            0.8598341,
+            0.6338788,
+            0.68099475,
+            0.8503834,
+            0.58941144,
+            0.84688795,
+            0.61008036,
+            0.88481283,
             ]
 
         );
 
         let correct_answer = vec![
             "5ZLD00MOT36ZK6DX",
-            "WYE97K70U1layout::DESCRIPTOR_LENGTHY9SAlayout::DESCRIPTOR_LENGTH",
+            "WYE97K70U18Y9SA8",
             "ZID354YZTEAEWOZC",
-            "DDlayout::DESCRIPTOR_LENGTHHKDRP2N4CPUO6",
+            "DD8HKDRP2N4CPUO6",
             "PTFLJ2OZHFOG2DYL",
-            "IPWJNLZNC0Playout::DESCRIPTOR_LENGTH79Q2",
+            "IPWJNLZNC0P879Q2",
             "WVLV4I96MD0LNN3N",
             "U7TSZERO313NXQ4U",
             "MBGRRIRL213LQFUO",
-            "MJ255VPHOK7HW55layout::DESCRIPTOR_LENGTH",
+            "MJ255VPHOK7HW558",
             "HH7M5H7BGC3KYE6I",
             "NXSYU67FL5SUZPBZ",
-            "ARDU41VA315KNZlayout::DESCRIPTOR_LENGTH3",
-            "TVLSWP3H7GZlayout::DESCRIPTOR_LENGTHHKRW",
-            "Blayout::DESCRIPTOR_LENGTHOSVJGNI69DBHKC",
+            "ARDU41VA315KNZ83",
+            "TVLSWP3H7GZ8HKRW",
+            "B8OSVJGNI69DBHKC",
             "0G3FS1H1MAFCMAQP",
             "BKSQDVKLXK93DWN6",
             "VL6P6BBJQ9VT0CCH",
@@ -1311,27 +1312,27 @@ mod tests {
             "ERWUTVVNZOVNHO7B",
             "MWV7OONG9Q4H3V1A",
             "AJ9A47HXJ30EXTVG",
-            "OOCZMI2layout::DESCRIPTOR_LENGTHYAZBZ0LO",
-            "ID22JZRXE1XZCWMlayout::DESCRIPTOR_LENGTH",
+            "OOCZMI28YAZBZ0LO",
+            "ID22JZRXE1XZCWM8",
             "RN7XN70ESJW1IAUF",
-            "Rlayout::DESCRIPTOR_LENGTH7OPQE6O5XDR0BG",
+            "R87OPQE6O5XDR0BG",
             "7PHMBEBZ0W4GNUCU",
             "9MAHZ2P344HVHHGC",
-            "Z0GHGZAHYLMElayout::DESCRIPTOR_LENGTHYXA",
+            "Z0GHGZAHYLME8YXA",
             "AKHK9V00BIIVD1EY",
             "LJFEPE6VYX5PL9NV",
             "34Y7VBX74LKDMOEH",
-            "HVVLlayout::DESCRIPTOR_LENGTHPGOTA4WNVF2",
+            "HVVL8PGOTA4WNVF2",
             "X6LGJ1VGB2B4PIUD",
             "LS560FKNAVULNIZG",
             "JYO0U92T1J0G72I1",
-            "16NZY2Zlayout::DESCRIPTOR_LENGTHD5FAACKT",
+            "16NZY2Z8D5FAACKT",
             "PJDZGXQ9XCK7YRCN",
             "6BMGSLFBFFUJZ2BE",
             "GFUT7B5EO34ZV7L5",
             "RYF3P46R6ZI0I9LK",
             "LAXTER0MXHK4IDV4",
-            "XAWlayout::DESCRIPTOR_LENGTH40BTPR7UG7TR",
+            "XAW840BTPR7UG7TR",
             "JUA6LNX66CC66AZ7",
             "OL7RKTO4PIT1XPER",
             "PO4QNRJU4K5N19IP",
@@ -1365,12 +1366,11 @@ mod tests {
             assert_eq!(identifiers, correct_answer);
         }
     }
-    */
 
-    /*
-    #[ignore]
     #[test]
     fn quick_fuzzed_verify_nn_accuracy(){
+
+        const N: usize = 8;
 
         use::std::fs::File;
         use std::io::prelude::*;
@@ -1378,7 +1378,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord> = Vec::new();
+        let mut records: Vec<CompoundRecord<N>> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1397,7 +1397,7 @@ mod tests {
             let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
             let descriptor = Descriptor::from_vec(s.clone());
 
-            assert_eq!(s.len(), layout::DESCRIPTOR_LENGTH);
+            assert_eq!(s.len(), 8);
 
             let cr = CompoundRecord {
                 compound_identifier: identifier,
@@ -1408,34 +1408,34 @@ mod tests {
             records.push(cr);
         }
 
-        let descriptor = Descriptor::from_vec(
+        let descriptor = Descriptor::<N>::from_vec(
             vec![0.5613212933959323,
-                 0.502749356650layout::DESCRIPTOR_LENGTH1layout::DESCRIPTOR_LENGTH4,
-                 0.73905747layout::DESCRIPTOR_LENGTHlayout::DESCRIPTOR_LENGTH950layout::DESCRIPTOR_LENGTH92,
-                 0.45621673055layout::DESCRIPTOR_LENGTH4901,
+                 0.5027493566508184,
+                 0.7390574788950892,
+                 0.4562167305584901,
                  0.02413149926370306,
-                 0.layout::DESCRIPTOR_LENGTH0layout::DESCRIPTOR_LENGTH23031472320layout::DESCRIPTOR_LENGTH9,
-                 0.7620553layout::DESCRIPTOR_LENGTHlayout::DESCRIPTOR_LENGTH9layout::DESCRIPTOR_LENGTH2211,
+                 0.8082303147232089,
+                 0.762055388982211,
                  0.34713323654674944]
         );
 
         let correct_answer = vec![
            "VDSYOSB36FAKWD2A", "011KIZEK6CTTETKF", "X0ZDKRU5TVHI3WWH",
            "2K9VBRZ99OA797VH", "6NJO4GB3YOCQ3GBI", "P702HIO2HPRTSELC",
-           "EB4GCJAHBNDN0DBN", "GM2TR9EL0PIV0layout::DESCRIPTOR_LENGTHN9", "I9MP7layout::DESCRIPTOR_LENGTHDM70A3VQZ6",
+           "EB4GCJAHBNDN0DBN", "GM2TR9EL0PIV08N9", "I9MP78DM70A3VQZ6",
            "V3UTSP2J7LUMNWP2", "MUV3E634V1MFUC9X", "FZ4ZE0AG1TGZ091W",
-           "6Z4UPG2DNPK23QLN", "G3layout::DESCRIPTOR_LENGTHK1PE4A7ES6U2S", "AHVE2P24VBSGR14X",
-           "BKOX77ILZZQ0JTCJ", "6IETlayout::DESCRIPTOR_LENGTH16V235Slayout::DESCRIPTOR_LENGTHCSlayout::DESCRIPTOR_LENGTH", "721layout::DESCRIPTOR_LENGTH1A2R9TO1HZBB",
-           "21T5RLEMEY9PUJEX", "JH7J6layout::DESCRIPTOR_LENGTHCPBS9H20HA", "V5EYF5CT6BOBIPCX",
+           "6Z4UPG2DNPK23QLN", "G38K1PE4A7ES6U2S", "AHVE2P24VBSGR14X",
+           "BKOX77ILZZQ0JTCJ", "6IET816V235S8CS8", "72181A2R9TO1HZBB",
+           "21T5RLEMEY9PUJEX", "JH7J68CPBS9H20HA", "V5EYF5CT6BOBIPCX",
            "VIS7Z7JZBDAMI0DW", "S7E4Z0YB99O2BG09", "PB6I6IK22CKPL3GU",
-           "6ZEOQV45TQ6FU6Z1", "B5KCEVK99YQML5GY", "LKW13Xlayout::DESCRIPTOR_LENGTHKBYWLE71D",
-           "layout::DESCRIPTOR_LENGTH2UNF7Ilayout::DESCRIPTOR_LENGTHTB06DQHP", "OJOID5GNIRX0SC2R", "LGIFGG2SCEYCN3YE",
+           "6ZEOQV45TQ6FU6Z1", "B5KCEVK99YQML5GY", "LKW13X8KBYWLE71D",
+           "82UNF7I8TB06DQHP", "OJOID5GNIRX0SC2R", "LGIFGG2SCEYCN3YE",
            "WN0GPONNZFVZS4KD", "BOJ7KG4PX2I42PL0", "W0Z7PR44B20VUY6J",
            "RMNC1MWQW3LZLNG7", "LU2DGTI12CY5R2AU", "0249P6QT4S3J5CPH",
-           "34V5RHOJ19CGI2CJ", "BUTU4YHRTHDE00XO", "X6TRZOF1layout::DESCRIPTOR_LENGTH6layout::DESCRIPTOR_LENGTH6RIRD",
-           "Vlayout::DESCRIPTOR_LENGTH9CHTIJOK42XDG0", "GO4BSC1VHO4F1IGF", "SZDPXUHVB663JAJL",
-           "3FFVXGL6JV5SSYCT", "IPYLLPTEQIN2UAL2", "G4NMBlayout::DESCRIPTOR_LENGTHWURS7GKEH6",
-           "W6B4IXXKHP0JRYU4", "X0K3MXLDSU2L0KFN", "JEHVACT7QJlayout::DESCRIPTOR_LENGTHDlayout::DESCRIPTOR_LENGTH1CI",
+           "34V5RHOJ19CGI2CJ", "BUTU4YHRTHDE00XO", "X6TRZOF18686RIRD",
+           "V89CHTIJOK42XDG0", "GO4BSC1VHO4F1IGF", "SZDPXUHVB663JAJL",
+           "3FFVXGL6JV5SSYCT", "IPYLLPTEQIN2UAL2", "G4NMB8WURS7GKEH6",
+           "W6B4IXXKHP0JRYU4", "X0K3MXLDSU2L0KFN", "JEHVACT7QJ8D81CI",
            "E0NO9UXRAV6PQEUQ", "LLOA71UE951B3IRE"];
 
         let correct_answer = correct_answer.into_iter().map(|x| CompoundIdentifier::from_string(x.to_string())).collect::<Vec<_>>();
@@ -1465,7 +1465,6 @@ mod tests {
             assert_eq!(identifiers, correct_answer);
         }
     }
-    */
 
 
 
@@ -1482,7 +1481,7 @@ mod tests {
         //pretty_env_logger::init();
 
 
-        let random_arr: [f32; layout::DESCRIPTOR_LENGTH] = rand::random();
+        let random_arr: [f32; 8] = rand::random();
         let descriptor = Descriptor { data: random_arr };
         dbg!(&descriptor);
 
@@ -1501,7 +1500,7 @@ mod tests {
     #[test]
     fn slow_memtree_load() {
 
-        let tree = Tree::from_filenames("/home/josh/db/100mil_layout::DESCRIPTOR_LENGTHk_page/node".to_string(), "/home/josh/db/100mil_layout::DESCRIPTOR_LENGTHk_page/record".to_string(), true);
+        let tree = Tree::<8>::from_filenames("/home/josh/db/100mil_8k_page/node".to_string(), "/home/josh/db/100mil_8k_page/record".to_string(), true);
 
     }   
 
