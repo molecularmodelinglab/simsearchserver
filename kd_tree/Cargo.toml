@@ -8,7 +8,8 @@ edition = "2021"
 [dependencies]
 assert_approx_eq = "*"
 rand = "*"
-serde = "*"
+serde = {version = "*", features = ["derive"]}
+serde_yaml = "*"
 kdam = "*"
 byteorder = "1.4.3"
 ascii = "*"

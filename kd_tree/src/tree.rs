@@ -5,17 +5,60 @@ use crate::page::{RecordPage, NodePage, PageType };
 use crate::io::{NodePager, RecordPager, PagePointer, CachedPager};
 use crate::layout;
 use ascii::{AsAsciiStr, AsciiString};
+use serde::{Serialize, Deserialize};
 
+use std::fs::File;
+use std::io::prelude::*;
 
 use std::path::Path;
 use std::collections::VecDeque;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TreeConfig {
+    desc_length: usize,
+    record_page_length: usize,
+    node_page_length: usize,
+    cache: bool,
+}
+
+impl TreeConfig {
+
+    fn default() -> Self {
+        return Self {
+            desc_length: 8,
+            record_page_length: 4096,
+            node_page_length: 4096,
+            cache: true,
+        }
+    }
+
+    fn from_file(filename: String) -> Self {
+
+        let serialized = std::fs::read_to_string(filename).unwrap();
+
+        let deserialized: Self = serde_yaml::from_str(&serialized).unwrap();        
+        dbg!(&deserialized);
+
+        return deserialized;
+    }
+
+    fn to_file(&self, filename: String) {
+        
+        let serialized = serde_yaml::to_string(&self).unwrap();
+        let mut file = File::create(filename).unwrap();
+
+        file.write(serialized.as_bytes()).unwrap();
+
+
+    }
+        
+}
 
 /// Struct to represent the kd-tree
 ///
 /// Can be either for reading or just querying given a directory on disk. Internal nodes and leaf
 /// nodes are stored in separate files and paged separately.
 #[derive(Debug)]
-
 pub struct Tree {
     pub node_pager: NodePager,
     pub record_pager: RecordPager,
@@ -24,8 +67,7 @@ pub struct Tree {
     pub free_node_pages: VecDeque<PageAddress>,
     pub root: Option<PagePointer>,
     pub use_cached_nodes: bool,
-    pub desc_length: usize,
-
+    pub config: TreeConfig,
 }
 
 ///struct for keeping N- top closest points
@@ -154,20 +196,28 @@ pub enum NodeAction {
 
 impl Tree {
 
-    pub fn from_filenames(node_filename: String, record_filename: String, desc_length: usize, cache: bool) -> Self {
+    //pub fn from_filenames(node_filename: String, record_filename: String, desc_length: usize, record_page_length: usize, node_page_length: usize,  cache: bool) -> Self {
+    pub fn from_directory(directory_name: String) -> Self {
+
+        let config_filename = directory_name.clone() + "/config.yaml";
+        let config = TreeConfig::from_file(config_filename);
+
+        let node_filename = directory_name.clone() + "/" + "node";
+        let record_filename = directory_name.clone() + "/" + "record";
+
 
         dbg!(&node_filename);
         dbg!(&record_filename);
-        let mut node_pager = NodePager::new(Path::new(&node_filename), false).unwrap();
-        let mut record_pager = RecordPager::new(Path::new(&record_filename), desc_length, false).unwrap();
+        let mut node_pager = NodePager::new(Path::new(&node_filename), config.node_page_length, false).unwrap();
+        let mut record_pager = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, false).unwrap();
 
         let free_node_pages = VecDeque::from([PageAddress(0)]);
 
-        let (cached_node_pager, use_cached_nodes) : (Option<CachedPager>, bool) = match cache {
+        let (cached_node_pager, use_cached_nodes) : (Option<CachedPager>, bool) = match config.cache {
             
             true => {
 
-                (Some(CachedPager::from_filename(Path::new(&node_filename)).unwrap()), true)
+                (Some(CachedPager::from_filename(Path::new(&node_filename), config.node_page_length).unwrap()), true)
 
             },
             false => (None, false),
@@ -185,44 +235,67 @@ impl Tree {
             }),
             cached_node_pager,
             use_cached_nodes,
-            desc_length,
+            config,
             };
     }
 
-    ///Given a target directory, either use the existing files in that directory for querying or
-    ///construction of a new tree 
-    pub fn new(directory_name: String, desc_length: usize, create: bool) -> Self {
+    pub fn default(directory_name: String) -> Self {
+         
+        let config = TreeConfig::default();
+        let create = true;
 
         let node_filename = directory_name.clone() + "/" + "node";
         let record_filename = directory_name.clone() + "/" + "record";
 
+        return Self::new(directory_name, config, create);
+                         
+
+    }
+
+    pub fn with_config(directory_name: String, config: TreeConfig) -> Self {
+
+        let create = true;
+        let node_filename = directory_name.clone() + "/" + "node";
+        let record_filename = directory_name.clone() + "/" + "record";
+
+        return Self::new(directory_name, config, create);
+    }
+
+    ///Given a target directory, either use the existing files in that directory for querying or
+    ///construction of a new tree 
+    pub fn new(directory_name: String, config: TreeConfig, create: bool) -> Self {
+
+        let node_filename = directory_name.clone() + "/" + "node";
+        let record_filename = directory_name.clone() + "/" + "record";
+        let config_filename = directory_name.clone() + "/" + "config.yaml";
+
         dbg!(&node_filename);
-        let mut node_pager = NodePager::new(Path::new(&node_filename), create).unwrap();
-        let mut record_pager = RecordPager::new(Path::new(&record_filename), desc_length, create).unwrap();
+        let mut node_pager = NodePager::new(Path::new(&node_filename), config.node_page_length, create).unwrap();
+        let mut record_pager = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, create).unwrap();
 
         let free_node_pages = VecDeque::from([PageAddress(0)]);
               
         match create {
             true => {
          
-                let first_page = RecordPage::new(desc_length);
+                let first_page = RecordPage::new(config.record_page_length, config.desc_length);
 
                 record_pager.write_page(&first_page).unwrap();
 
-                let first_page = NodePage::new();
+                let first_page = NodePage::new(config.node_page_length);
                 node_pager.write_page(&first_page).unwrap();
-                    
+
+                config.to_file(config_filename);
 
                 return Self {
                     node_pager,
                     record_pager, 
                     dirname: directory_name.clone(),
                     free_node_pages,
-                    //free_record_pages: free_record_pages,
                     root: None,
                     cached_node_pager: None,
                     use_cached_nodes: false,
-                    desc_length,
+                    config,
                 };
             },
             false => {
@@ -238,7 +311,7 @@ impl Tree {
                     }),
                     cached_node_pager: None,
                     use_cached_nodes: false,
-                    desc_length,
+                    config,
                     };
                 },
             };
@@ -646,7 +719,7 @@ impl Tree {
             Some(_) => {
                     let parent_page = self.node_pager.get_node_page(&parent_pointer.page_address).unwrap();
                     let parent_node = parent_page.get_node_at(parent_pointer.node_offset.clone()).unwrap();
-                    (parent_node.split_axis + 1) % self.desc_length
+                    (parent_node.split_axis + 1) % self.config.desc_length
             },
         };
 
@@ -697,7 +770,7 @@ impl Tree {
         }
 
         //make new left record page at current offset
-        let mut left_record_page = RecordPage::new(self.desc_length);
+        let mut left_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
         for record in left_records.iter() {
             left_record_page.add_record(record)?;
         }
@@ -705,7 +778,7 @@ impl Tree {
         self.record_pager.write_page_at_offset(&left_record_page, &this_pointer.page_address).unwrap();
         
         //make new right record page at next offset
-        let mut right_record_page = RecordPage::new(self.desc_length);
+        let mut right_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
         for record in right_records.iter() {
             right_record_page.add_record(record)?;
         }
@@ -806,7 +879,7 @@ impl Tree {
 
         match chosen_address {
             None => { //we never found a free page?
-                let mut page = NodePage::new();
+                let mut page = NodePage::new(self.config.node_page_length);
                 let offset = page.add_node(node).unwrap();
 
                 let page_address = self.node_pager.write_page(&page).unwrap();
@@ -846,15 +919,15 @@ mod tests {
     use super::*;
     use test::Bencher;
     use crate::node::{CompoundRecord, CompoundIdentifier, Descriptor};
-    use rand::distributions::Alphanumeric;
+    //use rand::distributions::Alphanumeric;
     use kdam::tqdm;
-    use rand::prelude::*;
+    //use rand::prelude::*;
 
     #[test]
     fn quick_tree_new() {
 
         let n: usize = 8;
-        let mut tree = Tree::new("test_data/tree_new/".to_string(), n, true);
+        let mut tree = Tree::default("test_data/tree_new/".to_string());
 
         let cr = CompoundRecord::random(n);
         tree.add_record(&cr).unwrap();
@@ -873,7 +946,14 @@ mod tests {
     fn quick_tree_find() {
 
         for n in [8,12,16] {
-            let mut tree = Tree::new("test_data/aaab/".to_string(), n, true);
+            
+            let config = TreeConfig {
+                desc_length: n,
+                record_page_length: 4096,
+                node_page_length: 4096,
+                cache: true,
+            };
+            let mut tree = Tree::with_config("test_data/aaab/".to_string(), config);
             //dbg!(&tree);
 
 
@@ -929,7 +1009,9 @@ mod tests {
 
         for n in [8,12,16] {
 
-            let mut tree = Tree::new("test_data/aaaa/".to_string(), n, true);
+            let mut config = TreeConfig::default();
+            config.desc_length = n;
+            let mut tree = Tree::with_config("test_data/aaaa/".to_string(), config);
             //dbg!(&tree);
 
 
@@ -1027,8 +1109,10 @@ mod tests {
 
         dbg!(records.len());
 
+        let mut config = TreeConfig::default();
+        config.desc_length = n;
 
-        let mut tree = Tree::new("test_data/bvnnacc/".to_string(), n, true);
+        let mut tree = Tree::with_config("test_data/bvnnacc/".to_string(), config);
 
         for record in tqdm!(records.iter()) {
 
@@ -1041,15 +1125,14 @@ mod tests {
     #[bench]
     fn benchmark_query_speed(b: &mut Bencher) {
 
-        let n = 8;
         fn make_random_query(tree: &mut Tree) {
 
-            let descriptor = Descriptor::random(tree.desc_length);
+            let descriptor = Descriptor::random(tree.config.desc_length);
 
             let _nn = tree.get_nearest_neighbors(&descriptor, 20);
         }
 
-        let mut tree = Tree::new("test_data/bqs/".to_string(), n, false);
+        let mut tree = Tree::default("test_data/bqs/".to_string());
         b.iter(|| make_random_query(&mut tree));
 
 
@@ -1171,7 +1254,7 @@ mod tests {
         let correct_answer: Vec<_> = correct_answer.into_iter().map(|x| CompoundIdentifier::from_string(x.to_string())).collect();
 
 
-        let mut tree = Tree::new("test_data/bvnnacc/".to_string(), n, false);
+        let mut tree = Tree::default("test_data/bvnnacc/".to_string());
 
         let nn = tree.get_nearest_neighbors(&descriptor, 50);
         dbg!(&nn);
@@ -1303,7 +1386,7 @@ mod tests {
             records.shuffle(&mut thread_rng());
 
 
-            let mut build_tree = Tree::new("test_data/nn_validation/".to_string(), n, true);
+            let mut build_tree = Tree::default("test_data/nn_validation/".to_string());
 
             for record in tqdm!(records.iter()) {
 
@@ -1311,7 +1394,7 @@ mod tests {
             }
 
 
-            let mut query_tree = Tree::new("test_data/nn_validation/".to_string(), n, false);
+            let mut query_tree = Tree::from_directory("test_data/nn_validation/".to_string());
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
             let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
@@ -1402,8 +1485,12 @@ mod tests {
 
             records.shuffle(&mut thread_rng());
 
+            let mut config = TreeConfig::default();
+            config.desc_length = 8;
 
-            let mut build_tree = Tree::new("test_data/qf/".to_string(), n, true);
+            let mut build_tree = Tree::with_config(
+                                    "test_data/qf/".to_string(), 
+                                    config,);
 
             for record in tqdm!(records.iter()) {
 
@@ -1411,7 +1498,7 @@ mod tests {
             }
 
 
-            let mut query_tree = Tree::new("test_data/qf/".to_string(), n, false);
+            let mut query_tree = Tree::from_directory("test_data/qf/".to_string());
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
             //let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.0.clone()).collect();
@@ -1423,6 +1510,7 @@ mod tests {
 
 
 
+    /*
     #[test]
     fn bil_test_speed(){
 
@@ -1432,8 +1520,13 @@ mod tests {
         let record_filename = "/home/josh/db/100mil_test_fixed_strings/record".to_string();
         //let record_filename = "/home/josh/big_tmpfs/record".to_string();
         //let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone())));
-        let mut tree = Tree::from_filenames(node_filename.clone(), record_filename.clone(), 8, false);
-        //pretty_env_logger::init();
+        let mut tree = Tree::from_directory(
+        let mut tree = Tree::from_filenames(node_filename.clone(), 
+                                            record_filename.clone(), 
+                                            8, 
+                                            65536,
+                                            8192,
+                                            false);
 
 
         let random_arr: [f32; 8] = rand::random();
@@ -1449,8 +1542,10 @@ mod tests {
         dbg!(&nn);
      
     }
+    */
 
 
+    /*
     #[ignore] //depends on layout of already written tree
     #[test]
     fn slow_memtree_load() {
@@ -1459,6 +1554,7 @@ mod tests {
         let tree = Tree::from_filenames("/home/josh/db/100mil_8k_page/node".to_string(), "/home/josh/db/100mil_8k_page/record".to_string(), n, true);
 
     }   
+    */
 
 
 

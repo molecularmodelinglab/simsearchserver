@@ -22,41 +22,48 @@ pub trait Pageable {
 #[derive(Debug)]
 pub struct NodePage {
 
-    pub data: Box<[u8; layout::NODE_PAGE_SIZE]>,
+    //pub data: Box<[u8; layout::NODE_PAGE_SIZE]>,
+    pub data: Vec<u8>,
     pub tail: Option<ItemOffset>,
+    pub page_length: usize,
 }
 
 //TODO: strip const generic? why does it care about descriptor length?
 impl NodePage {
 
-    pub fn new() -> Self {
+    pub fn new(page_length: usize) -> Self {
 
-        let mut arr: [u8; layout::NODE_PAGE_SIZE] = [0; layout::NODE_PAGE_SIZE];
+        //let mut arr: [u8; layout::NODE_PAGE_SIZE] = [0; layout::NODE_PAGE_SIZE];
+        let mut arr = vec![0u8; page_length];
 
         arr[layout::PAGE_TYPE_OFFSET] = PageType::Node as u8;
         arr[layout::IS_EMPTY_OFFSET] = 1 as u8;
 
         //dbg!(arr[layout::PAGE_TYPE_OFFSET]);
         let page = Self {
-            data: Box::new(arr),
+            data: arr,
             tail: None,
+            page_length,
         };
 
         return page
 
     }
 
-    pub fn get_data(&self) -> &[u8; layout::NODE_PAGE_SIZE] {
+    pub fn get_data(&self) -> &[u8] {
         &self.data
     }
 
 
-    pub fn from_arr(arr: [u8; layout::NODE_PAGE_SIZE]) -> Self {
+    pub fn from_arr(arr: &[u8], page_length: usize) -> Self {
 
         //read tail from disk
         //let tail = arr[layout::TAIL_OFFSET] as usize;
 
         let tail = i32::from_be_bytes(arr[layout::TAIL_OFFSET..layout::TAIL_OFFSET+layout::TAIL_SIZE].try_into().unwrap()) as usize;
+
+        let mut vec = vec![0u8; page_length];
+        vec.copy_from_slice(arr);
 
         //read empty from disk
         let is_empty = arr[layout::IS_EMPTY_OFFSET] as usize;
@@ -70,8 +77,9 @@ impl NodePage {
         };
 
         let page = Self {
-            data: Box::new(arr),
+            data: vec,
             tail: tail_val,
+            page_length,
         };
 
         return page
@@ -80,7 +88,8 @@ impl NodePage {
 
     pub fn get_capacity(&self) -> usize {
 
-        return (layout::NODE_PAGE_SIZE - layout::PAGE_DATA_START) / layout::NODE_SIZE;
+        //return (layout::NODE_PAGE_SIZE - layout::PAGE_DATA_START) / layout::NODE_SIZE;
+        return (self.page_length - layout::PAGE_DATA_START) / layout::NODE_SIZE;
 
     }
 
@@ -233,19 +242,19 @@ mod tests {
 
     #[test]
     fn quick_new_nodepage_works() {
-        let _np = NodePage::new();
+        let _np = NodePage::new(4096);
     }
 
     #[test]
     fn nodepage_capacity() {
-        let np = NodePage::new();
+        let np = NodePage::new(4096);
         dbg!(np.get_capacity());
     }
 
 
     #[test]
     fn quick_add_node_trivial_works() {
-        let mut np = NodePage::new();
+        let mut np = NodePage::new(4096);
         let node = InternalNode::default();
 
         assert_eq!(np.num_nodes(), 0);
@@ -258,7 +267,7 @@ mod tests {
 
     #[test]
     fn quick_panic_node_full_works() {
-        let mut np = NodePage::new();
+        let mut np = NodePage::new(4096);
         let node = InternalNode::default();
 
         for i in 0..1024 {
@@ -275,13 +284,17 @@ mod tests {
     #[test]
     fn quick_test_new_leafpage_works() {
         let n = 8;
-        let _lp = RecordPage::new(n);
+        let record_page_length = 4096;
+        let _lp = RecordPage::new(record_page_length, n);
     }
 
     #[test]
     fn quick_add_compound_record() {
         let n = 8;
-        let mut lp = RecordPage::new(n);
+        let record_page_length = 4096;
+        let mut lp = RecordPage::new(record_page_length, n);
+
+        dbg!(&lp);
 
         let cr = CompoundRecord::default(n);
 
@@ -303,9 +316,9 @@ mod tests {
     fn quick_test_get_capacity() {
 
         let n = 8;
-        let mut lp = RecordPage::new(n);
+        let record_page_length = 4096;
+        let mut lp = RecordPage::new(record_page_length, n);
         dbg!(&lp.get_capacity());
-        //dbg!(lp.get_capacity());
 
         for i in 0..100 {
             let cr = CompoundRecord::default(n);
@@ -328,43 +341,57 @@ mod tests {
 #[derive(Debug)]
 pub struct RecordPage {
 
-    pub data: Box<[u8; layout::RECORD_PAGE_SIZE]>,
+    //pub data: Box<[u8; layout::RECORD_PAGE_SIZE]>,
+    pub data: Vec<u8>,
     pub tail: Option<ItemOffset>,
     pub desc_length: usize,
+    pub page_length: usize,
 }
 
 impl RecordPage {
 
-    pub fn new(desc_length: usize) -> Self {
+    pub fn new(page_length: usize, desc_length: usize) -> Self {
         
         let mut s = Self {
-            data: Box::new([0; layout::RECORD_PAGE_SIZE]),
+            //data: Box::new([0; layout::RECORD_PAGE_SIZE]),
+            //data: Vec::with_capacity(length),
+            data: vec![0u8; page_length],
             tail: Some(ItemOffset(0)),
             desc_length,
+            page_length,
         };
 
         s.data[layout::PAGE_TYPE_OFFSET] = PageType::Leaf as u8;
+
+        dbg!(s.desc_length);
+        dbg!(CompoundRecord::compute_record_size(s.desc_length));
+        dbg!(s.get_capacity());
         return s;
 
     }
 
-    pub fn get_data(&self) -> &[u8; layout::RECORD_PAGE_SIZE] {
+    //pub fn get_data(&self) -> &[u8; layout::RECORD_PAGE_SIZE] {
+    pub fn get_data(&self) -> &Vec<u8> {
         &self.data
     }
 
-    pub fn from_arr(arr: [u8; layout::RECORD_PAGE_SIZE], desc_length: usize) -> Self {
+    pub fn from_arr(arr: &[u8], page_length: usize, desc_length: usize) -> Self {
 
         //read tail from disk
         //let tail = arr[layout::TAIL_OFFSET] as usize;
 
         let tail = Some(ItemOffset(u32::from_be_bytes(arr[layout::TAIL_OFFSET..layout::TAIL_OFFSET+layout::TAIL_SIZE].try_into().unwrap())));
 
+        //let mut vec = Vec::with_capacity(length);
+        let mut vec = vec![0u8; page_length];
+        vec.copy_from_slice(arr);
+
         let page = Self {
-            data: Box::new(arr),
+            data: vec,
             tail,
             desc_length,
+            page_length,
         };
-
         return page;
     }
 
@@ -452,7 +479,8 @@ impl RecordPage {
 
     pub fn get_capacity(&self) -> usize {
 
-        return (layout::RECORD_PAGE_SIZE - layout::PAGE_DATA_START) / CompoundRecord::compute_record_size(self.desc_length);
+        //return (layout::RECORD_PAGE_SIZE - layout::PAGE_DATA_START) / CompoundRecord::compute_record_size(self.desc_length);
+        return (self.page_length - layout::PAGE_DATA_START) / CompoundRecord::compute_record_size(self.desc_length);
 
     }
 

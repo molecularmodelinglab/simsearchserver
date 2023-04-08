@@ -10,16 +10,16 @@ use std::convert::TryFrom;
 //pub const PAGE_SIZE: usize = 8192;
 pub const PTR_SIZE: usize = size_of::<usize>(); 
 
-pub const NODE_PAGE_SIZE: usize = 8192;
+//pub const NODE_PAGE_SIZE: usize = 8192;
 //aub const NODE_PAGE_SIZE: usize = 4096;
 
 //pub const RECORD_PAGE_SIZE: usize = 16384;
 //jpub const RECORD_PAGE_SIZE: usize = 32768;
-pub const RECORD_PAGE_SIZE: usize = 65536;
+//pub const RECORD_PAGE_SIZE: usize = 65536;
 //pub const RECORD_PAGE_SIZE: usize = 8192;
 
 //TODO: allow different values
-pub const DESCRIPTOR_LENGTH: usize = 8;
+//pub const DESCRIPTOR_LENGTH: usize = 8;
 //pub const DESCRIPTOR_LENGTH: usize = 16;
 
 pub struct Value (pub usize);
