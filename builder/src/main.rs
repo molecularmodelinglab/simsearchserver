@@ -10,16 +10,69 @@ use std::path::Path;
 
 fn main() {
 
-    let n = 8;
-    let db_filename = "/home/josh/db/param_test/".to_string();
-    dbg!(layout::NODE_PAGE_SIZE);
-    dbg!(layout::RECORD_PAGE_SIZE);
+    param_sweep();
 
-    let mut tree = tree::Tree::new(db_filename.clone(), n, true);
+}
 
-    for _ in tqdm!(0..1e7 as usize) {
-        let rec = CompoundRecord::random(n);
+fn build_single() {
+
+    let config_filename = "/home/josh/git/simsearchserver/build_config.yaml".to_string();
+
+    let mut config = tree::TreeConfig::from_file(config_filename);
+
+    /*
+    let mut config = tree::TreeConfig::default(); 
+    config.desc_length = 8;
+    config.node_page_length = 4096;
+    config.record_page_length = 65536;
+    */
+
+    dbg!(&config);
+
+    let mut tree = tree::Tree::create_with_config(config.clone());
+
+    for _ in tqdm!(0..1e9 as usize) {
+        let rec = CompoundRecord::random(config.desc_length);
         tree.add_record(&rec).unwrap();
+    }
+}
+
+
+fn param_sweep() {
+
+    use std::time::{Duration, Instant};
+
+    use log::info;
+    env_logger::init();
+
+
+    let mut config = tree::TreeConfig::default();
+    for desc_length in [8,10,12,16].into_iter() {
+        for node_page_size in [2048,4096,8192].into_iter() {
+            for record_page_size in [2048, 4096, 8192, 16384].into_iter() {
+                for db_size in [1e5, 1e6, 1e7, 1e8].into_iter() {
+
+                    config.desc_length = desc_length;
+                    config.node_page_length = node_page_size;
+                    config.record_page_length = record_page_size;
+
+                    let directory_name = format!("/home/josh/db/benchmark_{}_{}_{}_{}", db_size, desc_length, node_page_size, record_page_size);
+                    config.directory = directory_name.clone();
+                    
+                    dbg!(&config);
+
+                    let mut tree = tree::Tree::force_create_with_config(config.clone());
+
+                    let start = Instant::now();
+                    for _ in tqdm!(0..db_size as usize) {
+                        let rec = CompoundRecord::random(config.desc_length);
+                        tree.add_record(&rec).unwrap();
+                    }
+                    let duration = start.elapsed();
+                    info!("{}: {}", &directory_name, &duration.as_secs_f64());
+                }
+            }
+        }
     }
 }
 

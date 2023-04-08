@@ -1,0 +1,5 @@
+directory: "/home/josh/db/builder_test/"
+desc_length: 8
+record_page_length: 16384
+node_page_length: 8192
+cache_nodes_for_query: true

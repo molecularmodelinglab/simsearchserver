@@ -18,7 +18,7 @@ async fn hello(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Respo
     //let descriptor = Descriptor::from_vec(vec![0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]);
     println!("HERE");
     let mut mg = tree.lock().unwrap();
-    let descriptor = Descriptor::random(mg.desc_length);
+    let descriptor = Descriptor::random(mg.config.desc_length);
     dbg!(&descriptor);
     println!("HERE2");
     let nn = mg.get_nearest_neighbors(&descriptor, 100);
@@ -32,10 +32,8 @@ async fn hello(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Respo
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     
-    let n = 8;
-    let node_filename = "/home/josh/db/param_test/node".to_string();
-    let record_filename = "/home/josh/db/param_test/record".to_string();
-    let mut tree = Arc::new(Mutex::new(tree::Tree::from_filenames(node_filename.clone(), record_filename.clone(), n, true)));
+    let directory = "/home/josh/db/config_test/".to_string();
+    let mut tree = Arc::new(Mutex::new(tree::Tree::read_from_directory(directory)));
     //pretty_env_logger::init();
 
     // For every connection, we must make a `Service` to handle all

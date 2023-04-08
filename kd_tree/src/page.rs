@@ -363,9 +363,12 @@ impl RecordPage {
 
         s.data[layout::PAGE_TYPE_OFFSET] = PageType::Leaf as u8;
 
+        /*
         dbg!(s.desc_length);
         dbg!(CompoundRecord::compute_record_size(s.desc_length));
         dbg!(s.get_capacity());
+        */
+
         return s;
 
     }
