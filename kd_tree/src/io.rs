@@ -488,7 +488,14 @@ impl RecordPager {
 
         let start = self.calc_offset(address);
         self.file.seek(SeekFrom::Start(start))?;
-        self.file.read_exact(&mut page).unwrap();
+
+        match self.file.read_exact(&mut page) {
+            Ok(_) => {},
+            Err(e) => {
+                println!("Failed to read record page at {:?}", &address);
+            }
+
+        };
 
         let page = RecordPage::from_arr(&page, self.page_length, self.desc_length);
 

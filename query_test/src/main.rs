@@ -3,22 +3,22 @@ use rand::prelude::*;
 
 fn main() {
     param_sweep();
+    //single_query();
 
 }
 
 fn single_query() {
-    let n = 8;
-    let directory = "/home/josh/db/1_bil_test/".to_string();
+    let directory = "/home/josh/db/benchmark_100000000_10_8192_16384".to_string();
 
     let mut tree = tree::Tree::read_from_directory(directory.clone());
 
-    let descriptor = node::Descriptor::random(n);
+    let descriptor = node::Descriptor::random(tree.config.desc_length);
     dbg!(&descriptor);
 
 
-    //let descriptor = Descriptor::from_vec(vec![0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]);
-    //let nn = tree.get_nearest_neighbors(&descriptor, 10);
-    tree.output_depths();
+
+    let nn = tree.get_nearest_neighbors(&descriptor, 1000);
+    //tree.output_depths();
 
     //dbg!(&nn);
 
