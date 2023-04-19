@@ -54,11 +54,7 @@ impl NodePage {
         &self.data
     }
 
-
     pub fn from_arr(arr: &[u8], page_length: usize) -> Self {
-
-        //read tail from disk
-        //let tail = arr[layout::TAIL_OFFSET] as usize;
 
         let tail = i32::from_be_bytes(arr[layout::TAIL_OFFSET..layout::TAIL_OFFSET+layout::TAIL_SIZE].try_into().unwrap()) as usize;
 

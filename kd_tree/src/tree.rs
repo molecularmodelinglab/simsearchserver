@@ -3,6 +3,7 @@ extern crate test;
 use crate::node::{InternalNode, CompoundRecord, PageAddress, Descriptor, ItemOffset};
 use crate::page::{RecordPage, NodePage, PageType };
 use crate::io::{NodePager, RecordPager, PagePointer, CachedPager};
+use std::collections::HashMap;
 use crate::layout;
 use ascii::{AsAsciiStr, AsciiString};
 use serde::{Serialize, Deserialize};
@@ -675,6 +676,47 @@ impl Tree {
         Ok(())
     }
 
+    pub fn uniform_layout(&mut self, n_levels: usize, lower_bound: f32, upper_bound: f32) {
+
+        let mut candidates: VecDeque<(usize, PagePointer)> = VecDeque::new();
+
+        let root_pointer = match &self.root {
+            None => PagePointer {
+                page_type: PageType::Node,
+                page_address: PageAddress(0),
+                node_offset: ItemOffset(0),
+                },
+
+            Some(x) => x.clone(),
+        };
+
+        let used_bounds: HashMap<usize, (f32, f32)> = HashMap::new();
+
+        //set initial bounds for each dimension
+        for i in 0..self.config.desc_length {
+            used_bounds.insert(i, (-1.0, 1.0));
+        }
+
+        let root_node = InternalNode {
+            split_axis: 0,
+            parent_page_address: PageAddress::default(),
+            parent_node_offset: 0,
+            left_child_node_offset: None,
+            right_child_node_offset: None,
+        };
+
+
+
+        candidates.push_front((0, root_pointer));
+
+        dbg!(candidates);
+
+
+
+
+        todo!()
+    }
+
     ///Internal method to take a single full RecordPage, find its median at the "next" axis, and
     ///split the records along that median. This is really the only place where new internal nodes
     ///are created.
@@ -1118,6 +1160,19 @@ mod tests {
 
 
     }
+    #[test]
+    fn quick_uniform_tree() {
+
+        let mut config = TreeConfig::default();
+        config.desc_length = 8;
+        config.directory = "test_data/bvnnacc/".to_string();
+
+        let mut tree = Tree::force_create_with_config(config);
+
+
+        tree.uniform_layout(10, -1.0, 1.0);
+    }
+
 
 
     #[test]
