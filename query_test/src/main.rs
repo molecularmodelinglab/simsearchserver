@@ -2,13 +2,13 @@ use kd_tree::{tree, node, layout};
 use rand::prelude::*;
 
 fn main() {
-    param_sweep();
-    //single_query();
+    //param_sweep();
+    single_query();
 
 }
 
 fn single_query() {
-    let directory = "/home/josh/db/benchmark_100000000_10_8192_16384".to_string();
+    let directory = "/home/josh/db/builder_test_12".to_string();
 
     let mut tree = tree::Tree::read_from_directory(directory.clone());
 

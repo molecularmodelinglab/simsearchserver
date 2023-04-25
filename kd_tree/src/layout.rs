@@ -47,13 +47,14 @@ impl TryFrom<[u8; 1]> for Value {
 //pub const NODE_TYPE_OFFSET: usize = 0;
 //pub const NODE_TYPE_SIZE: usize = 1;
 
-pub const PARENT_PAGE_START: usize = 0;
-pub const PARENT_PAGE_SIZE: usize = PTR_SIZE;
+//pub const PARENT_PAGE_START: usize = 0;
+//pub const PARENT_PAGE_SIZE: usize = PTR_SIZE;
 
-pub const PARENT_NODE_OFFSET_START: usize = PARENT_PAGE_START + PARENT_PAGE_SIZE;
-pub const PARENT_NODE_OFFSET_SIZE: usize = 1;
+//pub const PARENT_NODE_OFFSET_START: usize = PARENT_PAGE_START + PARENT_PAGE_SIZE;
+//pub const PARENT_NODE_OFFSET_SIZE: usize = 1;
 
-pub const LEFT_CHILD_PAGE_START: usize = PARENT_NODE_OFFSET_START + PARENT_NODE_OFFSET_SIZE;
+//pub const LEFT_CHILD_PAGE_START: usize = PARENT_NODE_OFFSET_START + PARENT_NODE_OFFSET_SIZE;
+pub const LEFT_CHILD_PAGE_START: usize = 0;
 pub const LEFT_CHILD_PAGE_SIZE: usize = PTR_SIZE;
 
 pub const LEFT_CHILD_NODE_OFFSET_START: usize = LEFT_CHILD_PAGE_START + LEFT_CHILD_PAGE_SIZE; 

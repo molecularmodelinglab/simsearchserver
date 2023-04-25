@@ -1,5 +1,5 @@
-directory: "/home/josh/db/builder_test/"
-desc_length: 16
+directory: "/pool/builder_test_fast/"
+desc_length: 10
 record_page_length: 16384
 node_page_length: 8192
 cache_nodes_for_query: true

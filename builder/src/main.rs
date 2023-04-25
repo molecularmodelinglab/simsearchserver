@@ -10,7 +10,8 @@ use std::path::Path;
 
 fn main() {
 
-    param_sweep();
+    build_single();
+    //param_sweep();
 
 }
 
@@ -31,7 +32,7 @@ fn build_single() {
 
     let mut tree = tree::Tree::create_with_config(config.clone());
 
-    for _ in tqdm!(0..1e9 as usize) {
+    for _ in tqdm!(0..4e9 as usize) {
         let rec = CompoundRecord::random(config.desc_length);
         tree.add_record(&rec).unwrap();
     }

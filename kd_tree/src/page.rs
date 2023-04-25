@@ -1,4 +1,4 @@
-//! A page is a 4kb byte array that is either a collection of internal nodes or a single leaf node
+//! A page is a byte array that is either a collection of internal nodes or a single leaf node
 //! that is a collection of compound records.
 //!
 //!
@@ -171,7 +171,7 @@ impl NodePage {
 
     }
 
-    pub fn get_node_at(&self, offset: ItemOffset) -> Result<InternalNode, String> {
+    pub fn get_node_at(&self, offset: &ItemOffset) -> Result<InternalNode, String> {
 
         //dbg!(&self.get_data()[0..10]);
         //println!("CURR TAIL: {:?}", self.tail);
@@ -213,7 +213,7 @@ impl NodePage {
 
         for offset in 0..10000 {
 
-            let node_result = self.get_node_at(ItemOffset(offset));
+            let node_result = self.get_node_at(&ItemOffset(offset));
 
             match node_result {
 
@@ -441,6 +441,7 @@ impl RecordPage {
 
         let slice = &mut self.data[start..start + size];
 
+        //println!("TAIL BEFORE ADD: {}", self.tail.as_ref().unwrap().0);
         //slice.copy_from_slice(&record.to_arr());
         slice.copy_from_slice(&record.to_vec());
         self.tail.as_mut().unwrap().0 += 1;
@@ -448,6 +449,8 @@ impl RecordPage {
         //ensure tail value is updated
         self.data[layout::TAIL_OFFSET..layout::TAIL_OFFSET + layout::TAIL_SIZE].copy_from_slice(&self.tail.as_ref().unwrap().0.to_be_bytes());
 
+        //println!("TAIL AFTER ADD: {}", self.tail.as_ref().unwrap().0);
+        //println!("CAPACITY: {}", self.get_capacity());
         //let tail = i32::from_be_bytes(arr[layout::TAIL_OFFSET..layout::TAIL_OFFSET+4].try_into().unwrap()) as usize;
         
         Ok(())

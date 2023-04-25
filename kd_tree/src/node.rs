@@ -18,6 +18,13 @@ use std::convert::TryInto;
 #[derive(Debug, PartialEq, Clone)]
 pub struct PageAddress(pub usize);
 
+impl PageAddress {
+    pub fn default() -> Self {
+        return Self(0);
+    }
+}
+
+
 /*
 impl PageAddress {
     
@@ -32,6 +39,12 @@ impl PageAddress {
 #[derive(Debug, PartialEq, Clone)]
 //pub struct ItemOffset(pub usize);
 pub struct ItemOffset(pub u32);
+
+impl ItemOffset {
+    pub fn default() -> Self {
+        return Self(0);
+    }
+}
 
 #[derive(Debug, PartialEq)]
 pub enum NodeType{
@@ -83,8 +96,8 @@ impl Descriptor {
 #[derive(Debug, PartialEq, Clone)]
 pub struct InternalNode {
 
-    pub parent_page_address: PageAddress,
-    pub parent_node_offset: ItemOffset,
+    //pub parent_page_address: PageAddress,
+    //pub parent_node_offset: ItemOffset,
     pub left_child_page_address: PageAddress,
     pub left_child_node_offset: ItemOffset,
     pub left_child_type: PageType,
@@ -394,8 +407,8 @@ impl InternalNode {
 
         let node = Self {
             //node_type: NodeType::Internal,
-            parent_page_address: PageAddress(0),
-            parent_node_offset: ItemOffset(0),
+            //parent_page_address: PageAddress(0),
+            //parent_node_offset: ItemOffset(0),
             left_child_page_address: PageAddress(0),
             left_child_node_offset: ItemOffset(0),
             left_child_type: PageType::Node,
@@ -426,8 +439,8 @@ impl InternalNode {
     pub fn from_slice(node_slice: &[u8]) -> Result<InternalNode, String> {
 
         //let node_type = get_usize_from_array(node_slice, layout::NODE_TYPE_OFFSET, layout::NODE_TYPE_SIZE);
-        let parent_page_address = Parser::get_usize_from_array(node_slice, layout::PARENT_PAGE_START, layout::PARENT_PAGE_SIZE);
-        let parent_node_offset = Parser::get_usize_from_array(node_slice, layout::PARENT_NODE_OFFSET_START, layout::PARENT_NODE_OFFSET_SIZE);
+        //let parent_page_address = Parser::get_usize_from_array(node_slice, layout::PARENT_PAGE_START, layout::PARENT_PAGE_SIZE);
+        //let parent_node_offset = Parser::get_usize_from_array(node_slice, layout::PARENT_NODE_OFFSET_START, layout::PARENT_NODE_OFFSET_SIZE);
 
         let left_child_page_address = Parser::get_usize_from_array(node_slice, layout::LEFT_CHILD_PAGE_START, layout::LEFT_CHILD_PAGE_SIZE);
         let left_child_node_offset = Parser::get_usize_from_array(node_slice, layout::LEFT_CHILD_NODE_OFFSET_START, layout::LEFT_CHILD_NODE_OFFSET_SIZE);
@@ -450,8 +463,8 @@ impl InternalNode {
         };
         */
 
-        node.parent_page_address = PageAddress(parent_page_address.unwrap());
-        node.parent_node_offset = ItemOffset(parent_node_offset.unwrap() as u32);
+        //node.parent_page_address = PageAddress(parent_page_address.unwrap());
+        //node.parent_node_offset = ItemOffset(parent_node_offset.unwrap() as u32);
 
         node.left_child_page_address = PageAddress(left_child_page_address.unwrap());
         node.left_child_node_offset = ItemOffset(left_child_node_offset.unwrap() as u32);
@@ -490,10 +503,10 @@ impl InternalNode {
         };
         */
 
-        let slice = &mut arr[layout::PARENT_PAGE_START..layout::PARENT_PAGE_START + layout::PARENT_PAGE_SIZE];
-        BigEndian::write_u64(slice, self.parent_page_address.0.try_into().unwrap());
+        //let slice = &mut arr[layout::PARENT_PAGE_START..layout::PARENT_PAGE_START + layout::PARENT_PAGE_SIZE];
+        //BigEndian::write_u64(slice, self.parent_page_address.0.try_into().unwrap());
 
-        arr[layout::PARENT_NODE_OFFSET_START] = self.parent_node_offset.0 as u8;
+        //arr[layout::PARENT_NODE_OFFSET_START] = self.parent_node_offset.0 as u8;
 
         let slice = &mut arr[layout::LEFT_CHILD_PAGE_START..layout::LEFT_CHILD_PAGE_START + layout::LEFT_CHILD_PAGE_SIZE];
         let value: u64 = self.left_child_page_address.0.try_into().unwrap();

@@ -46,6 +46,10 @@ impl PagePointer {
         let s = format!("{:?}|{:?}|{:?}", self.page_type, self.page_address.0, self.node_offset.0);
         return s;
     }
+    
+    pub fn to_tuple(&self) -> (usize, usize) {
+        return (self.page_address.0 as usize, self.node_offset.0 as usize);
+    }
 }
 
 impl fmt::Display for PagePointer {
@@ -189,6 +193,83 @@ impl NodePager {
 
         Ok(res)
     }
+
+    pub fn node_from_pointer(&mut self, pointer: &PagePointer) -> Result<InternalNode, String> {
+
+        let page = self.get_node_page(&pointer.page_address).unwrap();
+        let node = page.get_node_at(&pointer.node_offset)?;
+
+        return Ok(node);
+    }
+
+    pub fn data_from_pointer(&mut self, pointer: &PagePointer) -> Result<(InternalNode, NodePage), String> {
+
+        let page = self.get_node_page(&pointer.page_address).unwrap();
+        let node = page.get_node_at(&pointer.node_offset)?;
+
+        return Ok((node, page));
+    }
+
+
+    pub fn add_node(&mut self, node: &InternalNode) -> Result<PagePointer, Error> {
+
+        let cursor = self.cursor.clone();
+        //dbg!(&self.cursor);
+        let page_address = PageAddress(cursor.0 - 1 );
+        let mut page = self.get_node_page(&page_address).unwrap();
+        //dbg!(&page.get_capacity());
+
+        let (mut page, page_address) =  match page.is_full() {
+            true => {
+                //dbg!("FULL");
+                let new_page = NodePage::new(self.page_length);
+                let new_address = self.write_page(&new_page)?;
+                //self.cursor.0 += 1;
+                (new_page, new_address)
+            },
+            false => {
+                (page, page_address)
+            }
+        };
+
+        let offset = page.add_node(node);
+
+        self.write_page_at_offset(&page, &page_address)?;
+
+        let return_pointer = PagePointer {
+            page_type: PageType::Node,
+            page_address: page_address,
+            node_offset: offset.unwrap(),
+        };
+        //dbg!(&return_pointer);
+
+        Ok(return_pointer)
+    }
+
+    pub fn update_node(&mut self, pointer: &PagePointer, new_node: &InternalNode) -> Result<(), Error> {
+
+
+        let (mut node, mut page) = self.data_from_pointer(pointer).unwrap();
+
+        page.write_node_at(new_node.clone(), pointer.node_offset.clone()).unwrap();
+        self.write_page_at_offset(&page, &pointer.page_address)?;
+
+
+
+        /*
+        dbg!(&pointer);
+        dbg!(&node);
+        dbg!(&new_node);
+        */
+
+        //let (mut node, mut page) = self.data_from_pointer(pointer).unwrap();
+        //dbg!(&node);
+        //panic!();
+
+        return Ok(())
+    }
+
+
     
 }
 
@@ -198,14 +279,44 @@ mod tests {
     use crate::node::{PageAddress, InternalNode, ItemOffset, Descriptor, CompoundRecord, CompoundIdentifier};
     
     #[test]
+    fn quick_nodes_to_file_and_back_works() {
+
+
+        for num_nodes in [1, 10, 100, 1000, 1234] {
+
+            for run in 0..10 {
+
+                let mut pager = FastNodePager::new();
+
+                for i in 0..num_nodes {
+                    let mut node = InternalNode::default();
+                    node.split_value = i as f32;
+                    pager.add_node(&node).unwrap();
+                }
+                
+                let filename = "test_data/node".to_string();
+                pager.to_file(&filename).unwrap();
+                pager = FastNodePager::from_file(&filename).unwrap();
+
+                for node in pager.store.iter() {
+                }
+                assert_eq!(pager.store.len(), num_nodes);
+            }
+        }
+
+    }
+
+
+
+    #[test]
     fn quick_nodepage_to_file_and_back_works() {
         const N: usize = 8;
         let mut pager = NodePager::new(Path::new("test_data/kdtree.nodes"), 4096, true).unwrap();
 
         let mut node1 = InternalNode::default();
 
-        node1.parent_page_address = PageAddress(65536);
-        node1.parent_node_offset = ItemOffset(2);
+        //node1.parent_page_address = PageAddress(65536);
+        //node1.parent_node_offset = ItemOffset(2);
         node1.left_child_page_address = PageAddress(300);
         node1.left_child_node_offset = ItemOffset(4);
         node1.right_child_page_address = PageAddress(500);
@@ -215,15 +326,15 @@ mod tests {
 
         let mut nodepage = NodePage::new(4096);
 
-        node1.parent_page_address = PageAddress(4096);
+        //node1.parent_page_address = PageAddress(4096);
         for _ in 0..10 {
             nodepage.push_node(&node1).unwrap();
         }
 
         let mut node2 = InternalNode::default();
 
-        node2.parent_page_address = PageAddress(4550);
-        node2.parent_node_offset = ItemOffset(2);
+        //node2.parent_page_address = PageAddress(4550);
+        //node2.parent_node_offset = ItemOffset(2);
         node2.left_child_page_address = PageAddress(300);
         node2.left_child_node_offset = ItemOffset(4);
         node2.right_child_page_address = PageAddress(500);
@@ -242,23 +353,23 @@ mod tests {
 
         //let node = page.get_node_at(ItemOffset(9));
 
-        let node_from_file = page.get_node_at(ItemOffset(0)).unwrap();
+        let node_from_file = page.get_node_at(&ItemOffset(0)).unwrap();
         assert_eq!(node1, node_from_file);
 
-        let node_from_file = page.get_node_at(ItemOffset(8)).unwrap();
+        let node_from_file = page.get_node_at(&ItemOffset(8)).unwrap();
         assert_eq!(node1, node_from_file);
 
 
-        let node_from_file = page.get_node_at(ItemOffset(10)).unwrap();
+        let node_from_file = page.get_node_at(&ItemOffset(10)).unwrap();
         assert_eq!(node2, node_from_file);
 
         //read second page
         let page = pager.get_node_page(&PageAddress(1)).unwrap();
 
-        let node_from_file = page.get_node_at(ItemOffset(0)).unwrap();
+        let node_from_file = page.get_node_at(&ItemOffset(0)).unwrap();
         assert_eq!(node1, node_from_file);
 
-        let node_from_file = page.get_node_at(ItemOffset(10)).unwrap();
+        let node_from_file = page.get_node_at(&ItemOffset(10)).unwrap();
         assert_eq!(node2, node_from_file);
     }
 
@@ -382,8 +493,7 @@ impl CachedPager {
 
     pub fn from_filename(filename: &Path, page_length: usize) -> Result<CachedPager, Error> {
 
-        dbg!(filename);
-        let mut node_pager = NodePager::new(filename, page_length, false)?;
+        dbg!(filename); let mut node_pager = NodePager::new(filename, page_length, false)?;
 
         //TODO: make this capacity calculation correct
         let mut all_nodes: Vec<InternalNode> = Vec::with_capacity(node_pager.cursor.0 * 300);
@@ -421,6 +531,155 @@ impl CachedPager {
     }
 
 }
+
+
+#[derive(Debug)]
+pub struct FastNodePager {
+    //pub map: HashMap<(usize, usize), InternalNode>,
+    store: Vec<InternalNode>,
+    page_length: usize,
+
+}
+
+impl FastNodePager {
+
+    pub fn new() -> FastNodePager {
+
+        return Self {
+            store: Vec::new(),
+            page_length: 128,
+        };
+
+    }
+
+    fn pointer_to_index(&self, pointer: &PagePointer) -> usize {
+        return pointer.page_address.0 as usize * self.page_length + pointer.node_offset.0 as usize;
+    }
+
+    fn index_to_pointer(&self, index: usize) -> PagePointer {
+        let page_address = index / self.page_length;
+        let node_offset = index % self.page_length;
+
+        return PagePointer {
+            page_address: PageAddress(page_address as usize),
+            node_offset: ItemOffset(node_offset as u32),
+            page_type: PageType::Node,
+        };
+    }
+
+    pub fn to_file(&self, filename: &String) -> Result<(), Error> {
+
+        let path = Path::new(filename);
+
+        let mut fd = OpenOptions::new()
+                    .create(true)
+                    .read(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(path).unwrap();
+
+
+        fn calc_offset(index: usize) -> usize {
+
+            return layout::PAGE_DATA_START + (index * layout::NODE_SIZE);
+
+        }
+
+        for i in 0..self.store.len() {
+            let node = self.store.get(i).unwrap();
+            let start = calc_offset(i);
+            let slice = node.to_arr();
+
+            fd.seek(SeekFrom::Start(start as u64))?;
+            fd.write(&slice).unwrap();
+        }
+
+        let cursor = self.store.len() - 1;
+        //update cursor on disk
+        let mut cursor_arr: [u8; layout::HEADER_CURSOR_SIZE] = [0x00; layout::HEADER_CURSOR_SIZE];
+
+        BigEndian::write_u64(&mut cursor_arr, cursor as u64);
+
+        fd.seek(SeekFrom::Start(layout::HEADER_CURSOR_START as u64))?;
+        fd.write(&cursor_arr)?;
+
+        Ok(())
+
+    }
+
+    pub fn from_file(filename: &String) -> Result<FastNodePager, Error> {
+
+        let path = Path::new(filename);
+
+        let mut fd = OpenOptions::new()
+                    .create(false)
+                    .read(true)
+                    .write(false)
+                    .truncate(false)
+                    .open(path)?;
+
+        let mut cursor_arr: [u8; layout::HEADER_CURSOR_SIZE] = [0x00; layout::HEADER_CURSOR_SIZE];
+        fd.seek(SeekFrom::Start(layout::HEADER_CURSOR_START as u64))?;
+        fd.read_exact(&mut cursor_arr)?;
+
+        let mut pager = Self::new();
+
+        let attempted_usize = layout::Value::try_from(cursor_arr);
+        let layout::Value(value) = attempted_usize.unwrap();
+        
+        for i in 0..(value + 1) {
+            let mut node_arr: [u8; layout::NODE_SIZE] = [0x00; layout::NODE_SIZE];
+            let start = layout::PAGE_DATA_START + (i * layout::NODE_SIZE);
+            fd.seek(SeekFrom::Start(start as u64))?;
+            fd.read_exact(&mut node_arr)?;
+            let node = InternalNode::from_slice(&node_arr).unwrap();
+            pager.store.push(node);
+
+        }
+
+
+        
+        Ok(pager)
+
+    }
+
+
+    pub fn num_nodes(&self) -> usize {
+        return self.store.len();
+    }
+
+    //TODO: return only node references, user can clone if they need to
+    pub fn node_from_pointer(&mut self, pointer: &PagePointer) -> Result<&InternalNode, String> {
+
+        //let node = self.map.get(&pointer.to_tuple()).unwrap();
+        let idx = self.pointer_to_index(pointer);
+        let node = self.store.get(idx).unwrap();
+
+        return Ok(node);
+    }
+
+    pub fn add_node(&mut self, node: &InternalNode) -> Result<PagePointer, Error> {
+
+        //self.map.insert(self.next_pointer.to_tuple(), node.clone());
+        self.store.push(node.clone());
+
+        let added_index = self.store.len() - 1;
+        let return_pointer = self.index_to_pointer(added_index);
+
+        Ok(return_pointer)
+    }
+
+    pub fn update_node(&mut self, pointer: &PagePointer, new_node: &InternalNode) -> Result<(), Error> {
+
+        //self.map.insert(pointer.to_tuple(), new_node.clone());
+        let idx = self.pointer_to_index(pointer);
+        self.store[idx] = new_node.clone();
+        //println!("UPDATED NODE ADDRESS: {:?}", pointer.to_tuple());
+
+        return Ok(())
+    }
+}
+
 
 impl RecordPager {
 
@@ -533,6 +792,10 @@ impl RecordPager {
         println!("NUMBER OF RECORDS FOUND: {:?}", records.len());
         println!("LAST RECORD FOUND: {:?}", records[records.len() - 1]);
 
+    }
+
+    pub fn len(&self) -> usize {
+        return self.cursor.0 as usize;
     }
 
     pub fn write_page(&mut self, page: &RecordPage) -> Result<PageAddress, Error> {
