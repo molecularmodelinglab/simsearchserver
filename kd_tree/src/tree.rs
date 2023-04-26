@@ -1,6 +1,6 @@
 //! Implementation of kd-tree creation and querying
 extern crate test;
-use crate::node::{InternalNode, CompoundRecord, PageAddress, Descriptor, ItemOffset};
+use crate::node::{InternalNode, CompoundRecord, CompoundIdentifier, Descriptor, ItemOffset, PageAddress};
 use crate::page::{RecordPage, NodePage, PageType };
 use crate::io::{NodePager, FastNodePager,RecordPager, PagePointer, CachedPager};
 use std::collections::HashMap;
@@ -22,7 +22,6 @@ pub struct TreeConfig {
     pub desc_length: usize,
     pub record_page_length: usize,
     pub node_page_length: usize,
-    pub cache_nodes_for_query: bool,
 }
 
 impl TreeConfig {
@@ -33,7 +32,6 @@ impl TreeConfig {
             desc_length: 8,
             record_page_length: 4096,
             node_page_length: 4096,
-            cache_nodes_for_query: true,
         }
     }
 
@@ -53,6 +51,19 @@ impl TreeConfig {
 
         file.write(serialized.as_bytes()).unwrap();
     }
+
+    pub fn get_node_filename(&self) -> String {
+
+        return self.directory.clone() + "/node";
+    }
+
+    pub fn get_record_filename(&self) -> String {
+
+        return self.directory.clone() + "/record";
+    }
+
+
+
 }
 
 /// Struct to represent the kd-tree
@@ -63,8 +74,6 @@ impl TreeConfig {
 pub struct Tree {
     pub node_pager: FastNodePager,
     pub record_pager: RecordPager,
-    pub cached_node_pager: Option<CachedPager>,
-    //pub free_node_pages: VecDeque<PageAddress>,
     pub root: PagePointer,
     pub config: TreeConfig,
 }
@@ -80,11 +89,16 @@ pub struct TopHits {
     pub pointers: Vec<Option<PagePointer>>,
 }
 
+fn get_smiles(identifier: &CompoundIdentifier) -> String {
+    let smiles = "not implemented".to_string();
+    smiles
+}
+
+
 impl TopHits {
 
     ///Distances are initially set to max f32 value
-    ///
-    ///Behavior is undefined if we don't visit at least `max_lengths` records
+    /// Behavior is undefined if we don't visit at least `max_lengths` records
     pub fn new(max_length: usize) -> Self {
 
         let mut distances: Vec<f32> = Vec::new();
@@ -158,7 +172,8 @@ impl TopHits {
         return self.distances[self.max_length - 1];
     }
 
-    pub fn to_json(&self) -> Vec<u8> {
+    //pub fn to_json(&self) -> Vec<u8> {
+    pub fn to_json(&self) -> String {
 
         let mut s = String::new();
         s += "{";
@@ -177,9 +192,33 @@ impl TopHits {
         s += "},\n";
         }
         s += "}";
-        return s.as_bytes().to_vec();
+        //return s.as_bytes().to_vec();
+        return s;
 
     }
+
+    pub fn to_yaml(&self) -> String {
+
+        let mut s = String::new();
+        for i in 0..self.records.len() {
+
+            let record = match &self.records[i] {
+                None => {panic!()},
+                Some(x) => x.clone(),
+            };
+            let identifier_string = record.compound_identifier.to_string();
+            let smiles = get_smiles(&record.compound_identifier);
+            s = s + &format!("  - {:?}: \n", identifier_string);
+        
+            s = s + &format!("    - dataset_id: {}\n", &record.dataset_identifier);
+            s = s + &format!("    - smiles: {}\n", &smiles);
+            s = s + &format!("    - distance: {}\n", &self.distances[i]).to_string();
+        }
+        //return s.as_bytes().to_vec();
+        return s;
+
+    }
+
 }
 
 pub enum Direction {
@@ -201,16 +240,16 @@ impl Tree {
         let config = TreeConfig::from_file(config_filename);
         dbg!(&config);
 
-        let node_filename = directory_name.clone() + "/" + "node";
-        let record_filename = directory_name.clone() + "/" + "record";
-
+        let node_filename = config.get_node_filename();
+        let record_filename = config.get_record_filename();
 
         dbg!(&node_filename);
         dbg!(&record_filename);
         //let mut node_pager = FastNodePager::new(Path::new(&node_filename), config.node_page_length, false).unwrap();
-        let mut node_pager = FastNodePager::new();
+        let mut node_pager = FastNodePager::from_file(&node_filename).unwrap();
         let mut record_pager = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, false).unwrap();
 
+        /*
         let (cached_node_pager, use_cached_nodes) : (Option<CachedPager>, bool) = match config.cache_nodes_for_query {
             
             true => {
@@ -220,6 +259,7 @@ impl Tree {
             },
             false => (None, false),
         };
+        */
               
         return Self {
             node_pager,
@@ -229,7 +269,6 @@ impl Tree {
                 page_address: PageAddress(0),
                 node_offset: ItemOffset(0),
             },
-            cached_node_pager,
             config,
             };
     }
@@ -260,6 +299,13 @@ impl Tree {
         return Self::new(config);
     }
 
+    pub fn flush(&mut self) {
+
+        let node_filename = self.config.get_node_filename();
+        self.node_pager.to_file(&node_filename);
+
+    }
+
     fn new(config: TreeConfig) -> Self {
 
         let node_filename = config.directory.clone() + "/" + "node";
@@ -275,8 +321,8 @@ impl Tree {
         let first_record_page = RecordPage::new(config.record_page_length, config.desc_length);
         record_pager.write_page(&first_record_page).unwrap();
 
-        let first_node = InternalNode::default();
-        node_pager.add_node(&first_node).unwrap();
+        //let first_node = InternalNode::default();
+        //node_pager.add_node(&first_node).unwrap();
 
         config.to_file(config_filename);
 
@@ -288,7 +334,6 @@ impl Tree {
                 page_address: PageAddress(0),
                 node_offset: ItemOffset(0),
             },
-            cached_node_pager: None,
             config,
         };
     }
@@ -747,7 +792,10 @@ impl Tree {
 
             //dbg!(&curr_pointer);
 
-            let mut curr_node = self.node_pager.node_from_pointer(&curr_pointer).unwrap().clone();
+            let mut curr_node = match self.node_pager.node_from_pointer(&curr_pointer) {
+                Ok(x) => x.clone(),
+                Err(_) => InternalNode::default(),
+                };
 
             if curr_tup.level > curr_depth {
                 curr_depth = curr_tup.level;
@@ -796,14 +844,23 @@ impl Tree {
                     curr_node.split_axis = split_axis;
                     curr_node.split_value = split_value;
 
+                    match self.node_pager.len() {
+                        0 => {
+                            self.node_pager.add_node(&curr_node).unwrap();
+                        }
+                        _ => {
+                        }
+                    }
+
+
                     let left_child_pointer = self.node_pager.add_node(&InternalNode::default()).unwrap();
                     let right_child_pointer = self.node_pager.add_node(&InternalNode::default()).unwrap();
 
                     //dbg!(&left_child_pointer);
                     //dbg!(&right_child_pointer);
 
-                    println!("LEFT: {:?}, {:?}", &left_child_pointer.page_address, &left_child_pointer.node_offset);
-                    println!("RIGHT: {:?}, {:?}", &right_child_pointer.page_address, &right_child_pointer.node_offset);
+                    //println!("LEFT: {:?}, {:?}", &left_child_pointer.page_address, &left_child_pointer.node_offset);
+                    //println!("RIGHT: {:?}, {:?}", &right_child_pointer.page_address, &right_child_pointer.node_offset);
 
                     curr_node.left_child_type = PageType::Node;
                     curr_node.left_child_page_address = left_child_pointer.page_address.clone();
@@ -1034,9 +1091,19 @@ impl Tree {
     pub fn split(&mut self, page: RecordPage, this_pointer: &PagePointer, parent_pointer: &PagePointer, last_was_left: bool) -> Result<(), String> {
 
         //determine the split axis
-        let parent_node = self.node_pager.node_from_pointer(&parent_pointer).unwrap();
+        let parent_node: Option<InternalNode> = match self.node_pager.node_from_pointer(&parent_pointer)
+        {
+            Ok(x) => Some(x.clone()),
+            Err(_) => None,
+        };
 
-        let split_axis =(parent_node.split_axis + 1) % self.config.desc_length;
+
+        
+        let split_axis = match &parent_node {
+            Some(x) => (x.split_axis + 1) % self.config.desc_length,
+            None => 0,
+        };
+
 
         //determine split value
         let records = page.get_records();
@@ -1099,7 +1166,7 @@ impl Tree {
             left_child_node_offset: this_pointer.node_offset.clone(), //not used
             left_child_type: PageType::Leaf,
             right_child_page_address: right_child_address,
-            right_child_node_offset: ItemOffset(0), //not used
+            right_child_node_offset: ItemOffset(69), //not used
             right_child_type: PageType::Leaf,
             split_axis,
             split_value: median,
@@ -1108,21 +1175,26 @@ impl Tree {
         //write new node and get address
         let pointer = self.node_pager.add_node(&node).unwrap();
 
-        //update the parent with this pointer
-        let mut parent_node = self.node_pager.node_from_pointer(&parent_pointer).unwrap().clone();
+        match parent_node {
+            Some(x) => {
+                //update the parent with this pointer
+                let mut updated_node = x.clone();
 
-        if last_was_left {
-            parent_node.left_child_page_address = pointer.page_address.clone();
-            parent_node.left_child_node_offset = pointer.node_offset.clone();
-            parent_node.left_child_type = PageType::Node;
-        }
-        else {
-            parent_node.right_child_page_address = pointer.page_address.clone();
-            parent_node.right_child_node_offset = pointer.node_offset.clone();
-            parent_node.right_child_type = PageType::Node;
-        }
+                if last_was_left {
+                    updated_node.left_child_page_address = pointer.page_address.clone();
+                    updated_node.left_child_node_offset = pointer.node_offset.clone();
+                    updated_node.left_child_type = PageType::Node;
+                }
+                else {
+                    updated_node.right_child_page_address = pointer.page_address.clone();
+                    updated_node.right_child_node_offset = pointer.node_offset.clone();
+                    updated_node.right_child_type = PageType::Node;
+                }
 
-        self.node_pager.update_node(&parent_pointer, &parent_node).unwrap();
+                self.node_pager.update_node(&parent_pointer, &updated_node).unwrap();
+            },
+            None => {},
+        }
 
         if self.root == *this_pointer {
             //println!("UPDATING ROOT");
@@ -1242,7 +1314,7 @@ mod tests {
             config.desc_length = n;
             config.directory = "test_data/aaaa".to_string();
 
-            let mut tree = Tree::force_create_with_config(config);
+            let mut tree = Tree::force_create_with_config(config.clone());
             //dbg!(&tree);
 
 
@@ -1288,6 +1360,7 @@ mod tests {
             let bad_record = CompoundRecord::random(n);
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
+
 
             let _nn = tree.get_nearest_neighbors(&bad_record.descriptor, 1);
         }
@@ -1376,18 +1449,25 @@ mod tests {
 
     }
     #[test]
-    fn quick_uniform_tree() {
+    fn uniform_tree() {
 
         let mut config = TreeConfig::default();
         config.desc_length = 8;
         config.record_page_length = 4096;
         config.node_page_length = 256;
 
-        config.directory = "test_data/bvnnacc/".to_string();
+        config.directory = "test_data/qut/".to_string();
 
         let mut tree = Tree::force_create_with_config(config.clone());
 
         //tree.uniform_layout(22, 0.0, 1.0);
+
+        /*
+        dbg!(&tree.node_pager.store[0]);
+        dbg!(&tree.node_pager.store[1]);
+        dbg!(&tree.node_pager.store[2]);
+        dbg!(&tree.root);
+        */
 
         let cr = CompoundRecord::random(config.desc_length);
 
@@ -1405,7 +1485,7 @@ mod tests {
             let cr = CompoundRecord::random(config.desc_length);
             tree.add_record(&cr).unwrap();
         }
-        tree.output_depths();
+        //tree.output_depths();
         println!("----------");
 
         dbg!(&tree.num_nodes());
@@ -1530,7 +1610,7 @@ mod tests {
 
         let mut config = TreeConfig::default();
         config.desc_length = 8;
-        config.directory = "test_data/bvnnacc/".to_string();
+        config.directory = "test_data/qvnnacc/".to_string();
 
         let mut tree = Tree::force_create_with_config(config);
 
@@ -1675,9 +1755,10 @@ mod tests {
                 build_tree.add_record(&record.clone()).unwrap();
             }
 
+            build_tree.flush();
 
-            //let mut query_tree = Tree::read_from_directory("test_data/nn_validation/".to_string());
-            let mut query_tree = build_tree;
+
+            let mut query_tree = Tree::read_from_directory("test_data/nn_validation/".to_string());
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
             let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
@@ -1885,17 +1966,40 @@ mod tests {
             config.desc_length = 8;
             config.directory = "test_data/qf".to_string();
 
-            let mut build_tree = Tree::force_create_with_config(config);
+            let mut build_tree = Tree::force_create_with_config(config.clone());
 
             for record in records.iter() {
 
                 build_tree.add_record(&record.clone()).unwrap();
             }
 
-            //let mut query_tree = Tree::read_from_directory("test_data/qf/".to_string());
-            let mut query_tree = build_tree;
+            let stem = config.directory.clone();
+            let node_filename = stem + "node";
 
+            //build_tree.output_depths();
+            //dbg!(&build_tree.node_pager.store[0]);
+            //dbg!(&build_tree.node_pager.store[1]);
+            //panic!();
+            build_tree.flush();
+
+            //let mut query_tree = Tree::read_from_directory("test_data/qf/".to_string());
+            let mut query_tree = Tree::read_from_directory(config.directory.clone());
+            //println!("HERE3");
+
+
+            /*
+            for node in query_tree.node_pager.store {
+                println!("{:?}" , node);
+            }
+            */
+
+
+            //dbg!(&build_tree.node_pager.store[0]);
+            //dbg!(&query_tree.node_pager.store[0]);
+            //panic!();
+            //query_tree.output_depths();
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
+            //println!("HERE4");
 
             let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
 

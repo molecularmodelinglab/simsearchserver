@@ -536,7 +536,7 @@ impl CachedPager {
 #[derive(Debug)]
 pub struct FastNodePager {
     //pub map: HashMap<(usize, usize), InternalNode>,
-    store: Vec<InternalNode>,
+    pub store: Vec<InternalNode>,
     page_length: usize,
 
 }
@@ -550,6 +550,10 @@ impl FastNodePager {
             page_length: 128,
         };
 
+    }
+
+    pub fn len(&self) -> usize {
+        return self.store.len();
     }
 
     fn pointer_to_index(&self, pointer: &PagePointer) -> usize {
@@ -567,6 +571,13 @@ impl FastNodePager {
         };
     }
 
+    fn calc_offset(index: usize) -> usize {
+
+        return layout::FILE_DATA_START + (index * layout::NODE_SIZE);
+
+    }
+
+
     pub fn to_file(&self, filename: &String) -> Result<(), Error> {
 
         let path = Path::new(filename);
@@ -578,20 +589,15 @@ impl FastNodePager {
                     .truncate(true)
                     .open(path).unwrap();
 
-
-        fn calc_offset(index: usize) -> usize {
-
-            return layout::PAGE_DATA_START + (index * layout::NODE_SIZE);
-
-        }
-
         for i in 0..self.store.len() {
             let node = self.store.get(i).unwrap();
-            let start = calc_offset(i);
+            let start = Self::calc_offset(i);
             let slice = node.to_arr();
 
             fd.seek(SeekFrom::Start(start as u64))?;
             fd.write(&slice).unwrap();
+            //println!("W {:?} {:?}", i, start);
+            //println!("\t{:?}", node);
         }
 
         let cursor = self.store.len() - 1;
@@ -629,7 +635,8 @@ impl FastNodePager {
         
         for i in 0..(value + 1) {
             let mut node_arr: [u8; layout::NODE_SIZE] = [0x00; layout::NODE_SIZE];
-            let start = layout::PAGE_DATA_START + (i * layout::NODE_SIZE);
+            let start = Self::calc_offset(i);
+            //println!("R {:?} {:?}", i, start);
             fd.seek(SeekFrom::Start(start as u64))?;
             fd.read_exact(&mut node_arr)?;
             let node = InternalNode::from_slice(&node_arr).unwrap();
@@ -653,9 +660,12 @@ impl FastNodePager {
 
         //let node = self.map.get(&pointer.to_tuple()).unwrap();
         let idx = self.pointer_to_index(pointer);
-        let node = self.store.get(idx).unwrap();
+        let ret = match self.store.get(idx) {
+            Some(node) => Ok(node),
+            None => Err(format!("Node not found at address: {:?}", pointer.to_tuple())),
+        };
 
-        return Ok(node);
+        return ret;
     }
 
     pub fn add_node(&mut self, node: &InternalNode) -> Result<PagePointer, Error> {

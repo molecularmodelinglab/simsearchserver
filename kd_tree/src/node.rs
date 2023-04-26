@@ -91,6 +91,18 @@ impl Descriptor {
             length,
         }
     }
+
+    pub fn yaml(&self) -> String {
+
+        let mut s = "[".to_string();
+        for (i, item) in self.data.iter().enumerate() {
+            if i != 0 { s += ","; }
+            s += &format!("{:.3}", item);
+        }
+        s += "]";
+
+        return s;
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -425,15 +437,17 @@ impl InternalNode {
 
     pub fn pretty(&self) -> String {
 
-        return format!("LC: {:?}|{:?}|{:?} RC: {:?}|{:?}|{:?}| SA: {:?} SV: {:?}",
+        return format!("SA: {:?} SV: {:?}
+                            LC: {:?}|{:?}|{:?}
+                            RC: {:?}|{:?}|{:?}",
+                        self.split_axis,
+                        self.split_value,
                         self.left_child_type,
                         self.left_child_page_address.0,
                         self.left_child_node_offset.0,
                         self.right_child_type,
                         self.right_child_page_address.0,
-                        self.right_child_node_offset.0,
-                        self.split_axis,
-                        self.split_value);
+                        self.right_child_node_offset.0);
     }
 
     pub fn from_slice(node_slice: &[u8]) -> Result<InternalNode, String> {

@@ -32,10 +32,12 @@ fn build_single() {
 
     let mut tree = tree::Tree::create_with_config(config.clone());
 
-    for _ in tqdm!(0..4e9 as usize) {
+    for _ in tqdm!(0..1e4 as usize) {
         let rec = CompoundRecord::random(config.desc_length);
         tree.add_record(&rec).unwrap();
     }
+
+    tree.flush();
 }
 
 

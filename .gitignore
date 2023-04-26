@@ -1,0 +1,11 @@
+target
+kd_tree/test_data
+*.data
+*.trace
+*.txt
+*.ipynb
+*.old
+*.log
+*.lock
+out
+

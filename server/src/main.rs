@@ -1,5 +1,5 @@
 use kd_tree::{tree, layout};
-use kd_tree::node::Descriptor;
+use kd_tree::node::{Descriptor, CompoundIdentifier};
 
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
@@ -10,29 +10,55 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use hyper::server::Server;
 
-async fn hello(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Response<Body>, Infallible> {
-    println!("{:?}", req.uri().path());
+async fn get_nn(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Response<Body>, Infallible> {
+    let smiles = req.uri().path().to_string();
+    let num_nn = 100;
+    println!("{:?}", smiles);
 
+    let descriptor = get_smiles_embedding(&smiles);
 
-
-    //let descriptor = Descriptor::from_vec(vec![0.5,0.5,0.5,0.5,0.5,0.5,0.5,0.5]);
-    println!("HERE");
     let mut mg = tree.lock().unwrap();
-    let descriptor = Descriptor::random(mg.config.desc_length);
+
     dbg!(&descriptor);
-    println!("HERE2");
-    let nn = mg.get_nearest_neighbors(&descriptor, 100);
-    //let s = format!("{:?}", nn.records[0]);
-    //let s = format!("{:?}", nn.to_json());
-    let s = nn.to_json();
-    //Ok(Response::new(Body::from("Hello World!")))
-    Ok(Response::new(Body::from(s)))
+    let nn = mg.get_nearest_neighbors(&descriptor, num_nn);
+    let s = nn.to_yaml();
+
+    let mut data = "".to_string();
+    data += &format!("query: {:?}\n", smiles);
+    data += &format!("embedding: {}\n", descriptor.yaml());
+    data += &format!("num nn: {:?}\n", num_nn);
+    data += "hits: \n";
+    data += &s;
+    data += "}";
+
+    Ok(Response::new(Body::from(data.as_bytes().to_vec())))
+}
+fn preprocess_smiles(smiles: &String) -> Result<(), String> {
+
+    //check max length
+    
+    //check valid characters
+    
+    //canonicalize
+
+    return Ok(());
+
 }
 
+fn get_smiles_embedding(smiles: &String) -> Descriptor {
+
+    let res = preprocess_smiles(smiles);
+    match res {
+        Ok(_) => {},
+        Err(e) => { panic!();}
+    }
+
+    return Descriptor::random(8);
+}
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     
-    let directory = "/home/josh/db/config_test/".to_string();
+    let directory = "/pool/server_tree".to_string();
     let mut tree = Arc::new(Mutex::new(tree::Tree::read_from_directory(directory)));
     //pretty_env_logger::init();
 
@@ -45,7 +71,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // returns a Response into a `Service`.
         async move { Ok::<_, Infallible>(service_fn( move |req| {
             let tree = tree.clone();
-            hello(req, tree)
+            get_nn(req, tree)
         }
             ))}
     });
