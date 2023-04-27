@@ -1,9 +1,6 @@
 use kd_tree::node::CompoundRecord;
 use kdam::tqdm;
 use kd_tree::tree;
-use std::fs::File;
-use std::io::{self,BufRead};
-use std::path::Path;
 
 fn main() {
 
@@ -36,7 +33,6 @@ fn build_single() {
 
     tree.flush();
 }
-
 
 fn param_sweep() {
 
