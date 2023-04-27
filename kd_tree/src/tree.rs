@@ -1,13 +1,11 @@
 //! Implementation of kd-tree creation and querying
 extern crate test;
-use crate::node::{CompoundRecord, CompoundIdentifier, Descriptor, InternalNode, PageAddress, PagePointer};
+use crate::node::{CompoundRecord, CompoundIdentifier, Descriptor, InternalNode, PagePointer};
 use crate::page::RecordPage;
 use crate::io::{FastNodePager,RecordPager};
 use std::collections::HashMap;
-use crate::layout;
-use ascii::{AsAsciiStr, AsciiString};
 use serde::{Serialize, Deserialize};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use std::fs::File;
 use std::fs;
@@ -248,8 +246,8 @@ impl Tree {
         dbg!(&node_filename);
         dbg!(&record_filename);
         //let mut node_handler = FastNodePager::new(Path::new(&node_filename), config.node_page_length, false).unwrap();
-        let mut node_handler = FastNodePager::from_file(&node_filename).unwrap();
-        let mut record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, false).unwrap();
+        let node_handler = FastNodePager::from_file(&node_filename).unwrap();
+        let record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, false).unwrap();
 
         /*
         let (cached_node_handler, use_cached_nodes) : (Option<CachedPager>, bool) = match config.cache_nodes_for_query {
@@ -273,7 +271,7 @@ impl Tree {
 
     pub fn force_create_with_config(config: TreeConfig) -> Self {
 
-        fs::remove_dir_all(&config.directory);
+        fs::remove_dir_all(&config.directory).unwrap();
 
         return Self::create_with_config(config);
     }
@@ -300,7 +298,7 @@ impl Tree {
     pub fn flush(&mut self) {
 
         let node_filename = self.config.get_node_filename();
-        self.node_handler.to_file(&node_filename);
+        self.node_handler.to_file(&node_filename).unwrap();
 
     }
 
@@ -313,7 +311,7 @@ impl Tree {
         dbg!(&node_filename);
         //let mut node_handler = NodePager::new(Path::new(&node_filename), config.node_page_length, true).unwrap();
         //let mut node_handler = FastNodePager::new(config.node_page_length);
-        let mut node_handler = FastNodePager::new();
+        let node_handler = FastNodePager::new();
         let mut record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, true).unwrap();
 
         let first_record_page = RecordPage::new(config.record_page_length, config.desc_length);
@@ -546,7 +544,7 @@ impl Tree {
                 NodeAction::CheckIgnoredBranch => {
 
                     match curr_pointer {
-                        PagePointer::Leaf(index) => {panic!();},
+                        PagePointer::Leaf(_) => {panic!();},
                         PagePointer::Node(index) => {
 
                             let node = self.node_handler.get_node(&index).unwrap().clone();
@@ -678,7 +676,7 @@ impl Tree {
 
         struct NodeTuple {
             pointer: PagePointer,
-            parent_pointer: Option<PagePointer>,
+            //parent_pointer: Option<PagePointer>,
             bounds: HashMap<usize, (f32, f32)>,
             level: usize,
         }
@@ -698,7 +696,7 @@ impl Tree {
 
         let root_tup = NodeTuple {
             pointer: curr_pointer.clone(),
-            parent_pointer: None,
+            //parent_pointer: None,
             bounds: bounds.clone(),
             level: 0,
         };
@@ -721,7 +719,7 @@ impl Tree {
             let curr_pointer = curr_tup.pointer;
 
             let index = match curr_pointer {
-                PagePointer::Leaf(index) => {
+                PagePointer::Leaf(_) => {
                     dbg!("LEAF REACHED?");
                     panic!();
                 },
@@ -745,8 +743,8 @@ impl Tree {
                     let left_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
                     let right_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
 
-                    let left_page_address = self.record_handler.write_page(&left_record_page).unwrap();
-                    let right_page_address = self.record_handler.write_page(&right_record_page).unwrap();
+                    let left_page_pointer = self.record_handler.write_page(&left_record_page).unwrap();
+                    let right_page_pointer = self.record_handler.write_page(&right_record_page).unwrap();
 
                     //println!("RECORD LEFT: {:?}, {:?}", &left_child_pointer.page_address, &left_child_pointer.node_offset);
                     //println!("RIGHT: {:?}, {:?}", &right_child_pointer.page_address, &right_child_pointer.node_offset);
@@ -758,8 +756,11 @@ impl Tree {
                     curr_node.split_axis = split_axis;
                     curr_node.split_value = split_value;
 
-                    curr_node.left_child_pointer = PagePointer::Leaf(0);
-                    curr_node.right_child_pointer = PagePointer::Leaf(0);
+                    //curr_node.left_child_pointer = PagePointer::Leaf(0);
+                    //curr_node.right_child_pointer = PagePointer::Leaf(0);
+
+                    curr_node.left_child_pointer = left_page_pointer;
+                    curr_node.right_child_pointer = right_page_pointer;
 
                     self.node_handler.update_node(&index, &curr_node).unwrap();
 
@@ -811,14 +812,14 @@ impl Tree {
 
                     let left_tup = NodeTuple {
                         pointer: left_child_pointer.clone(),
-                        parent_pointer: Some(curr_pointer.clone()),
+                        //parent_pointer: Some(curr_pointer.clone()),
                         bounds: left_bounds,
                         level: curr_tup.level + 1,
                     };
 
                     let right_tup = NodeTuple {
                         pointer: right_child_pointer.clone(),
-                        parent_pointer: Some(curr_pointer.clone()),
+                        //parent_pointer: Some(curr_pointer.clone()),
                         bounds: right_bounds,
                         level: curr_tup.level + 1,
                     };
@@ -1097,7 +1098,7 @@ impl Tree {
         //make new node
         let node = InternalNode {
             left_child_pointer: this_pointer.clone(),
-            right_child_pointer: right_child_pointer,
+            right_child_pointer,
             split_axis,
             split_value: median,
         };
@@ -1401,7 +1402,7 @@ mod tests {
         dbg!(&tree.root);
         */
 
-        let cr = CompoundRecord::random(config.desc_length);
+        //let cr = CompoundRecord::random(config.desc_length);
 
         /*
         for i in 0..300 {
@@ -1413,7 +1414,7 @@ mod tests {
 
         //tree.output_depths();
 
-        for i in tqdm!(0..1e6 as i32) {
+        for _ in tqdm!(0..1e6 as i32) {
             let cr = CompoundRecord::random(config.desc_length);
             tree.add_record(&cr).unwrap();
         }
@@ -1905,8 +1906,8 @@ mod tests {
                 build_tree.add_record(&record.clone()).unwrap();
             }
 
-            let stem = config.directory.clone();
-            let node_filename = stem + "node";
+            //let stem = config.directory.clone();
+            //let node_filename = stem + "node";
 
             //build_tree.output_depths();
             //dbg!(&build_tree.node_handler.store[0]);

@@ -1,11 +1,8 @@
-use kd_tree::layout;
-use kd_tree::node::{CompoundIdentifier, Descriptor, CompoundRecord};
-use rand::prelude::*;
-use rand::distributions::Alphanumeric;
+use kd_tree::node::CompoundRecord;
 use kdam::tqdm;
 use kd_tree::tree;
 use std::fs::File;
-use std::io::{self, BufReader, BufRead};
+use std::io::{self,BufRead};
 use std::path::Path;
 
 fn main() {
@@ -19,7 +16,7 @@ fn build_single() {
 
     let config_filename = "/home/josh/git/simsearchserver/build_config.yaml".to_string();
 
-    let mut config = tree::TreeConfig::from_file(config_filename);
+    let config = tree::TreeConfig::from_file(config_filename);
 
     /*
     let mut config = tree::TreeConfig::default(); 
@@ -43,7 +40,7 @@ fn build_single() {
 
 fn param_sweep() {
 
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
 
     use log::info;
     env_logger::init();
@@ -77,11 +74,5 @@ fn param_sweep() {
             }
         }
     }
-}
-
-fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
-where P: AsRef<Path>, {
-    let file = File::open(filename)?;
-    Ok(io::BufReader::new(file).lines())
 }
 

@@ -5,24 +5,26 @@
 use crate::error::Error;
 //use crate::node::{PageAddress, InternalNode, ItemOffset, Descriptor, CompoundRecord, CompoundIdentifier};
 use crate::node::{PageAddress, CompoundIdentifier, InternalNode, PagePointer};
-use crate::page::{RecordPage, PageType};
+use crate::page::RecordPage;
 use byteorder::{ByteOrder, BigEndian};
 use crate::layout;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::Path;
-use std::collections::HashMap;
+//use std::collections::HashMap;
 
-use std::fmt;
+//use std::fmt;
 
 
+/*
 #[derive(Debug)]
 pub struct NodePager {
     file: File,
     pub cursor: usize, //this is the next available slot
     pub page_length: usize,
 }
+*/
 
 #[derive(Debug)]
 pub struct RecordPager {
@@ -245,7 +247,7 @@ impl NodePager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{PageAddress, InternalNode, Descriptor, CompoundRecord, CompoundIdentifier};
+    use crate::node::InternalNode;
     
     #[test]
     fn quick_nodes_to_file_and_back_works() {
@@ -253,7 +255,7 @@ mod tests {
 
         for num_nodes in [1, 10, 100, 1000, 1234] {
 
-            for run in 0..10 {
+            for _ in 0..10 {
 
                 let mut pager = FastNodePager::new();
 
@@ -267,8 +269,6 @@ mod tests {
                 pager.to_file(&filename).unwrap();
                 pager = FastNodePager::from_file(&filename).unwrap();
 
-                for node in pager.store.iter() {
-                }
                 assert_eq!(pager.store.len(), num_nodes);
             }
         }
@@ -442,7 +442,6 @@ impl CachedPager {
 pub struct FastNodePager {
     //pub map: HashMap<(usize, usize), InternalNode>,
     pub store: Vec<InternalNode>,
-    page_length: usize,
 
 }
 
@@ -452,7 +451,6 @@ impl FastNodePager {
 
         return Self {
             store: Vec::new(),
-            page_length: 128,
         };
 
     }
@@ -646,7 +644,7 @@ impl RecordPager {
 
         match self.file.read_exact(&mut page) {
             Ok(_) => {},
-            Err(e) => {
+            Err(_) => {
                 println!("Failed to read record page at {:?}", &address);
             }
 
@@ -724,7 +722,7 @@ impl RecordPager {
         let data = page.get_data();
 
         self.file.write(data)?;
-        let res = self.cursor.clone();
+        //let res = self.cursor.clone();
 
         Ok(())
     }

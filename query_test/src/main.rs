@@ -1,5 +1,5 @@
-use kd_tree::{tree, node, layout};
-use rand::prelude::*;
+use kd_tree::{tree, node};
+//use rand::prelude::*;
 
 fn main() {
     //param_sweep();
@@ -28,7 +28,7 @@ fn param_sweep() {
 
 
     use glob::glob;
-    use std::time::{Duration, Instant};
+    use std::time::Instant;
     use log::info;
     env_logger::init();
 

@@ -10,8 +10,7 @@ use crate::page::PageType;
 use crate::layout;
 
 use byteorder::{ByteOrder, BigEndian};
-use ascii::{AsAsciiStr, AsciiString};
-use std::cmp;
+use ascii::AsciiString;
 use std::fmt;
 
 use std::convert::TryInto;
@@ -95,7 +94,7 @@ impl Descriptor {
     pub fn random(length: usize) -> Self {
 
         let random_vec: Vec::<f32> = (0..length).map(|_| rand::random::<f32>()).collect();
-        return Self { data: random_vec, length: length };
+        return Self { data: random_vec, length};
 
 
     }
@@ -262,7 +261,7 @@ impl Parser{
             //let mut arr: [f32; length] = [0.0; length];
             let mut vec: Vec<f32> = Vec::with_capacity(length);
             //let mut values: Vec<f32> = Vec::with_capacity(layout::DESCRIPTOR_LENGTH);
-            for i in 0..length {
+            for _ in 0..length {
                 let bytes = &data[curr_offset..curr_offset + 4];
                 let known_size_array = coerce_f32(bytes);
                 let attempted_f32 = BigEndian::read_f32(&known_size_array);
@@ -272,15 +271,17 @@ impl Parser{
                 curr_offset += 4;
             }
 
-            let desc = Descriptor { data: vec, length: length};
+            let desc = Descriptor { data: vec, length};
             Ok(desc)
         }
 
 
+    /*
     fn vec_to_array<T, const M: usize>(v: Vec<T>) -> [T; M] {
         v.try_into()
             .unwrap_or_else(|v: Vec<T>| panic!("Expected a Vec of length {} but it was {}", M, v.len()))
     }
+    */
 
 }
 
@@ -293,7 +294,7 @@ impl CompoundRecord {
             dataset_identifier: 0,
             compound_identifier: CompoundIdentifier::from_str("defaultname"),
             descriptor: Descriptor {data: vec![0.0; length], length},
-            length: length
+            length,
         };
     }
     
@@ -373,7 +374,7 @@ impl CompoundRecord {
 
         vec.extend_from_slice(&arr);
 
-        let mut curr_offset = layout::DESCRIPTOR_START;
+        //let mut curr_offset = layout::DESCRIPTOR_START;
         for i in 0..self.length {
 
             let mut slice = [0u8; 4];
@@ -550,7 +551,7 @@ impl InternalNode {
 }
 #[cfg(test)]
 mod tests {
-    use super::*;
+    //use super::*;
 
     /*
     #[test]
@@ -668,21 +669,8 @@ mod tests {
         dbg![layout::NODE_SIZE];
         dbg![layout::COMPOUND_RECORD_SIZE];
     }
-    
-
     */
-    #[test]
-    fn generic_descriptor() {
-
-    const n: usize = 8;
-    let d = Descriptor {
-                //data:  [6.9,6.9,6.9,6.9,
-                //        6.9,6.9,6.9,6.9],
-                data: vec![6.9; n], 
-                length: n
-            };
-    }
-
+    
 }
 
 

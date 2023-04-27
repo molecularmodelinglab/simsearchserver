@@ -3,7 +3,7 @@
 //!
 //!
 
-use crate::node::{InternalNode, CompoundRecord, Descriptor};
+use crate::node::{CompoundRecord, Descriptor};
 use crate::layout;
 
 #[derive(Debug, Clone, PartialEq)]

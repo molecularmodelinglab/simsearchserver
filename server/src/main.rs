@@ -1,10 +1,10 @@
-use kd_tree::{tree, layout};
-use kd_tree::node::{Descriptor, CompoundIdentifier};
+use kd_tree::tree;
+use kd_tree::node::Descriptor;
 
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 
-use rand::prelude::*;
+//use rand::prelude::*;
 
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
@@ -50,7 +50,7 @@ fn get_smiles_embedding(smiles: &String) -> Descriptor {
     let res = preprocess_smiles(smiles);
     match res {
         Ok(_) => {},
-        Err(e) => { panic!();}
+        Err(_) => { panic!();}
     }
 
     return Descriptor::random(12);
@@ -59,7 +59,7 @@ fn get_smiles_embedding(smiles: &String) -> Descriptor {
 pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     
     let directory = "/pool/builder_test_fast".to_string();
-    let mut tree = Arc::new(Mutex::new(tree::Tree::read_from_directory(directory)));
+    let tree = Arc::new(Mutex::new(tree::Tree::read_from_directory(directory)));
     //pretty_env_logger::init();
 
     // For every connection, we must make a `Service` to handle all
