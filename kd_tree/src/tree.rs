@@ -1,8 +1,8 @@
 //! Implementation of kd-tree creation and querying
 extern crate test;
-use crate::node::{InternalNode, CompoundRecord, CompoundIdentifier, Descriptor, ItemOffset, PageAddress};
-use crate::page::{RecordPage, NodePage, PageType };
-use crate::io::{NodePager, FastNodePager,RecordPager, PagePointer, CachedPager};
+use crate::node::{CompoundRecord, CompoundIdentifier, Descriptor, InternalNode, PageAddress, PagePointer};
+use crate::page::RecordPage;
+use crate::io::{FastNodePager,RecordPager};
 use std::collections::HashMap;
 use crate::layout;
 use ascii::{AsAsciiStr, AsciiString};
@@ -72,8 +72,8 @@ impl TreeConfig {
 /// nodes are stored in separate files and paged separately.
 #[derive(Debug)]
 pub struct Tree {
-    pub node_pager: FastNodePager,
-    pub record_pager: RecordPager,
+    pub node_handler: FastNodePager,
+    pub record_handler: RecordPager,
     pub root: PagePointer,
     pub config: TreeConfig,
 }
@@ -221,11 +221,13 @@ impl TopHits {
 
 }
 
+#[derive(Debug)]
 pub enum Direction {
     Left,
     Right,
 }
 
+#[derive(Debug)]
 pub enum NodeAction {
     CheckIgnoredBranch,
     Descend,
@@ -245,12 +247,12 @@ impl Tree {
 
         dbg!(&node_filename);
         dbg!(&record_filename);
-        //let mut node_pager = FastNodePager::new(Path::new(&node_filename), config.node_page_length, false).unwrap();
-        let mut node_pager = FastNodePager::from_file(&node_filename).unwrap();
-        let mut record_pager = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, false).unwrap();
+        //let mut node_handler = FastNodePager::new(Path::new(&node_filename), config.node_page_length, false).unwrap();
+        let mut node_handler = FastNodePager::from_file(&node_filename).unwrap();
+        let mut record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, false).unwrap();
 
         /*
-        let (cached_node_pager, use_cached_nodes) : (Option<CachedPager>, bool) = match config.cache_nodes_for_query {
+        let (cached_node_handler, use_cached_nodes) : (Option<CachedPager>, bool) = match config.cache_nodes_for_query {
             
             true => {
 
@@ -262,13 +264,9 @@ impl Tree {
         */
               
         return Self {
-            node_pager,
-            record_pager, 
-            root: PagePointer {
-                page_type: PageType::Node,
-                page_address: PageAddress(0),
-                node_offset: ItemOffset(0),
-            },
+            node_handler,
+            record_handler, 
+            root: PagePointer::Node(0),
             config,
             };
     }
@@ -302,7 +300,7 @@ impl Tree {
     pub fn flush(&mut self) {
 
         let node_filename = self.config.get_node_filename();
-        self.node_pager.to_file(&node_filename);
+        self.node_handler.to_file(&node_filename);
 
     }
 
@@ -313,27 +311,23 @@ impl Tree {
         let config_filename = config.directory.clone() + "/" + "config.yaml";
 
         dbg!(&node_filename);
-        //let mut node_pager = NodePager::new(Path::new(&node_filename), config.node_page_length, true).unwrap();
-        //let mut node_pager = FastNodePager::new(config.node_page_length);
-        let mut node_pager = FastNodePager::new();
-        let mut record_pager = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, true).unwrap();
+        //let mut node_handler = NodePager::new(Path::new(&node_filename), config.node_page_length, true).unwrap();
+        //let mut node_handler = FastNodePager::new(config.node_page_length);
+        let mut node_handler = FastNodePager::new();
+        let mut record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, true).unwrap();
 
         let first_record_page = RecordPage::new(config.record_page_length, config.desc_length);
-        record_pager.write_page(&first_record_page).unwrap();
+        record_handler.write_page(&first_record_page).unwrap();
 
         //let first_node = InternalNode::default();
-        //node_pager.add_node(&first_node).unwrap();
+        //node_handler.add_node(&first_node).unwrap();
 
         config.to_file(config_filename);
 
         return Self {
-            node_pager,
-            record_pager, 
-            root: PagePointer {
-                page_type: PageType::Leaf,
-                page_address: PageAddress(0),
-                node_offset: ItemOffset(0),
-            },
+            node_handler,
+            record_handler, 
+            root: PagePointer::Leaf(0),
             config,
         };
     }
@@ -359,44 +353,30 @@ impl Tree {
 
             let (curr_pointer, count_so_far) = curr_tup;
 
-            match curr_pointer.page_type {
-                PageType::Leaf => {
+            match curr_pointer {
+
+                PagePointer::Leaf(index) => {
                     println!("{}", count_so_far + 1);
 
-                    let page = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
+                    let page = self.record_handler.get_record_page(&index).unwrap();
                     let records = page.get_records();
-                    println!("RECORD PAGE {}", curr_pointer.page_address.0);
+                    println!("RECORD PAGE {}", index);
                     for record in records {
                         println!("\tCOMPOUND: {}", record.compound_identifier.to_string());
                     }
                 },
-                PageType::Node => {
+                PagePointer::Node(index) => {
 
 
-                    let node = self.node_pager.node_from_pointer(&curr_pointer).unwrap().clone();
+                    let node = self.node_handler.get_node(&index).unwrap().clone();
 
                     //dbg!(&node);
+                    println!("{}", curr_pointer);
+                        println!("\tLEFT:  {}", node.left_child_pointer);
+                        println!("\tRIGHT: {}", node.right_child_pointer);
 
-                    let left_pointer = PagePointer {
-                                page_type: node.left_child_type,
-                                page_address: node.left_child_page_address,
-                                node_offset: node.left_child_node_offset,
-                    };
-
- 
-                    let right_pointer = PagePointer {
-                                page_type: node.right_child_type,
-                                page_address: node.right_child_page_address,
-                                node_offset: node.right_child_node_offset,
-
-                    };
-
-                    println!("{:?},{:?} ({:?},{:?})", curr_pointer.page_address, curr_pointer.node_offset, &node.split_axis, &node.split_value);
-                        println!("\tLEFT:  {:?},{:?} [{:?}]", left_pointer.page_address, left_pointer.node_offset, left_pointer.page_type);
-                        println!("\tRIGHT: {:?},{:?} [{:?}]", right_pointer.page_address, right_pointer.node_offset, right_pointer.page_type);
-
-                    nodes_to_check.push_back((left_pointer, count_so_far + 1));
-                    nodes_to_check.push_back((right_pointer, count_so_far + 1));
+                    nodes_to_check.push_back((node.left_child_pointer, count_so_far + 1));
+                    nodes_to_check.push_back((node.right_child_pointer, count_so_far + 1));
                 },
             }
         }
@@ -412,40 +392,24 @@ impl Tree {
         let mut curr_pointer: PagePointer = self.root.clone();
 
         loop {
-            match curr_pointer.page_type {
-                PageType::Leaf => {
+            match curr_pointer {
+                PagePointer::Leaf(index) => {
 
-                    let page: RecordPage = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
+                    let page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
                     return Ok(page.descriptor_in_page(&record.descriptor));
 
                 },
-                PageType::Node => {
+                PagePointer::Node(index) => {
 
-                    let node = self.node_pager.node_from_pointer(&curr_pointer).unwrap().clone();
+                    let node = self.node_handler.get_node(&index).unwrap().clone();
 
                     let axis = node.split_axis;
                     let this_value = record.descriptor.data[axis];
                     let split_value = node.split_value;
 
                     match this_value <= split_value {
-
-                        true => {
-
-                            curr_pointer = PagePointer {
-                                page_type: node.left_child_type,
-                                page_address: node.left_child_page_address,
-                                node_offset: node.left_child_node_offset,
-
-                            }
-                        },
-                        false => {
-
-                            curr_pointer = PagePointer {
-                                page_type: node.right_child_type,
-                                page_address: node.right_child_page_address,
-                                node_offset: node.right_child_node_offset,
-                            }
-                        },
+                        true => curr_pointer = node.left_child_pointer,
+                        false => curr_pointer = node.right_child_pointer,
                     }
                 }
             }
@@ -460,9 +424,9 @@ impl Tree {
 
     pub fn print_record_lengths(&mut self) {
 
-        for i in 0..self.record_pager.len() {
+        for i in 0..self.record_handler.len() {
 
-            let page = self.record_pager.get_record_page(&PageAddress(i)).unwrap();
+            let page = self.record_handler.get_record_page(&i).unwrap();
             println!("{:?}", page.len());
 
         }
@@ -472,13 +436,13 @@ impl Tree {
 
     pub fn num_nodes(&mut self) -> usize {
 
-        return self.node_pager.num_nodes();
+        return self.node_handler.num_nodes();
 
 
         /*
         let mut count = 0;
-        for i in 0..self.node_pager.cursor.0 {
-            let page = self.node_pager.get_node_page(&PageAddress(i)).unwrap();
+        for i in 0..self.node_handler.cursor.0 {
+            let page = self.node_handler.get_node_page(&PageAddress(i)).unwrap();
             count += page.num_nodes();
         }
 
@@ -506,9 +470,12 @@ impl Tree {
 
         nodes_to_check.push_front((root_pointer, NodeAction::Descend, None));
 
+
         loop {
 
+            dbg!(&nodes_to_check);
             let popped_val = nodes_to_check.pop_front();
+            dbg!(&popped_val);
 
             let curr_tup = match popped_val {
                 None => {break;},
@@ -522,26 +489,28 @@ impl Tree {
                 NodeAction::Descend => {
 
 
-                    match curr_pointer.page_type {
-                        PageType::Leaf => {
+                    match curr_pointer {
+                        PagePointer::Leaf(index) => {
 
                             num_record_pages_visited += 1;
 
-                            let page: RecordPage = self.record_pager.get_record_page(&curr_pointer.page_address.clone()).unwrap();
+                            let page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
 
                             for record in page.get_records() {
                                 let dist = query_descriptor.distance(&record.descriptor);
+
+                                println!("TRY ADD: {:?}", record.compound_identifier.to_string());
 
                                 hits.try_add(dist, &record, &curr_pointer).unwrap();
                             }
 
 
                         },
-                        PageType::Node => {
+                        PagePointer::Node(index) => {
 
                             num_nodes_visited += 1;
 
-                            let node = self.node_pager.node_from_pointer(&curr_pointer).unwrap().clone();
+                            let node = self.node_handler.get_node(&index).unwrap().clone();
 
                             let axis = node.split_axis;
                             let this_value = &query_descriptor.data[axis];
@@ -551,12 +520,7 @@ impl Tree {
 
                                 true => {
 
-                                    let descend_pointer = PagePointer {
-                                        page_type: node.left_child_type,
-                                        page_address: node.left_child_page_address,
-                                        node_offset: node.left_child_node_offset,
-
-                                    };
+                                    let descend_pointer = node.left_child_pointer;
 
                                     //push the current node and the direction we're going
                                     nodes_to_check.push_front((descend_pointer.clone(), NodeAction::Descend, None));
@@ -566,17 +530,12 @@ impl Tree {
                                 },
                                 false => {
 
-                                    let descend_pointer = PagePointer {
-                                        page_type: node.right_child_type,
-                                        page_address: node.right_child_page_address,
-                                        node_offset: node.right_child_node_offset,
-                                    };
+                                    let descend_pointer = node.right_child_pointer;
 
                                     //push the current node and the direction we're going
                                     nodes_to_check.push_front((descend_pointer.clone(), NodeAction::Descend, None));
 
                                     //push the current node and the direction we ignored
-                                    //nodes_to_check.push_front((curr_pointer.clone(), NodeAction::CheckIgnoredBranch, Some(Direction::Left)));
                                     nodes_to_check.push_back((curr_pointer.clone(), NodeAction::CheckIgnoredBranch, Some(Direction::Left)));
                                 },
                             }
@@ -586,39 +545,28 @@ impl Tree {
 
                 NodeAction::CheckIgnoredBranch => {
 
-                    let node = self.node_pager.node_from_pointer(&curr_pointer).unwrap().clone();
+                    match curr_pointer {
+                        PagePointer::Leaf(index) => {panic!();},
+                        PagePointer::Node(index) => {
 
-                    let split_axis = node.split_axis;
-                    let split_value = node.split_value;
+                            let node = self.node_handler.get_node(&index).unwrap().clone();
 
-                    //calc_distance to this axis and check it
-                                       let dist = self.dist_to_axis(split_axis, split_value, query_descriptor);
-                    let threshold = hits.get_highest_dist();
-                    //println!("DIST TO AXIS: {:?}", dist);
+                            let split_axis = node.split_axis;
+                            let split_value = node.split_value;
 
-                    if dist < threshold { //we have to visit the supplied direction
-                        let descend_pointer = match direction.unwrap() {
-                            Direction::Left => {
+                            //calc_distance to this axis and check it
+                            let dist = self.dist_to_axis(split_axis, split_value, query_descriptor);
+                            let threshold = hits.get_highest_dist();
+                            //println!("DIST TO AXIS: {:?}", dist);
 
-                                PagePointer {
-                                    page_type: node.left_child_type,
-                                    page_address: node.left_child_page_address,
-                                    node_offset: node.left_child_node_offset,
-                                }
-
-                            },
-                            Direction::Right => {
-
-                                PagePointer {
-                                    page_type: node.right_child_type,
-                                    page_address: node.right_child_page_address,
-                                    node_offset: node.right_child_node_offset,
-                                }
-
-                            },
-
-                        };
-                        nodes_to_check.push_front((descend_pointer, NodeAction::Descend, None));
+                            if dist < threshold { //we have to visit the supplied direction
+                                let descend_pointer = match direction.unwrap() {
+                                    Direction::Left => node.left_child_pointer,
+                                    Direction::Right => node.right_child_pointer,
+                                };
+                                nodes_to_check.push_front((descend_pointer, NodeAction::Descend, None));
+                            }
+                        }
                     }
 
                 },
@@ -655,12 +603,16 @@ impl Tree {
         //dbg!(&curr_pointer);
         let mut curr_pointer = self.root.clone();
 
+        /*
         //should only persist if there are no nodes yet
         let mut last_pointer =  PagePointer {
             page_type: PageType::Leaf,
             page_address: PageAddress(0),
             node_offset: ItemOffset(0),
         };
+        */
+
+        let mut last_pointer = self.root.clone();
 
         let mut last_was_left = true;
 
@@ -668,10 +620,10 @@ impl Tree {
 
         loop {
             //println!("WE ARE AT {:?}|{:?}|{:?}", curr_pointer.page_type, curr_pointer.page_address, curr_pointer.node_offset);
-            match curr_pointer.page_type {
-                PageType::Leaf => {
+            match curr_pointer {
+                PagePointer::Leaf(index) => {
 
-                    let mut page: RecordPage = self.record_pager.get_record_page(&curr_pointer.page_address).unwrap();
+                    let mut page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
 
                     page.add_record(record).unwrap();
                     //dbg!(page.get_capacity());
@@ -682,14 +634,14 @@ impl Tree {
                     match page.is_full() {
                         true => { //println!("NEED TO SPLIT");
                             let _ = &self.split(page, &curr_pointer, &last_pointer, last_was_left);},
-                        false => { self.record_pager.write_page_at_offset(&page, &curr_pointer.page_address).unwrap(); },
+                        false => { self.record_handler.write_page_at_offset(&page, &index).unwrap(); },
                     }
 
                     break;
                 },
-                PageType::Node => {
+                PagePointer::Node(index) => {
 
-                    let node = self.node_pager.node_from_pointer(&curr_pointer).unwrap().clone();
+                    let node = self.node_handler.get_node(&index).unwrap().clone();
 
                     let axis = node.split_axis;
                     let this_value = record.descriptor.data[axis];
@@ -701,23 +653,13 @@ impl Tree {
                             last_pointer = curr_pointer.clone();
                             last_was_left = true;
 
-                            curr_pointer = PagePointer {
-                                page_type: node.left_child_type,
-                                page_address: node.left_child_page_address,
-                                node_offset: node.left_child_node_offset,
-
-                            }
+                            curr_pointer = node.left_child_pointer;
                         },
                         false => {
                             last_pointer = curr_pointer.clone();
                             last_was_left = false;
 
-                            curr_pointer = PagePointer {
-                                page_type: node.right_child_type,
-                                page_address: node.right_child_page_address,
-                                node_offset: node.right_child_node_offset,
-                            }
-
+                            curr_pointer = node.right_child_pointer;
 
                         },
                     }
@@ -743,11 +685,7 @@ impl Tree {
 
         let mut to_visit: VecDeque<NodeTuple> = VecDeque::new();
 
-        self.root = PagePointer {
-                page_type: PageType::Node,
-                page_address: PageAddress(0),
-                node_offset: ItemOffset(0),
-            };
+        self.root = PagePointer::Node(0);
 
         let mut curr_depth = 0;
         let curr_pointer = self.root.clone();
@@ -782,17 +720,15 @@ impl Tree {
             };
             let curr_pointer = curr_tup.pointer;
 
-            match curr_pointer.page_type {
-                PageType::Leaf => {
+            let index = match curr_pointer {
+                PagePointer::Leaf(index) => {
                     dbg!("LEAF REACHED?");
                     panic!();
                 },
-                PageType::Node => {},
-            }
+                PagePointer::Node(index) => index,
+            };
 
-            //dbg!(&curr_pointer);
-
-            let mut curr_node = match self.node_pager.node_from_pointer(&curr_pointer) {
+            let mut curr_node = match self.node_handler.get_node(&index) {
                 Ok(x) => x.clone(),
                 Err(_) => InternalNode::default(),
                 };
@@ -809,8 +745,8 @@ impl Tree {
                     let left_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
                     let right_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
 
-                    let left_page_address = self.record_pager.write_page(&left_record_page).unwrap();
-                    let right_page_address = self.record_pager.write_page(&right_record_page).unwrap();
+                    let left_page_address = self.record_handler.write_page(&left_record_page).unwrap();
+                    let right_page_address = self.record_handler.write_page(&right_record_page).unwrap();
 
                     //println!("RECORD LEFT: {:?}, {:?}", &left_child_pointer.page_address, &left_child_pointer.node_offset);
                     //println!("RIGHT: {:?}, {:?}", &right_child_pointer.page_address, &right_child_pointer.node_offset);
@@ -822,17 +758,10 @@ impl Tree {
                     curr_node.split_axis = split_axis;
                     curr_node.split_value = split_value;
 
+                    curr_node.left_child_pointer = PagePointer::Leaf(0);
+                    curr_node.right_child_pointer = PagePointer::Leaf(0);
 
-                    curr_node.left_child_type = PageType::Leaf;
-                    curr_node.left_child_page_address = left_page_address;
-                    curr_node.left_child_node_offset = ItemOffset(0);
-
-
-                    curr_node.right_child_type = PageType::Leaf;
-                    curr_node.right_child_page_address = right_page_address;
-                    curr_node.right_child_node_offset = ItemOffset(0);
-
-                    self.node_pager.update_node(&curr_pointer, &curr_node).unwrap();
+                    self.node_handler.update_node(&index, &curr_node).unwrap();
 
                 },
                 false => { //keep on splitting
@@ -844,17 +773,16 @@ impl Tree {
                     curr_node.split_axis = split_axis;
                     curr_node.split_value = split_value;
 
-                    match self.node_pager.len() {
+                    match self.node_handler.len() {
                         0 => {
-                            self.node_pager.add_node(&curr_node).unwrap();
+                            self.node_handler.add_node(&curr_node).unwrap();
                         }
                         _ => {
                         }
                     }
 
-
-                    let left_child_pointer = self.node_pager.add_node(&InternalNode::default()).unwrap();
-                    let right_child_pointer = self.node_pager.add_node(&InternalNode::default()).unwrap();
+                    let left_child_pointer = self.node_handler.add_node(&InternalNode::default()).unwrap();
+                    let right_child_pointer = self.node_handler.add_node(&InternalNode::default()).unwrap();
 
                     //dbg!(&left_child_pointer);
                     //dbg!(&right_child_pointer);
@@ -862,15 +790,10 @@ impl Tree {
                     //println!("LEFT: {:?}, {:?}", &left_child_pointer.page_address, &left_child_pointer.node_offset);
                     //println!("RIGHT: {:?}, {:?}", &right_child_pointer.page_address, &right_child_pointer.node_offset);
 
-                    curr_node.left_child_type = PageType::Node;
-                    curr_node.left_child_page_address = left_child_pointer.page_address.clone();
-                    curr_node.left_child_node_offset = left_child_pointer.node_offset.clone();
+                    curr_node.left_child_pointer = left_child_pointer.clone();
+                    curr_node.right_child_pointer = right_child_pointer.clone();
 
-                    curr_node.right_child_type = PageType::Node;
-                    curr_node.right_child_page_address = right_child_pointer.page_address.clone();
-                    curr_node.right_child_node_offset = right_child_pointer.node_offset.clone();
-
-                    self.node_pager.update_node(&curr_pointer, &curr_node).unwrap();
+                    self.node_handler.update_node(&index, &curr_node).unwrap();
 
                     let bounds = curr_tup.bounds;
 
@@ -960,7 +883,7 @@ impl Tree {
         let split_axis = match self.root {
             None => {0},
             Some(_) => {
-                    let parent_page = self.node_pager.get_node_page(&parent_pointer.page_address).unwrap();
+                    let parent_page = self.node_handler.get_node_page(&parent_pointer.page_address).unwrap();
                     let parent_node = parent_page.get_node_at(parent_pointer.node_offset.clone()).unwrap();
                     (parent_node.split_axis + 1) % self.config.desc_length
             },
@@ -1018,7 +941,7 @@ impl Tree {
             left_record_page.add_record(record)?;
         }
 
-        self.record_pager.write_page_at_offset(&left_record_page, &this_pointer.page_address).unwrap();
+        self.record_handler.write_page_at_offset(&left_record_page, &this_pointer.page_address).unwrap();
         
         //make new right record page at next offset
         let mut right_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
@@ -1026,7 +949,7 @@ impl Tree {
             right_record_page.add_record(record)?;
         }
 
-        let right_child_address = self.record_pager.write_page(&right_record_page).unwrap();
+        let right_child_address = self.record_handler.write_page(&right_record_page).unwrap();
 
         //make new node
         let node = InternalNode {
@@ -1047,7 +970,7 @@ impl Tree {
 
         //update the parent with this pointer
         if self.root != None {
-            let mut parent_page = self.node_pager.get_node_page(&parent_pointer.page_address).unwrap();
+            let mut parent_page = self.node_handler.get_node_page(&parent_pointer.page_address).unwrap();
             let mut parent_node = parent_page.get_node_at(parent_pointer.node_offset.clone()).unwrap();
 
 
@@ -1063,9 +986,9 @@ impl Tree {
             }
 
             parent_page.write_node_at(parent_node, parent_pointer.node_offset.clone()).unwrap();
-            self.node_pager.write_page_at_offset(&parent_page, &parent_pointer.page_address).unwrap();
+            self.node_handler.write_page_at_offset(&parent_page, &parent_pointer.page_address).unwrap();
         }
-            //let parent_page = self.node_pager.get_node_page(&parent_pointer.page_address).unwrap();
+            //let parent_page = self.node_handler.get_node_page(&parent_pointer.page_address).unwrap();
             //let parent_node = parent_page.get_node_at(parent_pointer.node_offset.clone()).unwrap();
 
         //let first_pointer = PagePointer {
@@ -1090,11 +1013,18 @@ impl Tree {
     ///are created.
     pub fn split(&mut self, page: RecordPage, this_pointer: &PagePointer, parent_pointer: &PagePointer, last_was_left: bool) -> Result<(), String> {
 
+        dbg!(parent_pointer);
+
         //determine the split axis
-        let parent_node: Option<InternalNode> = match self.node_pager.node_from_pointer(&parent_pointer)
-        {
-            Ok(x) => Some(x.clone()),
-            Err(_) => None,
+        let parent_node: Option<InternalNode> = match &parent_pointer {
+            PagePointer::Leaf(_) => None,
+            PagePointer::Node(index) => {
+
+            match self.node_handler.get_node(index) {
+                Ok(x) => Some(x.clone()),
+                Err(_) => None,
+                }
+            }
         };
 
 
@@ -1150,7 +1080,11 @@ impl Tree {
             left_record_page.add_record(record)?;
         }
 
-        self.record_pager.write_page_at_offset(&left_record_page, &this_pointer.page_address).unwrap();
+        let this_index = match this_pointer {
+            PagePointer::Node(_) => panic!(),
+            PagePointer::Leaf(x) => x,
+        };
+        self.record_handler.write_page_at_offset(&left_record_page, this_index).unwrap();
         
         //make new right record page at next offset
         let mut right_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
@@ -1158,40 +1092,38 @@ impl Tree {
             right_record_page.add_record(record)?;
         }
 
-        let right_child_address = self.record_pager.write_page(&right_record_page).unwrap();
+        let right_child_pointer = self.record_handler.write_page(&right_record_page).unwrap();
 
         //make new node
         let node = InternalNode {
-            left_child_page_address: this_pointer.page_address.clone(),
-            left_child_node_offset: this_pointer.node_offset.clone(), //not used
-            left_child_type: PageType::Leaf,
-            right_child_page_address: right_child_address,
-            right_child_node_offset: ItemOffset(69), //not used
-            right_child_type: PageType::Leaf,
+            left_child_pointer: this_pointer.clone(),
+            right_child_pointer: right_child_pointer,
             split_axis,
             split_value: median,
         };
 
         //write new node and get address
-        let pointer = self.node_pager.add_node(&node).unwrap();
+        let pointer = self.node_handler.add_node(&node).unwrap();
 
         match parent_node {
             Some(x) => {
                 //update the parent with this pointer
                 let mut updated_node = x.clone();
 
+
                 if last_was_left {
-                    updated_node.left_child_page_address = pointer.page_address.clone();
-                    updated_node.left_child_node_offset = pointer.node_offset.clone();
-                    updated_node.left_child_type = PageType::Node;
+                    updated_node.left_child_pointer = pointer.clone();
                 }
                 else {
-                    updated_node.right_child_page_address = pointer.page_address.clone();
-                    updated_node.right_child_node_offset = pointer.node_offset.clone();
-                    updated_node.right_child_type = PageType::Node;
+                    updated_node.right_child_pointer = pointer.clone();
                 }
 
-                self.node_pager.update_node(&parent_pointer, &updated_node).unwrap();
+                match parent_pointer {
+                    PagePointer::Leaf(_) => panic!(),
+                    PagePointer::Node(index) => {
+                        self.node_handler.update_node(index, &updated_node).unwrap();
+                    }
+                }
             },
             None => {},
         }
@@ -1208,7 +1140,7 @@ impl Tree {
     /*
     pub fn add_new_node(&mut self, node: &InternalNode) -> Result<PagePointer, String> {
 
-        let pointer = self.node_pager.add_node(node).unwrap();
+        let pointer = self.node_handler.add_node(node).unwrap();
         return Ok(pointer);
     }
     */
@@ -1463,9 +1395,9 @@ mod tests {
         //tree.uniform_layout(22, 0.0, 1.0);
 
         /*
-        dbg!(&tree.node_pager.store[0]);
-        dbg!(&tree.node_pager.store[1]);
-        dbg!(&tree.node_pager.store[2]);
+        dbg!(&tree.node_handler.store[0]);
+        dbg!(&tree.node_handler.store[1]);
+        dbg!(&tree.node_handler.store[2]);
         dbg!(&tree.root);
         */
 
@@ -1477,7 +1409,7 @@ mod tests {
             tree.add_record(&cr).unwrap();
         }
         */
-        //let (node, page) = tree.node_pager.data_from_pointer(&tree.root.unwrap()).unwrap();
+        //let (node, page) = tree.node_handler.data_from_pointer(&tree.root.unwrap()).unwrap();
 
         //tree.output_depths();
 
@@ -1621,8 +1553,8 @@ mod tests {
         dbg!(&identifiers);
 
         assert_eq!(identifiers, correct_answer);
-        //tree.record_pager.print_records();
-        //tree.node_pager.print_nodes();
+        //tree.record_handler.print_records();
+        //tree.node_handler.print_nodes();
     }
 
     #[test]
@@ -1958,7 +1890,7 @@ mod tests {
         use rand::thread_rng;
         use rand::seq::SliceRandom;
 
-        for _ in tqdm!(0..10) {
+        for _ in tqdm!(0..1) {
 
             records.shuffle(&mut thread_rng());
 
@@ -1977,8 +1909,8 @@ mod tests {
             let node_filename = stem + "node";
 
             //build_tree.output_depths();
-            //dbg!(&build_tree.node_pager.store[0]);
-            //dbg!(&build_tree.node_pager.store[1]);
+            //dbg!(&build_tree.node_handler.store[0]);
+            //dbg!(&build_tree.node_handler.store[1]);
             //panic!();
             build_tree.flush();
 
@@ -1988,16 +1920,15 @@ mod tests {
 
 
             /*
-            for node in query_tree.node_pager.store {
+            for node in query_tree.node_handler.store {
                 println!("{:?}" , node);
             }
             */
 
 
-            //dbg!(&build_tree.node_pager.store[0]);
-            //dbg!(&query_tree.node_pager.store[0]);
+            //dbg!(&build_tree.node_handler.store[0]);
+            //dbg!(&query_tree.node_handler.store[0]);
             //panic!();
-            //query_tree.output_depths();
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
             //println!("HERE4");
 

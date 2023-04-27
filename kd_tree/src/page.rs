@@ -3,7 +3,7 @@
 //!
 //!
 
-use crate::node::{ItemOffset, InternalNode, CompoundRecord, Descriptor};
+use crate::node::{InternalNode, CompoundRecord, Descriptor};
 use crate::layout;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -19,12 +19,13 @@ pub trait Pageable {
 }
 */
 
+/*
 #[derive(Debug)]
 pub struct NodePage {
 
     //pub data: Box<[u8; layout::NODE_PAGE_SIZE]>,
     pub data: Vec<u8>,
-    pub tail: Option<ItemOffset>,
+    pub tail: Option<usize>,
     pub page_length: usize,
 }
 
@@ -66,7 +67,7 @@ impl NodePage {
 
         let tail_val = match is_empty {
             1 => None,
-            2 => Some(ItemOffset(tail as u32)),
+            2 => Some(tail),
             _ => {println!("BAD EMPTY VAL: {:?}", is_empty);
                     dbg!(arr);
                 panic!();},
@@ -93,7 +94,7 @@ impl NodePage {
 
         match &self.tail {
             None => {return 0;},
-            Some(x) => {return x.0 as usize + 1},
+            Some(x) => {return x + 1},
         }
         /*
         match self.tail.0 {
@@ -104,7 +105,7 @@ impl NodePage {
 
     }
 
-    pub fn add_node(&mut self, node: &InternalNode) -> Result<ItemOffset, String> {
+    pub fn add_node(&mut self, node: &InternalNode) -> Result<PagePointer, String> {
 
         match self.push_node(node) {
             Ok(_) => {return Ok(ItemOffset(self.tail.clone().unwrap().0)) },
@@ -229,6 +230,7 @@ impl NodePage {
 
 
 }
+*/
 
 #[cfg(test)]
 mod tests {
@@ -236,6 +238,7 @@ mod tests {
 
     use super::*;
 
+    /*
     #[test]
     fn quick_new_nodepage_works() {
         let _np = NodePage::new(4096);
@@ -275,6 +278,7 @@ mod tests {
 
         }
     }
+    */
 
 
     #[test]
@@ -339,7 +343,7 @@ pub struct RecordPage {
 
     //pub data: Box<[u8; layout::RECORD_PAGE_SIZE]>,
     pub data: Vec<u8>,
-    pub tail: Option<ItemOffset>,
+    pub tail: Option<usize>,
     pub desc_length: usize,
     pub page_length: usize,
 }
@@ -352,7 +356,7 @@ impl RecordPage {
             //data: Box::new([0; layout::RECORD_PAGE_SIZE]),
             //data: Vec::with_capacity(length),
             data: vec![0u8; page_length],
-            tail: Some(ItemOffset(0)),
+            tail: Some(0),
             desc_length,
             page_length,
         };
@@ -379,7 +383,8 @@ impl RecordPage {
         //read tail from disk
         //let tail = arr[layout::TAIL_OFFSET] as usize;
 
-        let tail = Some(ItemOffset(u32::from_be_bytes(arr[layout::TAIL_OFFSET..layout::TAIL_OFFSET+layout::TAIL_SIZE].try_into().unwrap())));
+        //let tail = Some(ItemOffset(u32::from_be_bytes(arr[layout::TAIL_OFFSET..layout::TAIL_OFFSET+layout::TAIL_SIZE].try_into().unwrap())));
+        let tail = Some(u32::from_be_bytes(arr[layout::TAIL_OFFSET..layout::TAIL_OFFSET+layout::TAIL_SIZE].try_into().unwrap()) as usize);
 
         //let mut vec = Vec::with_capacity(length);
         let mut vec = vec![0u8; page_length];
@@ -436,7 +441,7 @@ impl RecordPage {
             false => {},
         }
 
-        let start = layout::PAGE_DATA_START + (self.tail.as_ref().unwrap().0 as usize * record.get_record_size());
+        let start = layout::PAGE_DATA_START + (self.tail.unwrap() * record.get_record_size());
         let size = record.get_record_size();
 
         let slice = &mut self.data[start..start + size];
@@ -444,10 +449,15 @@ impl RecordPage {
         //println!("TAIL BEFORE ADD: {}", self.tail.as_ref().unwrap().0);
         //slice.copy_from_slice(&record.to_arr());
         slice.copy_from_slice(&record.to_vec());
-        self.tail.as_mut().unwrap().0 += 1;
+        self.tail = match self.tail {
+            Some(x) => Some(x + 1),
+            None => Some(0),
+        };
+
+        let coerced_tail: u32 = self.tail.unwrap().try_into().unwrap();
 
         //ensure tail value is updated
-        self.data[layout::TAIL_OFFSET..layout::TAIL_OFFSET + layout::TAIL_SIZE].copy_from_slice(&self.tail.as_ref().unwrap().0.to_be_bytes());
+        self.data[layout::TAIL_OFFSET..layout::TAIL_OFFSET + layout::TAIL_SIZE].copy_from_slice(&coerced_tail.to_be_bytes());
 
         //println!("TAIL AFTER ADD: {}", self.tail.as_ref().unwrap().0);
         //println!("CAPACITY: {}", self.get_capacity());
@@ -458,7 +468,7 @@ impl RecordPage {
 
     pub fn get_record_at(&self, offset: usize) -> Result<CompoundRecord, String> {
 
-        if offset >= self.tail.as_ref().unwrap().0 as usize {
+        if offset >= self.tail.unwrap() {
             return Err("Provided offset greater than number of nodes".to_string());
         }
         else {
@@ -475,7 +485,7 @@ impl RecordPage {
 
     pub fn is_full(&self) -> bool {
 
-        return self.tail.as_ref().unwrap().0 as usize >= self.get_capacity();
+        return self.tail.unwrap() as usize >= self.get_capacity();
 
     }
 
@@ -487,7 +497,7 @@ impl RecordPage {
     }
 
     pub fn len(&self) -> usize {
-        return self.tail.as_ref().unwrap().0 as usize;
+        return self.tail.unwrap() as usize;
     }
 
 

@@ -4,8 +4,8 @@
 
 use crate::error::Error;
 //use crate::node::{PageAddress, InternalNode, ItemOffset, Descriptor, CompoundRecord, CompoundIdentifier};
-use crate::node::{PageAddress, ItemOffset, CompoundIdentifier, InternalNode};
-use crate::page::{NodePage, RecordPage, PageType};
+use crate::node::{PageAddress, CompoundIdentifier, InternalNode, PagePointer};
+use crate::page::{RecordPage, PageType};
 use byteorder::{ByteOrder, BigEndian};
 use crate::layout;
 use std::fs::{File, OpenOptions};
@@ -20,50 +20,18 @@ use std::fmt;
 #[derive(Debug)]
 pub struct NodePager {
     file: File,
-    pub cursor: PageAddress, //this is the next available slot
+    pub cursor: usize, //this is the next available slot
     pub page_length: usize,
 }
 
 #[derive(Debug)]
 pub struct RecordPager {
     file: File,
-    pub cursor: PageAddress, //this is the next available slot
+    pub cursor: usize, //this is the next available slot
     pub desc_length: usize,
     pub page_length: usize,
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct PagePointer {
-    pub page_type: PageType,
-    pub page_address: PageAddress,
-    pub node_offset: ItemOffset,
-}
-
-impl PagePointer {
-
-    pub fn pretty(&self) -> String {
-
-        let s = format!("{:?}|{:?}|{:?}", self.page_type, self.page_address.0, self.node_offset.0);
-        return s;
-    }
-    
-    pub fn to_tuple(&self) -> (usize, usize) {
-        return (self.page_address.0 as usize, self.node_offset.0 as usize);
-    }
-}
-
-impl fmt::Display for PagePointer {
-
-    // This trait requires `fmt` with this exact signature.
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Write strictly the first element into the supplied output
-        // stream: `f`. Returns `fmt::Result` which indicates whether the
-        // operation succeeded or failed. Note that `write!` uses syntax which
-        // is very similar to `println!`.
-        write!(f, "{:?}|{:?}|{:?}", self.page_type, self.page_address.0, self.node_offset.0)
-    }
-}
-
+/*
 impl NodePager {
 
     pub fn new(path: &Path, page_length: usize, create: bool) -> Result<Self, Error> {
@@ -272,11 +240,12 @@ impl NodePager {
 
     
 }
+*/
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::node::{PageAddress, InternalNode, ItemOffset, Descriptor, CompoundRecord, CompoundIdentifier};
+    use crate::node::{PageAddress, InternalNode, Descriptor, CompoundRecord, CompoundIdentifier};
     
     #[test]
     fn quick_nodes_to_file_and_back_works() {
@@ -306,72 +275,6 @@ mod tests {
 
     }
 
-
-
-    #[test]
-    fn quick_nodepage_to_file_and_back_works() {
-        const N: usize = 8;
-        let mut pager = NodePager::new(Path::new("test_data/kdtree.nodes"), 4096, true).unwrap();
-
-        let mut node1 = InternalNode::default();
-
-        //node1.parent_page_address = PageAddress(65536);
-        //node1.parent_node_offset = ItemOffset(2);
-        node1.left_child_page_address = PageAddress(300);
-        node1.left_child_node_offset = ItemOffset(4);
-        node1.right_child_page_address = PageAddress(500);
-        node1.right_child_node_offset = ItemOffset(6);
-        node1.split_axis = 7;
-        node1.split_value = 8.8888;
-
-        let mut nodepage = NodePage::new(4096);
-
-        //node1.parent_page_address = PageAddress(4096);
-        for _ in 0..10 {
-            nodepage.push_node(&node1).unwrap();
-        }
-
-        let mut node2 = InternalNode::default();
-
-        //node2.parent_page_address = PageAddress(4550);
-        //node2.parent_node_offset = ItemOffset(2);
-        node2.left_child_page_address = PageAddress(300);
-        node2.left_child_node_offset = ItemOffset(4);
-        node2.right_child_page_address = PageAddress(500);
-        node2.right_child_node_offset = ItemOffset(6);
-        node2.split_axis = 2;
-        node2.split_value = 32.9999;
-
-        nodepage.push_node(&node2).unwrap();
-
-        let page = &nodepage;
-        pager.write_page(page).unwrap();
-        pager.write_page(page).unwrap();
-
-        //read first page
-        let page = pager.get_node_page(&PageAddress(0)).unwrap();
-
-        //let node = page.get_node_at(ItemOffset(9));
-
-        let node_from_file = page.get_node_at(&ItemOffset(0)).unwrap();
-        assert_eq!(node1, node_from_file);
-
-        let node_from_file = page.get_node_at(&ItemOffset(8)).unwrap();
-        assert_eq!(node1, node_from_file);
-
-
-        let node_from_file = page.get_node_at(&ItemOffset(10)).unwrap();
-        assert_eq!(node2, node_from_file);
-
-        //read second page
-        let page = pager.get_node_page(&PageAddress(1)).unwrap();
-
-        let node_from_file = page.get_node_at(&ItemOffset(0)).unwrap();
-        assert_eq!(node1, node_from_file);
-
-        let node_from_file = page.get_node_at(&ItemOffset(10)).unwrap();
-        assert_eq!(node2, node_from_file);
-    }
 
     /*
     #[test]
@@ -482,6 +385,7 @@ mod tests {
 }
 
 
+/*
 
 #[derive(Debug)]
 pub struct CachedPager {
@@ -531,6 +435,7 @@ impl CachedPager {
     }
 
 }
+*/
 
 
 #[derive(Debug)]
@@ -556,27 +461,11 @@ impl FastNodePager {
         return self.store.len();
     }
 
-    fn pointer_to_index(&self, pointer: &PagePointer) -> usize {
-        return pointer.page_address.0 as usize * self.page_length + pointer.node_offset.0 as usize;
-    }
-
-    fn index_to_pointer(&self, index: usize) -> PagePointer {
-        let page_address = index / self.page_length;
-        let node_offset = index % self.page_length;
-
-        return PagePointer {
-            page_address: PageAddress(page_address as usize),
-            node_offset: ItemOffset(node_offset as u32),
-            page_type: PageType::Node,
-        };
-    }
-
     fn calc_offset(index: usize) -> usize {
 
         return layout::FILE_DATA_START + (index * layout::NODE_SIZE);
 
     }
-
 
     pub fn to_file(&self, filename: &String) -> Result<(), Error> {
 
@@ -656,13 +545,12 @@ impl FastNodePager {
     }
 
     //TODO: return only node references, user can clone if they need to
-    pub fn node_from_pointer(&mut self, pointer: &PagePointer) -> Result<&InternalNode, String> {
+    pub fn get_node(&mut self, index: &usize) -> Result<&InternalNode, String> {
 
         //let node = self.map.get(&pointer.to_tuple()).unwrap();
-        let idx = self.pointer_to_index(pointer);
-        let ret = match self.store.get(idx) {
+        let ret = match self.store.get(index.clone()) {
             Some(node) => Ok(node),
-            None => Err(format!("Node not found at address: {:?}", pointer.to_tuple())),
+            None => Err(format!("Node not found at address: {:?}", index)),
         };
 
         return ret;
@@ -674,16 +562,14 @@ impl FastNodePager {
         self.store.push(node.clone());
 
         let added_index = self.store.len() - 1;
-        let return_pointer = self.index_to_pointer(added_index);
 
-        Ok(return_pointer)
+        Ok(PagePointer::Node(added_index))
     }
 
-    pub fn update_node(&mut self, pointer: &PagePointer, new_node: &InternalNode) -> Result<(), Error> {
+    pub fn update_node(&mut self, index: &usize, new_node: &InternalNode) -> Result<(), Error> {
 
         //self.map.insert(pointer.to_tuple(), new_node.clone());
-        let idx = self.pointer_to_index(pointer);
-        self.store[idx] = new_node.clone();
+        self.store[index.clone()] = new_node.clone();
         //println!("UPDATED NODE ADDRESS: {:?}", pointer.to_tuple());
 
         return Ok(())
@@ -706,7 +592,7 @@ impl RecordPager {
 
                 return Ok(Self {
                     file: fd,
-                    cursor: PageAddress(0),
+                    cursor: 0,
                     desc_length,
                     page_length,
                 })
@@ -731,7 +617,7 @@ impl RecordPager {
                     
                     return Ok(Self {
                         file: fd,
-                        cursor: PageAddress(value),
+                        cursor: value,
                         desc_length,
                         page_length,
                     })
@@ -742,15 +628,15 @@ impl RecordPager {
     }
 
 
-    pub fn calc_offset(&self, address: &PageAddress) -> u64 {
+    pub fn calc_offset(&self, address: &usize) -> u64 {
 
         //let offset = (address.0 as usize * layout::RECORD_PAGE_SIZE) as u64;
-        let offset = (address.0 as usize * self.page_length) as u64;
+        let offset = (address * self.page_length) as u64;
         return layout::FILE_DATA_START as u64 + offset;
 
     }
 
-    pub fn get_record_page(&mut self, address: &PageAddress) -> Result<RecordPage, Error> {
+    pub fn get_record_page(&mut self, address: &usize) -> Result<RecordPage, Error> {
 
         //let mut page: [u8; self.length] = [0x00; self.length];
         let mut page: Vec<u8>  = vec![0; self.page_length];
@@ -778,11 +664,11 @@ impl RecordPager {
 
         loop {
 
-            if curr_address > self.cursor.0 {
+            if curr_address > self.cursor {
                 break
             }
 
-            let page: RecordPage = self.get_record_page(&PageAddress(curr_address)).unwrap();
+            let page: RecordPage = self.get_record_page(&curr_address).unwrap();
 
             let this_records = page.get_records();
 
@@ -805,10 +691,10 @@ impl RecordPager {
     }
 
     pub fn len(&self) -> usize {
-        return self.cursor.0 as usize;
+        return self.cursor;
     }
 
-    pub fn write_page(&mut self, page: &RecordPage) -> Result<PageAddress, Error> {
+    pub fn write_page(&mut self, page: &RecordPage) -> Result<PagePointer, Error> {
 
         let start = self.calc_offset(&self.cursor);
         self.file.seek(SeekFrom::Start(start))?;
@@ -818,20 +704,20 @@ impl RecordPager {
         self.file.write(data)?;
 
         let res = self.cursor.clone();
-        self.cursor.0 += 1;
+        self.cursor += 1;
         
         //update cursor on disk
         let mut cursor_arr: [u8; layout::HEADER_CURSOR_SIZE] = [0x00; layout::HEADER_CURSOR_SIZE];
 
-        BigEndian::write_u64(&mut cursor_arr, self.cursor.0 as u64);
+        BigEndian::write_u64(&mut cursor_arr, self.cursor as u64);
 
         self.file.seek(SeekFrom::Start(layout::HEADER_CURSOR_START as u64))?;
         self.file.write(&cursor_arr)?;
 
-        Ok(res)
+        Ok(PagePointer::Leaf(res))
     }
 
-    pub fn write_page_at_offset(&mut self, page: &RecordPage, address: &PageAddress) -> Result<PageAddress, Error> {
+    pub fn write_page_at_offset(&mut self, page: &RecordPage, address: &usize) -> Result<(), Error> {
         let start = self.calc_offset(address);
         self.file.seek(SeekFrom::Start(start))?;
 
@@ -840,7 +726,7 @@ impl RecordPager {
         self.file.write(data)?;
         let res = self.cursor.clone();
 
-        Ok(res)
+        Ok(())
     }
 
 }

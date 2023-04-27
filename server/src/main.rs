@@ -53,12 +53,12 @@ fn get_smiles_embedding(smiles: &String) -> Descriptor {
         Err(e) => { panic!();}
     }
 
-    return Descriptor::random(8);
+    return Descriptor::random(12);
 }
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     
-    let directory = "/pool/server_tree".to_string();
+    let directory = "/pool/builder_test_fast".to_string();
     let mut tree = Arc::new(Mutex::new(tree::Tree::read_from_directory(directory)));
     //pretty_env_logger::init();
 

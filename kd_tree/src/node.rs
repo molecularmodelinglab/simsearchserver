@@ -12,6 +12,7 @@ use crate::layout;
 use byteorder::{ByteOrder, BigEndian};
 use ascii::{AsAsciiStr, AsciiString};
 use std::cmp;
+use std::fmt;
 
 use std::convert::TryInto;
 
@@ -24,6 +25,32 @@ impl PageAddress {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum PagePointer {
+    Node(usize),
+    Leaf(usize),
+}
+
+impl fmt::Display for PagePointer {
+
+    // This trait requires `fmt` with this exact signature.
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        // Write strictly the first element into the supplied output
+        // stream: `f`. Returns `fmt::Result` which indicates whether the
+        // operation succeeded or failed. Note that `write!` uses syntax which
+        // is very similar to `println!`.
+        match self {
+            PagePointer::Node(node_offset) => {
+                write!(f, "NODE {:?}|{:?}", PageType::Node, node_offset)
+            },
+            PagePointer::Leaf(page_address) => {
+                write!(f, "LEAF {:?}|{:?}", PageType::Leaf, page_address)
+            }
+        }
+    }
+}
+
+
 
 /*
 impl PageAddress {
@@ -35,16 +62,6 @@ impl PageAddress {
 */
 
 
-
-#[derive(Debug, PartialEq, Clone)]
-//pub struct ItemOffset(pub usize);
-pub struct ItemOffset(pub u32);
-
-impl ItemOffset {
-    pub fn default() -> Self {
-        return Self(0);
-    }
-}
 
 #[derive(Debug, PartialEq)]
 pub enum NodeType{
@@ -108,14 +125,8 @@ impl Descriptor {
 #[derive(Debug, PartialEq, Clone)]
 pub struct InternalNode {
 
-    //pub parent_page_address: PageAddress,
-    //pub parent_node_offset: ItemOffset,
-    pub left_child_page_address: PageAddress,
-    pub left_child_node_offset: ItemOffset,
-    pub left_child_type: PageType,
-    pub right_child_page_address: PageAddress,
-    pub right_child_node_offset: ItemOffset,
-    pub right_child_type: PageType,
+    pub left_child_pointer: PagePointer,
+    pub right_child_pointer: PagePointer,
     pub split_axis: usize,
     pub split_value: f32,
 }
@@ -421,12 +432,8 @@ impl InternalNode {
             //node_type: NodeType::Internal,
             //parent_page_address: PageAddress(0),
             //parent_node_offset: ItemOffset(0),
-            left_child_page_address: PageAddress(0),
-            left_child_node_offset: ItemOffset(0),
-            left_child_type: PageType::Node,
-            right_child_page_address: PageAddress(0),
-            right_child_node_offset: ItemOffset(0),
-            right_child_type: PageType::Node,
+            left_child_pointer: PagePointer::Node(0),
+            right_child_pointer: PagePointer::Node(0),
             split_axis: 0,
             split_value: 0.0,
 
@@ -438,16 +445,12 @@ impl InternalNode {
     pub fn pretty(&self) -> String {
 
         return format!("SA: {:?} SV: {:?}
-                            LC: {:?}|{:?}|{:?}
-                            RC: {:?}|{:?}|{:?}",
+                            LC: {}
+                            RC: {}",
                         self.split_axis,
                         self.split_value,
-                        self.left_child_type,
-                        self.left_child_page_address.0,
-                        self.left_child_node_offset.0,
-                        self.right_child_type,
-                        self.right_child_page_address.0,
-                        self.right_child_node_offset.0);
+                        self.left_child_pointer,
+                        self.right_child_pointer)
     }
 
     pub fn from_slice(node_slice: &[u8]) -> Result<InternalNode, String> {
@@ -456,12 +459,10 @@ impl InternalNode {
         //let parent_page_address = Parser::get_usize_from_array(node_slice, layout::PARENT_PAGE_START, layout::PARENT_PAGE_SIZE);
         //let parent_node_offset = Parser::get_usize_from_array(node_slice, layout::PARENT_NODE_OFFSET_START, layout::PARENT_NODE_OFFSET_SIZE);
 
-        let left_child_page_address = Parser::get_usize_from_array(node_slice, layout::LEFT_CHILD_PAGE_START, layout::LEFT_CHILD_PAGE_SIZE);
-        let left_child_node_offset = Parser::get_usize_from_array(node_slice, layout::LEFT_CHILD_NODE_OFFSET_START, layout::LEFT_CHILD_NODE_OFFSET_SIZE);
+        let left_child_index = Parser::get_usize_from_array(node_slice, layout::LEFT_CHILD_INDEX_START, layout::LEFT_CHILD_INDEX_SIZE);
         let left_child_type = Parser::get_usize_from_array(node_slice, layout::LEFT_CHILD_TYPE_START, layout::LEFT_CHILD_TYPE_SIZE);
 
-        let right_child_page_address = Parser::get_usize_from_array(node_slice, layout::RIGHT_CHILD_PAGE_START, layout::RIGHT_CHILD_PAGE_SIZE);
-        let right_child_node_offset = Parser::get_usize_from_array(node_slice, layout::RIGHT_CHILD_NODE_OFFSET_START, layout::RIGHT_CHILD_NODE_OFFSET_SIZE);
+        let right_child_index = Parser::get_usize_from_array(node_slice, layout::RIGHT_CHILD_INDEX_START, layout::RIGHT_CHILD_INDEX_SIZE);
         let right_child_type = Parser::get_usize_from_array(node_slice, layout::RIGHT_CHILD_TYPE_START, layout::RIGHT_CHILD_TYPE_SIZE);
 
         let split_axis = Parser::get_usize_from_array(node_slice, layout::SPLIT_AXIS_OFFSET, layout::SPLIT_AXIS_SIZE);
@@ -479,25 +480,18 @@ impl InternalNode {
 
         //node.parent_page_address = PageAddress(parent_page_address.unwrap());
         //node.parent_node_offset = ItemOffset(parent_node_offset.unwrap() as u32);
+        //
 
-        node.left_child_page_address = PageAddress(left_child_page_address.unwrap());
-        node.left_child_node_offset = ItemOffset(left_child_node_offset.unwrap() as u32);
-        //dbg!(&left_child_type);
-        node.left_child_type = match left_child_type.unwrap() {
-            1 => {PageType::Node},
-            2 => {PageType::Leaf},
-            _ => {
-                panic!()},
-
+        node.left_child_pointer = match left_child_type.unwrap() {
+            1 => {PagePointer::Node(left_child_index.unwrap())},
+            2 => {PagePointer::Leaf(left_child_index.unwrap())},
+            _ => {panic!()},
         };
 
-        node.right_child_page_address = PageAddress(right_child_page_address.unwrap());
-        node.right_child_node_offset = ItemOffset(right_child_node_offset.unwrap() as u32);
-        node.right_child_type = match right_child_type.unwrap() {
-            1 => {PageType::Node},
-            2 => {PageType::Leaf},
+        node.right_child_pointer = match right_child_type.unwrap() {
+            1 => {PagePointer::Node(right_child_index.unwrap())},
+            2 => {PagePointer::Leaf(right_child_index.unwrap())},
             _ => {panic!()},
-
         };
 
         node.split_axis = split_axis.unwrap();
@@ -522,20 +516,27 @@ impl InternalNode {
 
         //arr[layout::PARENT_NODE_OFFSET_START] = self.parent_node_offset.0 as u8;
 
-        let slice = &mut arr[layout::LEFT_CHILD_PAGE_START..layout::LEFT_CHILD_PAGE_START + layout::LEFT_CHILD_PAGE_SIZE];
-        let value: u64 = self.left_child_page_address.0.try_into().unwrap();
+        let slice = &mut arr[layout::LEFT_CHILD_INDEX_START..layout::LEFT_CHILD_INDEX_START + layout::LEFT_CHILD_INDEX_SIZE];
+
+        let (node_type, value) = match self.left_child_pointer {
+            PagePointer::Node(x) => (1, x.try_into().unwrap()),
+            PagePointer::Leaf(x) => (2, x.try_into().unwrap()),
+        };
         BigEndian::write_u64(slice, value);
 
-        let value = self.left_child_node_offset.0 as u8;
-        arr[layout::LEFT_CHILD_NODE_OFFSET_START] = value;
 
-        arr[layout::LEFT_CHILD_TYPE_START] = self.left_child_type.clone() as u8;
+        arr[layout::LEFT_CHILD_TYPE_START] = node_type as u8;
 
-        let slice = &mut arr[layout::RIGHT_CHILD_PAGE_START..layout::RIGHT_CHILD_PAGE_START + layout::RIGHT_CHILD_PAGE_SIZE];
-        BigEndian::write_u64(slice, self.right_child_page_address.0.try_into().unwrap());
+        let slice = &mut arr[layout::RIGHT_CHILD_INDEX_START..layout::RIGHT_CHILD_INDEX_START + layout::RIGHT_CHILD_INDEX_SIZE];
 
-        arr[layout::RIGHT_CHILD_NODE_OFFSET_START] = self.right_child_node_offset.0 as u8;
-        arr[layout::RIGHT_CHILD_TYPE_START] = self.right_child_type.clone() as u8;
+        let (node_type, value) = match self.right_child_pointer {
+            PagePointer::Node(x) => (1, x.try_into().unwrap()),
+            PagePointer::Leaf(x) => (2, x.try_into().unwrap()),
+        };
+        BigEndian::write_u64(slice, value);
+
+        arr[layout::RIGHT_CHILD_TYPE_START] = node_type as u8;
+
 
         arr[layout::SPLIT_AXIS_OFFSET] = self.split_axis as u8;
 
