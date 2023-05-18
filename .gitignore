@@ -7,5 +7,6 @@ kd_tree/test_data
 *.old
 *.log
 *.lock
+*cache*
 out
 
