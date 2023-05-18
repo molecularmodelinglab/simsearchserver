@@ -1,0 +1,14 @@
+00_184474.pt:
+  vocab: '#%()+-0123456789<=>BCFHILNOPRSX[]cnosp$'
+  max_len: 152
+  dim_emb: 512
+  heads: 8
+  dim_hidden: 6
+  L_enc: 12
+  L_dec: 12
+  dim_ff: 2048
+  drpt: 0.1
+  actv: 'relu'
+  eps: 0.6
+  b_first: True
+  model_loc: None

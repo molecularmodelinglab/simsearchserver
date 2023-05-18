@@ -1,0 +1,13 @@
+[package]
+name = "builder"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+kd_tree = { path = "../kd_tree" }
+kdam = "*"
+rand = "*"
+log = "*"
+env_logger = "*"

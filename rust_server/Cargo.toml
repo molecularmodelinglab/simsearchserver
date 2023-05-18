@@ -1,0 +1,16 @@
+[workspace] 
+
+members = [
+	"kd_tree",
+	"builder",
+	"server",
+	"query_test",
+]
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
+
+[profile.release]
+lto = true
+codegen-units = 1
