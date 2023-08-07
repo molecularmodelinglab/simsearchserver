@@ -3,7 +3,8 @@
 //!
 //!
 
-use crate::node::{CompoundRecord, Descriptor};
+use crate::data::{TreeRecord};
+use crate::data::{Descriptor};
 use crate::layout;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -69,9 +70,9 @@ impl RecordPage {
     }
 
 
-    pub fn get_records(&self) -> Vec::<CompoundRecord> {
+    pub fn get_records(&self) -> Vec::<TreeRecord> {
 
-        let mut v: Vec::<CompoundRecord> = Vec::with_capacity(self.get_capacity());
+        let mut v: Vec::<TreeRecord> = Vec::with_capacity(self.get_capacity());
 
         for offset in 0..10000 {
 
@@ -88,7 +89,7 @@ impl RecordPage {
     }
 
 
-    pub fn add_record(&mut self, record: &CompoundRecord) -> Result<(), String> {
+    pub fn add_record(&mut self, record: &TreeRecord) -> Result<(), String> {
 
         //dbg!("ADD CHECK");
         match self.is_full() {
@@ -116,17 +117,17 @@ impl RecordPage {
         Ok(())
     }
 
-    pub fn get_record_at(&self, offset: usize) -> Result<CompoundRecord, String> {
+    pub fn get_record_at(&self, offset: usize) -> Result<TreeRecord, String> {
 
         if offset >= self.tail.unwrap() {
             return Err("Provided offset greater than number of nodes".to_string());
         }
         else {
-            let start = layout::PAGE_DATA_START + (offset * CompoundRecord::compute_record_size(self.desc_length)); 
-            let size = CompoundRecord::compute_record_size(self.desc_length);
+            let start = layout::PAGE_DATA_START + (offset * TreeRecord::compute_record_size(self.desc_length)); 
+            let size = TreeRecord::compute_record_size(self.desc_length);
             let slice = &self.data[start..start + size];
 
-            let cr = CompoundRecord::from_slice(slice, self.desc_length);
+            let cr = TreeRecord::from_slice(slice, self.desc_length);
             return cr;
         }
 
@@ -142,7 +143,7 @@ impl RecordPage {
 
     pub fn get_capacity(&self) -> usize {
 
-        return (self.page_length - layout::PAGE_DATA_START) / CompoundRecord::compute_record_size(self.desc_length);
+        return (self.page_length - layout::PAGE_DATA_START) / TreeRecord::compute_record_size(self.desc_length);
 
     }
 
@@ -171,18 +172,18 @@ mod tests {
 
         dbg!(&lp);
 
-        let cr = CompoundRecord::default(n);
+        let cr = TreeRecord::default(n);
 
         lp.add_record(&cr).unwrap();
         assert_eq!(lp.len(), 1);
 
-        let cr = CompoundRecord::default(n);
+        let cr = TreeRecord::default(n);
         lp.add_record(&cr).unwrap();
         assert_eq!(lp.len(), 2);
 
-        let cr = CompoundRecord::default(n);
+        let cr = TreeRecord::default(n);
         lp.add_record(&cr).unwrap();
-        let cr = CompoundRecord::default(n);
+        let cr = TreeRecord::default(n);
         lp.add_record(&cr).unwrap();
         assert_eq!(lp.len(), 4);
     }
@@ -196,7 +197,7 @@ mod tests {
         dbg!(&lp.get_capacity());
 
         for i in 0..100 {
-            let cr = CompoundRecord::default(n);
+            let cr = TreeRecord::default(n);
             let result = lp.add_record(&cr);
             //dbg!(lp.len(), &result);
 

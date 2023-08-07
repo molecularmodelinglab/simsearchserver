@@ -27,3 +27,4 @@ pub mod io;
 pub mod page;
 pub mod tree;
 pub mod database;
+pub mod data;

@@ -1,4 +1,4 @@
-use kd_tree::node::{CompoundRecord,CompoundIdentifier, Descriptor};
+use kd_tree::data::{TreeRecord, CompoundIdentifier, Descriptor};
 use kdam::tqdm;
 use kd_tree::tree;
 
@@ -30,7 +30,7 @@ fn build_single() {
     //tree.uniform_layout(20, 0.0, 1.0);
 
     for _ in tqdm!(0..config.num_records.unwrap() as usize) {
-        let rec = CompoundRecord::random(config.desc_length);
+        let rec = TreeRecord::random(config.desc_length);
         tree.add_record(&rec).unwrap();
     }
 
@@ -51,7 +51,7 @@ fn build_from_file() {
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
 
-    let mut records: Vec<CompoundRecord> = Vec::new();
+    let mut records: Vec<TreeRecord> = Vec::new();
 
     for (i, line) in contents.split("\n").enumerate() {
         if i == 0 {
@@ -71,7 +71,7 @@ fn build_from_file() {
 
         assert_eq!(s.len(), n);
 
-        let cr = CompoundRecord {
+        let cr = TreeRecord {
             compound_identifier: identifier,
             descriptor,
             dataset_identifier: 1,
@@ -122,7 +122,7 @@ fn param_sweep() {
 
                     let start = Instant::now();
                     for _ in tqdm!(0..db_size as usize) {
-                        let rec = CompoundRecord::random(config.desc_length);
+                        let rec = TreeRecord::random(config.desc_length);
                         tree.add_record(&rec).unwrap();
                     }
                     let duration = start.elapsed();

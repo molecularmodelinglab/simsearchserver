@@ -6,18 +6,130 @@ use kdam::tqdm;
 
 use rand::Rng;
 
+use crate::data::{MAX_SMILES_LENGTH, MAX_IDENTIFIER_LENGTH};
 
 
 pub const ENTRIES_START: usize = 0;
 pub const ENTRIES_SIZE: usize = 8;
 
 pub const SMILES_START: usize = ENTRIES_SIZE;
-pub const SMILES_SIZE: usize = 100;
+pub const SMILES_SIZE: usize = MAX_SMILES_LENGTH;
 
 pub const ID_START: usize = SMILES_START + SMILES_SIZE;
-pub const ID_SIZE: usize = 30;
+pub const ID_SIZE: usize = MAX_IDENTIFIER_LENGTH;
 
-pub const ENTRY_SIZE: usize = ENTRIES_SIZE + SMILES_SIZE + ID_SIZE;
+pub const DATABASE_ENTRY_SIZE: usize = ENTRIES_SIZE + SMILES_SIZE + ID_SIZE;
+
+#[derive(Debug, PartialEq, Clone)]
+struct DatabaseRecord {
+    smiles: String,
+    identifier: String,
+}
+
+impl DatabaseRecord {
+
+    fn from_line(line: &str) -> Result<Self, String> {
+
+        let mut s = line.split(",");
+
+        let smiles = match s.next() {
+
+            Some(s) => s,
+            None => panic!("No smiles string found"),
+        };
+    
+        if smiles.len() > SMILES_SIZE {
+            return Err("Smiles string too long".to_string());
+        }
+
+        let identifier = match s.next() {
+
+            Some(s) => s,
+            None => panic!("No identifier found"),
+        };
+
+        if identifier.len() > ID_SIZE {
+            return Err("Identifier string too long".to_string());
+        }
+
+        return Ok(DatabaseRecord {
+            smiles: smiles.to_string(),
+            identifier: identifier.to_string(),
+        });
+    }
+
+
+    fn to_arr(&self) -> Result<[u8; DATABASE_ENTRY_SIZE], String> {
+
+        let mut arr = [0u8; DATABASE_ENTRY_SIZE];
+
+        let mut fill_arr = [0u8; SMILES_SIZE];
+
+        let bytes = self.smiles.as_bytes();
+
+        fill_arr[..bytes.len()].copy_from_slice(bytes);
+
+
+        let smiles_arr: [u8;SMILES_SIZE] = fill_arr.try_into().expect("slice with incorrect length");
+
+
+        let mut fill_arr = [0u8; ID_SIZE];
+
+        let bytes = self.identifier.as_bytes();
+
+
+        fill_arr[..bytes.len()].copy_from_slice(bytes);
+
+        let identifier_arr: [u8;ID_SIZE] = fill_arr.try_into().expect("slice with incorrect length");
+
+
+        arr[SMILES_START..SMILES_START + SMILES_SIZE].copy_from_slice(&smiles_arr);
+        arr[ID_START..ID_START + ID_SIZE].copy_from_slice(&identifier_arr);
+
+        Ok(arr)
+    }
+
+    fn from_arr(arr: [u8; DATABASE_ENTRY_SIZE]) -> Self {
+
+        let smiles_arr = &arr[SMILES_START..SMILES_START + SMILES_SIZE];
+        let identifier_arr = &arr[ID_START..ID_START + ID_SIZE];
+
+        let mut smiles = String::from_utf8(smiles_arr.to_vec()).unwrap();
+        let smiles = smiles.trim_matches(char::from(0));
+        let identifier = String::from_utf8(identifier_arr.to_vec()).unwrap();
+        let identifier = identifier.trim_matches(char::from(0));
+
+        DatabaseRecord {
+            smiles: smiles.to_string(),
+            identifier: identifier.to_string(),
+        }
+    }
+
+    fn random() -> Self {
+
+        use rand::{distributions::Alphanumeric, Rng};
+
+        let mut rng = rand::thread_rng();
+
+        let smiles: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(20)
+            .map(char::from)
+            .collect();
+
+        let identifier: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(10)
+            .map(char::from)
+            .collect();
+
+        DatabaseRecord {
+            smiles: smiles,
+            identifier: identifier,
+        }
+    }
+
+}
 
 #[derive(Debug)]
 struct Database {
@@ -70,7 +182,7 @@ impl Database {
         }
     }
 
-    fn add_entry(&mut self, entry: &Entry) -> Result<usize, String> {
+    fn add_entry(&mut self, entry: &DatabaseRecord) -> Result<usize, String> {
 
         let arr = entry.to_arr();
 
@@ -79,7 +191,7 @@ impl Database {
             Err(e) => return Err(e),
         };
 
-        self.fd.seek(SeekFrom::Start((self.num_entries as u64) * (ENTRY_SIZE as u64))).unwrap();
+        self.fd.seek(SeekFrom::Start((self.num_entries as u64) * (DATABASE_ENTRY_SIZE as u64))).unwrap();
         self.fd.write(&arr).unwrap();
 
         let return_idx = self.num_entries;
@@ -92,14 +204,14 @@ impl Database {
         return Ok(return_idx);
     }
 
-    fn query(&mut self, id: u64) -> Entry {
+    fn query(&mut self, id: u64) -> DatabaseRecord {
 
-        let mut buf = [0u8; ENTRY_SIZE];
+        let mut buf = [0u8; DATABASE_ENTRY_SIZE];
             
-        self.fd.seek(SeekFrom::Start((id as u64) * (ENTRY_SIZE as u64))).unwrap();
+        self.fd.seek(SeekFrom::Start((id as u64) * (DATABASE_ENTRY_SIZE as u64))).unwrap();
         self.fd.read(&mut buf).unwrap();
 
-        let entry = Entry::from_arr(buf);
+        let entry = DatabaseRecord::from_arr(buf);
 
         return entry
     }
@@ -129,7 +241,6 @@ fn main() {
 fn build_from_file(filename: &str) {
 
 
-    use::std::fs::File;
     use std::io::prelude::*;
 
     let mut file = File::open(filename).unwrap();
@@ -156,7 +267,7 @@ fn build_from_file(filename: &str) {
             continue;
         }
 
-        let entry: Entry = Entry::from_line(line).unwrap();
+        let entry: DatabaseRecord = DatabaseRecord::from_line(line).unwrap();
         let arr = entry.to_arr();
 
         let arr = match arr {
@@ -172,117 +283,6 @@ fn build_from_file(filename: &str) {
 
     }
 }
-#[derive(Debug, PartialEq, Clone)]
-struct Entry {
-    smiles: String,
-    identifier: String,
-}
-
-impl Entry {
-
-    fn from_line(line: &str) -> Result<Self, String> {
-
-        let mut s = line.split(",");
-
-        let smiles = match s.next() {
-
-            Some(s) => s,
-            None => panic!("No smiles string found"),
-        };
-    
-        if smiles.len() > SMILES_SIZE {
-            return Err("Smiles string too long".to_string());
-        }
-
-        let identifier = match s.next() {
-
-            Some(s) => s,
-            None => panic!("No identifier found"),
-        };
-
-        if identifier.len() > ID_SIZE {
-            return Err("Identifier string too long".to_string());
-        }
-
-        return Ok(Entry {
-            smiles: smiles.to_string(),
-            identifier: identifier.to_string(),
-        });
-    }
-
-
-    fn to_arr(&self) -> Result<[u8; ENTRY_SIZE], String> {
-
-        let mut arr = [0u8; ENTRY_SIZE];
-
-        let mut fill_arr = [0u8; SMILES_SIZE];
-
-        let bytes = self.smiles.as_bytes();
-
-        fill_arr[..bytes.len()].copy_from_slice(bytes);
-
-
-        let smiles_arr: [u8;SMILES_SIZE] = fill_arr.try_into().expect("slice with incorrect length");
-
-
-        let mut fill_arr = [0u8; ID_SIZE];
-
-        let bytes = self.identifier.as_bytes();
-
-
-        fill_arr[..bytes.len()].copy_from_slice(bytes);
-
-        let identifier_arr: [u8;ID_SIZE] = fill_arr.try_into().expect("slice with incorrect length");
-
-
-        arr[SMILES_START..SMILES_START + SMILES_SIZE].copy_from_slice(&smiles_arr);
-        arr[ID_START..ID_START + ID_SIZE].copy_from_slice(&identifier_arr);
-
-        Ok(arr)
-    }
-
-    fn from_arr(arr: [u8; ENTRY_SIZE]) -> Self {
-
-        let smiles_arr = &arr[SMILES_START..SMILES_START + SMILES_SIZE];
-        let identifier_arr = &arr[ID_START..ID_START + ID_SIZE];
-
-        let mut smiles = String::from_utf8(smiles_arr.to_vec()).unwrap();
-        let smiles = smiles.trim_matches(char::from(0));
-        let identifier = String::from_utf8(identifier_arr.to_vec()).unwrap();
-        let identifier = identifier.trim_matches(char::from(0));
-
-        Entry {
-            smiles: smiles.to_string(),
-            identifier: identifier.to_string(),
-        }
-    }
-
-    fn random() -> Self {
-
-        use rand::{distributions::Alphanumeric, Rng};
-
-        let mut rng = rand::thread_rng();
-
-        let smiles: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(20)
-            .map(char::from)
-            .collect();
-
-        let identifier: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(10)
-            .map(char::from)
-            .collect();
-
-        Entry {
-            smiles: smiles,
-            identifier: identifier,
-        }
-    }
-
-}
-
 #[cfg(test)]
 mod tests {
 
@@ -297,14 +297,14 @@ mod tests {
         let mut database = Database::new(filename);
 
 
-        let mut entries: Vec<Entry> = Vec::new();
+        let mut entries: Vec<DatabaseRecord> = Vec::new();
 
         for _ in 0..10000 {
-            let entry = Entry::random();
+            let entry = DatabaseRecord::random();
             entries.push(entry);
         }
 
-        let mut reported_entries: Vec<(u64, Entry)> = Vec::new();
+        let mut reported_entries: Vec<(u64, DatabaseRecord)> = Vec::new();
 
         for entry in entries.iter() {
             let idx = database.add_entry(entry);

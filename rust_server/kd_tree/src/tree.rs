@@ -1,8 +1,10 @@
 //! Implementation of kd-tree creation and querying
 extern crate test;
-use crate::node::{CompoundRecord, CompoundIdentifier, Descriptor, InternalNode, PagePointer};
+use crate::data::{TreeRecord, CompoundIdentifier, Descriptor};
+use crate::node::{InternalNode, PagePointer};
 use crate::page::RecordPage;
 use crate::io::{FastNodePager,RecordPager};
+use crate::data::{Parser};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use std::time::Instant;
@@ -90,7 +92,7 @@ pub struct Tree {
 pub struct TopHits {
     pub max_length: usize,
     pub distances: Vec<f32>,
-    pub records: Vec<Option<CompoundRecord>>,
+    pub records: Vec<Option<TreeRecord>>,
     pub pointers: Vec<Option<PagePointer>>,
 }
 
@@ -107,7 +109,7 @@ impl TopHits {
     pub fn new(max_length: usize) -> Self {
 
         let mut distances: Vec<f32> = Vec::new();
-        let mut records: Vec<Option<CompoundRecord>> = Vec::new();
+        let mut records: Vec<Option<TreeRecord>> = Vec::new();
         let mut pointers: Vec<Option<PagePointer>> = Vec::new();
         for _ in 0..max_length {
             distances.push(f32::MAX);
@@ -125,7 +127,7 @@ impl TopHits {
     ///Internal method for adding a record to the list
     ///
     ///Undefined if called without checking if we can via `try_add`
-    fn _add(&mut self, distance: f32, record: &CompoundRecord, page_pointer: &PagePointer) -> Result<(), String> {
+    fn _add(&mut self, distance: f32, record: &TreeRecord, page_pointer: &PagePointer) -> Result<(), String> {
         //println!("ADDING");
 
         //find insertion point
@@ -155,7 +157,7 @@ impl TopHits {
     }
 
     ///Public method to be called on every record for consideration as a neighbor
-    pub fn try_add(&mut self, distance: f32, record: &CompoundRecord, page_pointer: &PagePointer) -> Result<(), String> {
+    pub fn try_add(&mut self, distance: f32, record: &TreeRecord, page_pointer: &PagePointer) -> Result<(), String> {
 
         let worst_best_distance = self.get_highest_dist();
         if distance < worst_best_distance {
@@ -367,7 +369,7 @@ impl Tree {
     }
 
     ///Returns whether or not the exact provided descriptor is in the tree
-    pub fn record_in_tree(&mut self, record: &CompoundRecord) -> Result<bool, String> {
+    pub fn record_in_tree(&mut self, record: &TreeRecord) -> Result<bool, String> {
 
         let mut curr_pointer: PagePointer = self.root.clone();
 
@@ -549,7 +551,9 @@ impl Tree {
     ///the records to that node. If this fills the node, the node is split at its median and two
     ///half-filled leaf nodes are created. A new internal node is created to point to these two
     ///children.
-    pub fn add_record(&mut self, record: &CompoundRecord) -> Result<(), String> {
+    pub fn add_record(&mut self, record: &TreeRecord) -> Result<(), String> {
+
+
 
         let mut curr_pointer = self.root.clone();
 
@@ -810,8 +814,8 @@ impl Tree {
 
         assert_eq!(left_record_idxs.len() + right_record_idxs.len(), records.len());
 
-        let mut left_records: Vec<CompoundRecord> = Vec::with_capacity((records.len() / 2) + 1);
-        let mut right_records: Vec<CompoundRecord> = Vec::with_capacity((records.len() / 2) + 1);
+        let mut left_records: Vec<TreeRecord> = Vec::with_capacity((records.len() / 2) + 1);
+        let mut right_records: Vec<TreeRecord> = Vec::with_capacity((records.len() / 2) + 1);
 
         //consume records and allocate into left and right pages
         for x in records.into_iter() {
@@ -891,7 +895,7 @@ impl Tree {
 mod tests {
     use super::*;
     use test::Bencher;
-    use crate::node::{CompoundRecord, CompoundIdentifier, Descriptor};
+    use crate::data::{TreeRecord, CompoundIdentifier, Descriptor};
     use kdam::tqdm;
 
     #[test]
@@ -905,15 +909,15 @@ mod tests {
 
         let mut tree = Tree::force_create_with_config(config);
 
-        let cr = CompoundRecord::random(n);
+        let cr = TreeRecord::random(n);
         tree.add_record(&cr).unwrap();
 
-        let cr = CompoundRecord::random(n);
+        let cr = TreeRecord::random(n);
         tree.add_record(&cr).unwrap();
 
         for _ in 0..2000 {
 
-            let cr = CompoundRecord::random(n);
+            let cr = TreeRecord::random(n);
             tree.add_record(&cr).unwrap();
         }
     }
@@ -929,26 +933,26 @@ mod tests {
 
             let mut tree = Tree::force_create_with_config(config);
 
-            let cr_to_find = CompoundRecord::random(n);();
+            let cr_to_find = TreeRecord::random(n);();
 
 
-            let cr = CompoundRecord::random(n);();
+            let cr = TreeRecord::random(n);();
             tree.add_record(&cr).unwrap();
 
-            let bad_record = CompoundRecord::random(n);();
+            let bad_record = TreeRecord::random(n);();
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
 
-            let cr = CompoundRecord::random(n);();
+            let cr = TreeRecord::random(n);();
             tree.add_record(&cr).unwrap();
 
-            let bad_record = CompoundRecord::random(n);();
+            let bad_record = TreeRecord::random(n);();
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
 
             for _ in 0..2000 {
 
-                let cr = CompoundRecord::random(n);();
+                let cr = TreeRecord::random(n);();
                 //dbg!(&cr);
                 tree.add_record(&cr).unwrap();
             }
@@ -963,14 +967,14 @@ mod tests {
 
             for _ in 0..2000 {
 
-                let cr = CompoundRecord::random(n);();
+                let cr = TreeRecord::random(n);();
                 tree.add_record(&cr).unwrap();
             }
 
             let answer = tree.record_in_tree(&cr_to_find).unwrap();
             assert_eq!(answer, true);
 
-            let bad_record = CompoundRecord::random(n);();
+            let bad_record = TreeRecord::random(n);();
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
         }
@@ -987,25 +991,25 @@ mod tests {
 
             let mut tree = Tree::force_create_with_config(config.clone());
 
-            let cr_to_find = CompoundRecord::random(n);
+            let cr_to_find = TreeRecord::random(n);
 
-            let cr = CompoundRecord::random(n);
+            let cr = TreeRecord::random(n);
             tree.add_record(&cr).unwrap();
 
-            let bad_record = CompoundRecord::random(n);
+            let bad_record = TreeRecord::random(n);
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
 
-            let cr = CompoundRecord::random(n);();
+            let cr = TreeRecord::random(n);();
             tree.add_record(&cr).unwrap();
 
-            let bad_record = CompoundRecord::random(n);
+            let bad_record = TreeRecord::random(n);
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
 
             for _ in tqdm!(0..20000) {
 
-                let cr = CompoundRecord::random(n);
+                let cr = TreeRecord::random(n);
                 tree.add_record(&cr).unwrap();
             }
 
@@ -1019,14 +1023,14 @@ mod tests {
 
             for _ in 0..2000 {
 
-                let cr = CompoundRecord::random(n);();
+                let cr = TreeRecord::random(n);();
                 tree.add_record(&cr).unwrap();
             }
 
             let answer = tree.record_in_tree(&cr_to_find).unwrap();
             assert_eq!(answer, true);
 
-            let bad_record = CompoundRecord::random(n);
+            let bad_record = TreeRecord::random(n);
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
 
@@ -1047,7 +1051,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord> = Vec::new();
+        let mut records: Vec<TreeRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1067,7 +1071,7 @@ mod tests {
 
             assert_eq!(s.len(), n);
 
-            let cr = CompoundRecord {
+            let cr = TreeRecord {
                 compound_identifier: identifier,
                 descriptor,
                 dataset_identifier: 1,
@@ -1136,11 +1140,11 @@ mod tests {
         dbg!(&tree.root);
         */
 
-        //let cr = CompoundRecord::random(config.desc_length);
+        //let cr = TreeRecord::random(config.desc_length);
 
         /*
         for i in 0..300 {
-            let cr = CompoundRecord::random(config.desc_length);
+            let cr = TreeRecord::random(config.desc_length);
             tree.add_record(&cr).unwrap();
         }
         */
@@ -1149,7 +1153,7 @@ mod tests {
         //tree.output_depths();
 
         for _ in tqdm!(0..1e6 as i32) {
-            let cr = CompoundRecord::random(config.desc_length);
+            let cr = TreeRecord::random(config.desc_length);
             tree.add_record(&cr).unwrap();
         }
         //tree.output_depths();
@@ -1171,7 +1175,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord> = Vec::new();
+        let mut records: Vec<TreeRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1191,7 +1195,7 @@ mod tests {
 
             assert_eq!(s.len(), n);
 
-            let cr = CompoundRecord {
+            let cr = TreeRecord {
                 compound_identifier: identifier,
                 descriptor,
                 dataset_identifier: 1,
@@ -1301,7 +1305,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord> = Vec::new();
+        let mut records: Vec<TreeRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1321,7 +1325,7 @@ mod tests {
 
             assert_eq!(s.len(), n);
 
-            let cr = CompoundRecord {
+            let cr = TreeRecord {
                 compound_identifier: identifier,
                 descriptor,
                 dataset_identifier: 1,
@@ -1443,7 +1447,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord> = Vec::new();
+        let mut records: Vec<TreeRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1463,7 +1467,7 @@ mod tests {
 
             assert_eq!(s.len(), n);
 
-            let cr = CompoundRecord {
+            let cr = TreeRecord {
                 compound_identifier: identifier,
                 descriptor,
                 dataset_identifier: 1,
@@ -1556,7 +1560,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<CompoundRecord> = Vec::new();
+        let mut records: Vec<TreeRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1577,7 +1581,7 @@ mod tests {
 
             assert_eq!(s.len(), n);
 
-            let cr = CompoundRecord {
+            let cr = TreeRecord {
                 compound_identifier: identifier,
                 descriptor,
                 dataset_identifier: 1,

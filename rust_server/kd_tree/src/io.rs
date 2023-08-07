@@ -3,7 +3,8 @@
 //!
 
 use crate::error::Error;
-use crate::node::{CompoundIdentifier, InternalNode, PagePointer};
+use crate::data::{CompoundIdentifier};
+use crate::node::{InternalNode, PagePointer};
 use crate::page::RecordPage;
 use byteorder::{ByteOrder, BigEndian};
 use crate::layout;
