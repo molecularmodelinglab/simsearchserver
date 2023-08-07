@@ -364,10 +364,6 @@ impl Tree {
                 },
             }
         }
-
-
-
-
     }
 
     ///Returns whether or not the exact provided descriptor is in the tree
@@ -1118,6 +1114,7 @@ mod tests {
 
 
     }
+
     #[test]
     fn uniform_tree() {
 
