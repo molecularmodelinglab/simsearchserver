@@ -1,22 +1,65 @@
 use byteorder::{ByteOrder, BigEndian};
 use std::fmt;
 use ascii::AsciiString;
-use rand::Rng;
+use rand::{distributions::Alphanumeric, Rng};
 use crate::layout;
+use crate::tree::TreeRecord;
 use crate::error::{Error};
 
-pub const IDENTIFIER_SIZE: usize = 16;
-pub const DESCRIPTOR_SIZE: usize = 32;
+pub type CompoundIndex = u64;
+
+pub const IDENTIFIER_SIZE: usize = 30;
 
 pub const MAX_SMILES_LENGTH: usize = 100;
-pub const MAX_IDENTIFIER_LENGTH: usize = 20;
+pub const MAX_IDENTIFIER_LENGTH: usize = 30;
 
+#[derive(Debug, PartialEq, Clone)]
 pub struct CompoundRecord {
-    pub dataset_identifier: u8,
     pub smiles: String,
     pub compound_identifier: CompoundIdentifier,
     pub descriptor: Descriptor,
     pub length: usize,
+}
+
+impl CompoundRecord {
+
+
+    pub fn new(dataset_identifier: u8, smiles: String, compound_identifier: CompoundIdentifier, descriptor: Descriptor, length: usize) -> Self {
+
+        return Self {
+            smiles,
+            compound_identifier,
+            descriptor,
+            length,
+        }
+    }
+
+    pub fn get_tree_record(&self, idx: &CompoundIndex) -> TreeRecord {
+
+        let mut tree_record = TreeRecord::default(self.length);
+        tree_record.index = *idx;
+        tree_record.descriptor = self.descriptor.clone();
+        return tree_record;
+    }
+
+    pub fn random(length: usize) -> Self {
+
+        let smiles: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(20)
+            .map(char::from)
+            .collect();
+
+        let compound_identifier = CompoundIdentifier::random();
+        let descriptor = Descriptor::random(length);
+
+        return Self {
+            smiles,
+            compound_identifier,
+            descriptor,
+            length,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -25,6 +68,7 @@ pub struct Descriptor {
     pub length: usize,
     //pub data: [f32; N],
 }
+
 impl Descriptor {
 
     pub fn distance(&self, other: &Descriptor) -> f32 {
@@ -70,104 +114,6 @@ impl Descriptor {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct TreeRecord {
-    pub dataset_identifier: u8,
-    pub compound_identifier: CompoundIdentifier,
-    pub descriptor: Descriptor,
-    pub length: usize,
-}
-
-impl TreeRecord {
-
-    pub fn default(length: usize) -> Self {
-
-        return Self {
-            dataset_identifier: 0,
-            compound_identifier: CompoundIdentifier::from_str("defaultname"),
-            descriptor: Descriptor {data: vec![0.0; length], length},
-            length,
-        };
-    }
-    
-    pub fn random(length: usize) -> TreeRecord {
-
-        let descriptor = Descriptor::random(length);
-        let identifier = CompoundIdentifier::random();
-
-        let cr = TreeRecord {
-            dataset_identifier: 0,
-            compound_identifier: identifier,
-            descriptor,
-            length,
-        };
-
-        return cr;
-    }
-
-    pub fn get_descriptor_size(&self) -> usize {
-        let descriptor_size: usize = self.length * 4;
-        return descriptor_size;
-    }
-
-    pub fn get_record_size(&self) -> usize {
-        let record_size = layout::DATASET_IDENTIFIER_SIZE + layout::COMPOUND_IDENTIFIER_SIZE + self.get_descriptor_size();
-        return record_size;
-
-    }
-
-    pub fn compute_record_size(length: usize) -> usize {
-        let record_size = layout::DATASET_IDENTIFIER_SIZE + layout::COMPOUND_IDENTIFIER_SIZE + (length * 4);
-        return record_size;
-
-    }
-
-
-    //TODO: handle trailing whitespace
-    pub fn from_slice(record_slice: &[u8], length: usize) -> Result<Self, String> {
-
-        let dataset_identifier = Parser::get_usize_from_array(record_slice, layout::DATASET_IDENTIFIER_START, layout::DATASET_IDENTIFIER_SIZE).unwrap();
-        let compound_identifier = CompoundIdentifier::from_ascii_array(record_slice, layout::COMPOUND_IDENTIFIER_START, layout::COMPOUND_IDENTIFIER_SIZE);
-
-        let descriptor = Parser::get_descriptor_from_array(record_slice, layout::DESCRIPTOR_START, length).unwrap();
-
-        return Ok (Self {
-            dataset_identifier: dataset_identifier as u8,
-            compound_identifier,
-            descriptor,
-            length,
-        })
-    }
-
-
-    pub fn to_vec(&self) -> Vec<u8> {
-
-        let mut vec: Vec<u8> = Vec::with_capacity(self.get_record_size());
-
-        vec.push(self.dataset_identifier as u8);
-
-        let s: AsciiString = AsciiString::from_ascii(self.compound_identifier.0.clone()).unwrap();
-        let b = s.as_bytes();
-
-        let mut arr = [0u8; layout::COMPOUND_IDENTIFIER_SIZE];
-        arr.copy_from_slice(b);
-
-        vec.extend_from_slice(&arr);
-
-        for i in 0..self.length {
-
-            let mut slice = [0u8; 4];
-            BigEndian::write_f32(&mut slice, self.descriptor.data[i]);
-            vec.extend_from_slice(&slice);
-
-        }
-
-        assert!(vec.len() == self.get_record_size());
-        
-        return vec;
-    }
-}
-
 #[derive(PartialEq, Clone)]
 pub struct CompoundIdentifier(pub [u8; IDENTIFIER_SIZE]);
 
@@ -175,7 +121,7 @@ impl CompoundIdentifier {
 
     pub fn from_string(s: String) -> Self {
 
-        assert!(s.len() <= 16);
+        assert!(s.len() <= IDENTIFIER_SIZE);
 
         return Self::from_str(&s);
     }
@@ -300,5 +246,34 @@ pub fn coerce_pointer(value: &[u8]) -> [u8; layout::PTR_SIZE] {
 
 pub fn coerce_f32(value: &[u8]) -> [u8; 4] {
     value.try_into().expect("slice with incorrect length")
+}
+
+#[cfg(test)]
+mod test {
+
+    use super::*;
+
+    #[test]
+    fn make_compound_record() {
+
+        let smiles = "C1=CC=C(C=C1)C(=O)O".to_string();
+        let identifier = CompoundIdentifier::from_string("it's a molecule".to_string());
+        let dataset_identifier = 1;
+        let length = 8;
+        let descriptor = Descriptor::from_vec(vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0], length);
+
+        let cr = CompoundRecord::new(dataset_identifier, smiles, identifier, descriptor, length);
+
+        dbg!(&cr);
+
+        let tr = cr.get_tree_record(&3);
+
+        dbg!(&tr);
+
+
+    }
+
+
+
 }
 

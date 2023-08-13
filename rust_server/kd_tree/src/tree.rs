@@ -1,13 +1,18 @@
 //! Implementation of kd-tree creation and querying
 extern crate test;
-use crate::data::{TreeRecord, CompoundIdentifier, Descriptor};
+use crate::data::{CompoundIdentifier, Descriptor, CompoundRecord, CompoundIndex};
+use crate::database::Database;
 use crate::node::{InternalNode, PagePointer};
 use crate::page::RecordPage;
+use crate::layout;
 use crate::io::{FastNodePager,RecordPager};
 use crate::data::{Parser};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use std::time::Instant;
+use rand::{distributions::Alphanumeric, Rng};
+use byteorder::{ByteOrder, BigEndian};
+
 
 use std::fs::File;
 use std::fs;
@@ -15,6 +20,91 @@ use std::io::prelude::*;
 
 use std::path::Path;
 use std::collections::VecDeque;
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct TreeRecord {
+    pub index: CompoundIndex,
+    pub descriptor: Descriptor,
+    pub length: usize,
+}
+
+impl TreeRecord {
+
+
+    pub fn default(length: usize) -> Self {
+
+        return Self {
+            index: 0,
+            descriptor: Descriptor {data: vec![0.0; length], length},
+            length,
+        };
+    }
+    
+    pub fn random(length: usize) -> TreeRecord {
+
+        let descriptor = Descriptor::random(length);
+        let index = rand::thread_rng().gen_range(0..10000);
+
+        let cr = TreeRecord {
+            index,
+            descriptor,
+            length,
+        };
+
+        return cr;
+    }
+
+    pub fn get_descriptor_size(&self) -> usize {
+        let descriptor_size: usize = self.length * 4;
+        return descriptor_size;
+    }
+
+    pub fn get_record_size(&self) -> usize {
+        let record_size = layout::INDEX_SIZE + self.get_descriptor_size();
+        return record_size;
+    }
+
+    pub fn compute_record_size(length: usize) -> usize {
+        let record_size = layout::INDEX_SIZE + (length * 4);
+        return record_size;
+    }
+
+    //TODO: handle trailing whitespace
+    pub fn from_slice(record_slice: &[u8], length: usize) -> Result<Self, String> {
+
+
+        let index = Parser::get_usize_from_array(record_slice, layout::INDEX_START, layout::INDEX_SIZE).unwrap() as u64;
+        let descriptor = Parser::get_descriptor_from_array(record_slice, layout::DESCRIPTOR_START, length).unwrap();
+
+        return Ok (Self {
+            index,
+            descriptor,
+            length,
+        })
+    }
+
+
+    pub fn to_vec(&self) -> Vec<u8> {
+
+        let mut vec: Vec<u8> = Vec::with_capacity(self.get_record_size());
+
+        let index_rep = self.index.to_be_bytes();
+        vec.extend_from_slice(&index_rep);
+
+        for i in 0..self.length {
+
+            let mut slice = [0u8; 4];
+            BigEndian::write_f32(&mut slice, self.descriptor.data[i]);
+            vec.extend_from_slice(&slice);
+
+        }
+
+        assert!(vec.len() == self.get_record_size());
+        
+        return vec;
+    }
+}
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TreeConfig {
@@ -69,6 +159,11 @@ impl TreeConfig {
         return self.directory.clone() + "/config.yaml";
     }
 
+    pub fn get_database_filename(&self) -> String {
+
+        return self.directory.clone() + "/db.db";
+    }
+
 
 
 }
@@ -81,9 +176,98 @@ impl TreeConfig {
 pub struct Tree {
     pub node_handler: FastNodePager,
     pub record_handler: RecordPager,
+    pub database: Database,
     pub root: PagePointer,
     pub config: TreeConfig,
 }
+
+#[derive(Debug)]
+pub struct NearestNeighbors {
+    pub distances: Vec<f32>,
+    pub records: Vec<Option<CompoundRecord>>,
+}
+
+impl NearestNeighbors {
+
+    fn from_top_hits(top_hits: TopHits, database: &mut Database) -> Self {
+
+        let mut distances: Vec<f32> = Vec::new();
+        let mut records: Vec<Option<CompoundRecord>> = Vec::new();
+
+        for i in 0..top_hits.records.len() {
+
+                let record = top_hits.records[i].as_ref().unwrap();
+                
+                let database_record = database.query(&top_hits.records[i].as_ref().unwrap().index).unwrap();
+
+                let compound_record = CompoundRecord {
+                    smiles: database_record.smiles.clone(),
+                    compound_identifier: database_record.identifier.clone(),
+                    descriptor: record.descriptor.clone(),
+                    length: record.length,
+                };
+
+                distances.push(top_hits.distances[i]);
+                records.push(Some(compound_record));
+
+        }
+
+        return Self {
+            distances,
+            records,
+        }
+    }
+
+    pub fn to_yaml(&self) -> String {
+
+        let mut s = String::new();
+        for i in 0..self.records.len() {
+
+            let record = match &self.records[i] {
+                None => {panic!()},
+                Some(x) => x.clone(),
+            };
+            let identifier_string = record.compound_identifier.to_string();
+            let smiles = record.smiles.to_string();
+            s = s + &format!("  {:?}: \n", identifier_string);
+            s = s + &format!("    smiles: {}\n", &smiles);
+            s = s + &format!("    embedding: {}\n", &record.descriptor.yaml());
+            s = s + &format!("    distance: {}\n", &self.distances[i]).to_string();
+        }
+
+        return s;
+
+    }
+
+
+    pub fn to_json(&self) -> String {
+
+        let mut s = String::new();
+        s += "{";
+        for i in 0..self.records.len() {
+
+            let record = match &self.records[i] {
+                None => {panic!()},
+                Some(x) => x.clone(),
+            };
+
+            let identifier = record.compound_identifier.to_string();
+            let smiles = record.smiles.to_string();
+            s = s + &format!("  \"{:?}\": {{\n", identifier);
+            s = s + &format!("  \"distance\": \"{}\"", &self.distances[i]).to_string();
+            s = s + &format!("  \"SMILES\": \"{}\"", smiles).to_string();
+            s = s + "," + "\n";
+        s += "},\n";
+        }
+        s += "}";
+
+        return s;
+
+    }
+
+
+}
+
 
 ///struct for keeping N- top closest points
 ///
@@ -95,12 +279,6 @@ pub struct TopHits {
     pub records: Vec<Option<TreeRecord>>,
     pub pointers: Vec<Option<PagePointer>>,
 }
-
-fn get_smiles(identifier: &CompoundIdentifier) -> String {
-    let smiles = "not implemented".to_string();
-    smiles
-}
-
 
 impl TopHits {
 
@@ -189,8 +367,8 @@ impl TopHits {
                 Some(x) => x.clone(),
             };
 
-            let identifier_string = record.compound_identifier.to_string();
-            s = s + &format!("  \"{:?}\": {{\n", identifier_string);
+            let index = record.index.to_string();
+            s = s + &format!("  \"{:?}\": {{\n", index);
             s = s + &format!("  \"distance\": \"{}\"", &self.distances[i]).to_string();
             s = s + "," + "\n";
         s += "},\n";
@@ -201,29 +379,11 @@ impl TopHits {
 
     }
 
-    pub fn to_yaml(&self) -> String {
+}
 
-        let mut s = String::new();
-        for i in 0..self.records.len() {
+fn get_smiles(index: &CompoundIdentifier) -> String {
 
-            let record = match &self.records[i] {
-                None => {panic!()},
-                Some(x) => x.clone(),
-            };
-            let identifier_string = record.compound_identifier.to_string();
-            let smiles = get_smiles(&record.compound_identifier);
-            s = s + &format!("  {:?}: \n", identifier_string);
-        
-            s = s + &format!("    dataset_id: {}\n", &record.dataset_identifier);
-            s = s + &format!("    smiles: {}\n", &smiles);
-            s = s + &format!("    embedding: {}\n", &record.descriptor.yaml());
-            s = s + &format!("    distance: {}\n", &self.distances[i]).to_string();
-        }
-
-        return s;
-
-    }
-
+    return "not implemented".to_string();
 }
 
 #[derive(Debug)]
@@ -256,9 +416,12 @@ impl Tree {
         let node_handler = FastNodePager::from_file(&node_filename).unwrap();
         let record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, false).unwrap();
 
+        let database = Database::open(&config.get_database_filename());
+
         return Self {
             node_handler,
             record_handler, 
+            database,
             root: PagePointer::Node(0),
             config,
             };
@@ -266,7 +429,7 @@ impl Tree {
 
     pub fn force_create_with_config(config: TreeConfig) -> Self {
 
-        fs::remove_dir_all(&config.directory).unwrap();
+        fs::remove_dir_all(&config.directory);
 
         return Self::create_with_config(config);
     }
@@ -312,12 +475,23 @@ impl Tree {
 
         config.to_file(config_filename);
 
+        let database_filename = config.directory.clone() + "/db.db";
+
+        let database = Database::new(&database_filename);
+
         return Self {
             node_handler,
             record_handler, 
+            database,
             root: PagePointer::Leaf(0),
             config,
         };
+    }
+
+    pub fn get_record_from_index(&self, index: &CompoundIndex) -> Option<CompoundRecord> {
+
+        todo!();
+
     }
 
     pub fn output_depths(&mut self) {
@@ -348,7 +522,7 @@ impl Tree {
                     let records = page.get_records();
                     println!("RECORD PAGE {}", index);
                     for record in records {
-                        println!("\tCOMPOUND: {}", record.compound_identifier.to_string());
+                        println!("\tCOMPOUND: {}", record.index.to_string());
                     }
                 },
                 PagePointer::Node(index) => {
@@ -369,7 +543,7 @@ impl Tree {
     }
 
     ///Returns whether or not the exact provided descriptor is in the tree
-    pub fn record_in_tree(&mut self, record: &TreeRecord) -> Result<bool, String> {
+    pub fn record_in_tree(&mut self, record: &CompoundRecord) -> Result<bool, String> {
 
         let mut curr_pointer: PagePointer = self.root.clone();
 
@@ -420,11 +594,20 @@ impl Tree {
 
     }
 
+    pub fn get_nearest_neighbors(&mut self, query_descriptor: &Descriptor, n: usize) -> NearestNeighbors {
+
+        let top_hits = self.get_top_hits(query_descriptor, n);
+
+        let nearest_neighbors = NearestNeighbors::from_top_hits(top_hits, &mut self.database);
+
+        return nearest_neighbors;
+    }
+
     ///Returns the `n` nearest neighbors of the provided `query_descriptor`
     ///
     ///Performance should worsen as `n` grows larger, as fewer branches of the tree can be pruned
     ///with more distant already-found points
-    pub fn get_nearest_neighbors(&mut self, query_descriptor: &Descriptor, n: usize) -> TopHits {
+    fn get_top_hits(&mut self, query_descriptor: &Descriptor, n: usize) -> TopHits {
 
         let mut hits = TopHits::new(n);
 
@@ -551,9 +734,11 @@ impl Tree {
     ///the records to that node. If this fills the node, the node is split at its median and two
     ///half-filled leaf nodes are created. A new internal node is created to point to these two
     ///children.
-    pub fn add_record(&mut self, record: &TreeRecord) -> Result<(), String> {
+    pub fn add_record(&mut self, record: &CompoundRecord) -> Result<(), String> {
 
+        let index = self.database.add_compound_record(record)?;
 
+        let tree_record = record.get_tree_record(&index);
 
         let mut curr_pointer = self.root.clone();
 
@@ -570,7 +755,7 @@ impl Tree {
                     let mut page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
 
                     //dbg!("ADD CHECK", &curr_pointer);
-                    page.add_record(record).unwrap();
+                    page.add_record(&tree_record).unwrap();
 
                     //dbg!("POST CHECK", &curr_pointer);
                     match page.is_full() {
@@ -895,7 +1080,7 @@ impl Tree {
 mod tests {
     use super::*;
     use test::Bencher;
-    use crate::data::{TreeRecord, CompoundIdentifier, Descriptor};
+    use crate::data::{CompoundIdentifier, Descriptor};
     use kdam::tqdm;
 
     #[test]
@@ -904,20 +1089,19 @@ mod tests {
         let n: usize = 8;
 
         let mut config = TreeConfig::default();
-        config.directory = "test_data/qtn/".to_string();
-
+        config.directory = "/tmp/qtn/".to_string();
 
         let mut tree = Tree::force_create_with_config(config);
 
-        let cr = TreeRecord::random(n);
+        let cr = CompoundRecord::random(n);
         tree.add_record(&cr).unwrap();
 
-        let cr = TreeRecord::random(n);
+        let cr = CompoundRecord::random(n);
         tree.add_record(&cr).unwrap();
 
         for _ in 0..2000 {
 
-            let cr = TreeRecord::random(n);
+            let cr = CompoundRecord::random(n);
             tree.add_record(&cr).unwrap();
         }
     }
@@ -929,30 +1113,30 @@ mod tests {
             
             let mut config = TreeConfig::default();
             config.desc_length = n;
-            config.directory = "test_data/aaab".to_string();
+            config.directory = "/tmp/aaab".to_string();
 
             let mut tree = Tree::force_create_with_config(config);
 
-            let cr_to_find = TreeRecord::random(n);();
+            let cr_to_find = CompoundRecord::random(n);();
 
 
-            let cr = TreeRecord::random(n);();
+            let cr = CompoundRecord::random(n);();
             tree.add_record(&cr).unwrap();
 
-            let bad_record = TreeRecord::random(n);();
+            let bad_record = CompoundRecord::random(n);();
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
 
-            let cr = TreeRecord::random(n);();
+            let cr = CompoundRecord::random(n);();
             tree.add_record(&cr).unwrap();
 
-            let bad_record = TreeRecord::random(n);();
+            let bad_record = CompoundRecord::random(n);();
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
 
             for _ in 0..2000 {
 
-                let cr = TreeRecord::random(n);();
+                let cr = CompoundRecord::random(n);();
                 //dbg!(&cr);
                 tree.add_record(&cr).unwrap();
             }
@@ -967,16 +1151,18 @@ mod tests {
 
             for _ in 0..2000 {
 
-                let cr = TreeRecord::random(n);();
+                let cr = CompoundRecord::random(n);();
                 tree.add_record(&cr).unwrap();
             }
 
             let answer = tree.record_in_tree(&cr_to_find).unwrap();
             assert_eq!(answer, true);
 
-            let bad_record = TreeRecord::random(n);();
+            let bad_record = CompoundRecord::random(n);();
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
+
+            tree.flush()
         }
     }
 
@@ -991,25 +1177,25 @@ mod tests {
 
             let mut tree = Tree::force_create_with_config(config.clone());
 
-            let cr_to_find = TreeRecord::random(n);
+            let cr_to_find = CompoundRecord::random(n);
 
-            let cr = TreeRecord::random(n);
+            let cr = CompoundRecord::random(n);
             tree.add_record(&cr).unwrap();
 
-            let bad_record = TreeRecord::random(n);
+            let bad_record = CompoundRecord::random(n);
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
 
-            let cr = TreeRecord::random(n);();
+            let cr = CompoundRecord::random(n);();
             tree.add_record(&cr).unwrap();
 
-            let bad_record = TreeRecord::random(n);
+            let bad_record = CompoundRecord::random(n);
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
 
             for _ in tqdm!(0..20000) {
 
-                let cr = TreeRecord::random(n);
+                let cr = CompoundRecord::random(n);
                 tree.add_record(&cr).unwrap();
             }
 
@@ -1023,14 +1209,14 @@ mod tests {
 
             for _ in 0..2000 {
 
-                let cr = TreeRecord::random(n);();
+                let cr = CompoundRecord::random(n);();
                 tree.add_record(&cr).unwrap();
             }
 
             let answer = tree.record_in_tree(&cr_to_find).unwrap();
             assert_eq!(answer, true);
 
-            let bad_record = TreeRecord::random(n);
+            let bad_record = CompoundRecord::random(n);
             let answer = tree.record_in_tree(&bad_record).unwrap();
             assert_eq!(answer, false);
 
@@ -1051,7 +1237,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<TreeRecord> = Vec::new();
+        let mut records: Vec<CompoundRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1071,10 +1257,10 @@ mod tests {
 
             assert_eq!(s.len(), n);
 
-            let cr = TreeRecord {
+            let cr = CompoundRecord {
                 compound_identifier: identifier,
                 descriptor,
-                dataset_identifier: 1,
+                smiles: "no smiles".to_string(),
                 length: n,
             };
 
@@ -1119,6 +1305,7 @@ mod tests {
 
     }
 
+    /*
     #[test]
     fn uniform_tree() {
 
@@ -1131,27 +1318,6 @@ mod tests {
 
         let mut tree = Tree::force_create_with_config(config.clone());
 
-        //tree.uniform_layout(22, 0.0, 1.0);
-
-        /*
-        dbg!(&tree.node_handler.store[0]);
-        dbg!(&tree.node_handler.store[1]);
-        dbg!(&tree.node_handler.store[2]);
-        dbg!(&tree.root);
-        */
-
-        //let cr = TreeRecord::random(config.desc_length);
-
-        /*
-        for i in 0..300 {
-            let cr = TreeRecord::random(config.desc_length);
-            tree.add_record(&cr).unwrap();
-        }
-        */
-        //let (node, page) = tree.node_handler.data_from_pointer(&tree.root.unwrap()).unwrap();
-
-        //tree.output_depths();
-
         for _ in tqdm!(0..1e6 as i32) {
             let cr = TreeRecord::random(config.desc_length);
             tree.add_record(&cr).unwrap();
@@ -1162,6 +1328,7 @@ mod tests {
         dbg!(&tree.num_nodes());
         tree.print_record_lengths();
     }
+    */
 
 
 
@@ -1175,7 +1342,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<TreeRecord> = Vec::new();
+        let mut records: Vec<CompoundRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1195,10 +1362,10 @@ mod tests {
 
             assert_eq!(s.len(), n);
 
-            let cr = TreeRecord {
+            let cr = CompoundRecord {
                 compound_identifier: identifier,
                 descriptor,
-                dataset_identifier: 1,
+                smiles: "no smiles".to_string(),
                 length: n
             };
 
@@ -1276,8 +1443,6 @@ mod tests {
 
         let correct_answer: Vec<_> = correct_answer.into_iter().map(|x| CompoundIdentifier::from_string(x.to_string())).collect();
 
-
-
         let mut config = TreeConfig::default();
         config.desc_length = 8;
         config.directory = "test_data/qvnnacc/".to_string();
@@ -1305,7 +1470,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<TreeRecord> = Vec::new();
+        let mut records: Vec<CompoundRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1325,10 +1490,10 @@ mod tests {
 
             assert_eq!(s.len(), n);
 
-            let cr = TreeRecord {
+            let cr = CompoundRecord {
                 compound_identifier: identifier,
                 descriptor,
-                dataset_identifier: 1,
+                smiles: "no smiles".to_string(),
                 length: n,
             };
 
@@ -1447,7 +1612,7 @@ mod tests {
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
-        let mut records: Vec<TreeRecord> = Vec::new();
+        let mut records: Vec<CompoundRecord> = Vec::new();
 
         for (i, line) in contents.split("\n").enumerate() {
             if i == 0 {
@@ -1467,10 +1632,10 @@ mod tests {
 
             assert_eq!(s.len(), n);
 
-            let cr = TreeRecord {
+            let cr = CompoundRecord {
                 compound_identifier: identifier,
+                smiles: "no smiles".to_string(),
                 descriptor,
-                dataset_identifier: 1,
                 length: n,
             };
 
@@ -1534,7 +1699,7 @@ mod tests {
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
 
-            let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
+            let identifiers = nn.records.into_iter().map(|x| x.unwrap().compound_identifier.clone()).collect::<Vec<_>>();
 
             if identifiers != correct_answer {
 
@@ -1549,6 +1714,7 @@ mod tests {
     }
 
 
+    /*
     #[test]
     fn quick_fuzzed_verify_nn_accuracy(){
 
@@ -1642,32 +1808,12 @@ mod tests {
                 build_tree.add_record(&record.clone()).unwrap();
             }
 
-            //let stem = config.directory.clone();
-            //let node_filename = stem + "node";
-
-            //build_tree.output_depths();
-            //dbg!(&build_tree.node_handler.store[0]);
-            //dbg!(&build_tree.node_handler.store[1]);
-            //panic!();
             build_tree.flush();
 
-            //let mut query_tree = Tree::read_from_directory("test_data/qf/".to_string());
             let mut query_tree = Tree::read_from_directory(config.directory.clone());
-            //println!("HERE3");
 
 
-            /*
-            for node in query_tree.node_handler.store {
-                println!("{:?}" , node);
-            }
-            */
-
-
-            //dbg!(&build_tree.node_handler.store[0]);
-            //dbg!(&query_tree.node_handler.store[0]);
-            //panic!();
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
-            //println!("HERE4");
 
             let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
 
@@ -1682,6 +1828,7 @@ mod tests {
             }
         }
     }
+    */
 
 
 

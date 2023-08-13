@@ -6,7 +6,7 @@ use kdam::tqdm;
 
 use rand::Rng;
 
-use crate::data::{MAX_SMILES_LENGTH, MAX_IDENTIFIER_LENGTH};
+use crate::data::{MAX_SMILES_LENGTH, MAX_IDENTIFIER_LENGTH, CompoundRecord, CompoundIdentifier};
 
 
 pub const ENTRIES_START: usize = 0;
@@ -21,9 +21,20 @@ pub const ID_SIZE: usize = MAX_IDENTIFIER_LENGTH;
 pub const DATABASE_ENTRY_SIZE: usize = ENTRIES_SIZE + SMILES_SIZE + ID_SIZE;
 
 #[derive(Debug, PartialEq, Clone)]
-struct DatabaseRecord {
-    smiles: String,
-    identifier: String,
+pub struct DatabaseRecord {
+    pub smiles: String,
+    pub identifier: CompoundIdentifier,
+}
+
+impl From<CompoundRecord> for DatabaseRecord {
+
+    fn from(record: CompoundRecord) -> Self {
+
+        DatabaseRecord {
+            smiles: record.smiles,
+            identifier: record.compound_identifier,
+        }
+    }
 }
 
 impl DatabaseRecord {
@@ -54,7 +65,7 @@ impl DatabaseRecord {
 
         return Ok(DatabaseRecord {
             smiles: smiles.to_string(),
-            identifier: identifier.to_string(),
+            identifier: CompoundIdentifier::from_str(identifier),
         });
     }
 
@@ -75,8 +86,8 @@ impl DatabaseRecord {
 
         let mut fill_arr = [0u8; ID_SIZE];
 
-        let bytes = self.identifier.as_bytes();
-
+        let identifier = self.identifier.to_string();
+        let bytes = identifier.as_bytes();
 
         fill_arr[..bytes.len()].copy_from_slice(bytes);
 
@@ -101,7 +112,7 @@ impl DatabaseRecord {
 
         DatabaseRecord {
             smiles: smiles.to_string(),
-            identifier: identifier.to_string(),
+            identifier: CompoundIdentifier::from_str(identifier),
         }
     }
 
@@ -117,11 +128,7 @@ impl DatabaseRecord {
             .map(char::from)
             .collect();
 
-        let identifier: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(10)
-            .map(char::from)
-            .collect();
+        let identifier = CompoundIdentifier::random();
 
         DatabaseRecord {
             smiles: smiles,
@@ -132,15 +139,15 @@ impl DatabaseRecord {
 }
 
 #[derive(Debug)]
-struct Database {
+pub struct Database {
     filename: String,
     fd: File,
-    num_entries: usize,
+    num_entries: u64,
 }
 
 impl Database {
 
-    fn new(filename: &str) -> Self {
+    pub fn new(filename: &str) -> Self {
 
         let path = Path::new(filename);
 
@@ -158,7 +165,7 @@ impl Database {
         }
     }
 
-    fn open(filename: &str) -> Self {
+    pub fn open(filename: &str) -> Self {
 
         let path = Path::new(filename);
 
@@ -173,7 +180,7 @@ impl Database {
         fd.seek(SeekFrom::Start(ENTRIES_START as u64)).unwrap();
         fd.read(&mut buf).unwrap();
 
-        let num_entries = u64::from_le_bytes(buf) as usize;
+        let num_entries = u64::from_le_bytes(buf);
 
         Database {
             filename: filename.to_string(),
@@ -181,8 +188,14 @@ impl Database {
             num_entries: num_entries,
         }
     }
+    pub fn add_compound_record(&mut self, entry: &CompoundRecord) -> Result<u64, String> {
 
-    fn add_entry(&mut self, entry: &DatabaseRecord) -> Result<usize, String> {
+        let database_record = DatabaseRecord::from(entry.clone());
+
+        return self.add_entry(&database_record);
+    }
+
+    fn add_entry(&mut self, entry: &DatabaseRecord) -> Result<u64, String> {
 
         let arr = entry.to_arr();
 
@@ -204,16 +217,16 @@ impl Database {
         return Ok(return_idx);
     }
 
-    fn query(&mut self, id: u64) -> DatabaseRecord {
+    pub fn query(&mut self, id: &u64) -> Option<DatabaseRecord> {
 
         let mut buf = [0u8; DATABASE_ENTRY_SIZE];
             
-        self.fd.seek(SeekFrom::Start((id as u64) * (DATABASE_ENTRY_SIZE as u64))).unwrap();
+        self.fd.seek(SeekFrom::Start((id) * (DATABASE_ENTRY_SIZE as u64))).unwrap();
         self.fd.read(&mut buf).unwrap();
 
         let entry = DatabaseRecord::from_arr(buf);
 
-        return entry
+        return Some(entry);
     }
 }
 
@@ -233,7 +246,7 @@ fn main() {
 
     println!("Running queries");
     for idx in tqdm!(indices.into_iter()) {
-        database.query(idx);
+        database.query(&idx);
     }
 }
 
@@ -312,7 +325,7 @@ mod tests {
         }
 
         for (idx, entry) in reported_entries.into_iter() {
-            let queried_entry = database.query(idx);
+            let queried_entry = database.query(&idx).unwrap();
             assert_eq!(queried_entry, entry);
         }
 
