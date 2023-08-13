@@ -596,6 +596,7 @@ impl Tree {
     pub fn get_nearest_neighbors(&mut self, query_descriptor: &Descriptor, n: usize) -> NearestNeighbors {
 
         let top_hits = self.get_top_hits(query_descriptor, n);
+        dbg!("BETWEEN");
 
         let nearest_neighbors = NearestNeighbors::from_top_hits(top_hits, &mut self.database);
 
@@ -643,13 +644,10 @@ impl Tree {
 
                             num_record_pages_visited += 1;
 
-                            //let page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
-                            let page: RecordPage = self.record_handler.get_record_page_no_cache(&index).unwrap();
+                            let page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
 
                             for record in page.get_records() {
                                 let dist = query_descriptor.distance(&record.descriptor);
-
-                                //println!("TRY ADD: {:?}", record.compound_identifier.to_string());
 
                                 hits.try_add(dist, &record, &curr_pointer).unwrap();
                             }
@@ -1173,7 +1171,7 @@ mod tests {
 
             let mut config = TreeConfig::default();
             config.desc_length = n;
-            config.directory = "test_data/aaaa".to_string();
+            config.directory = "/tmp/aaaa".to_string();
 
             let mut tree = Tree::force_create_with_config(config.clone());
 
@@ -1466,7 +1464,7 @@ mod tests {
         use::std::fs::File;
         use std::io::prelude::*;
 
-        let mut file = File::open("test_data/random_descriptors.txt").unwrap();
+        let mut file = File::open("test_data/random_descriptors.txt").expect("Didn't find source file");
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
 
