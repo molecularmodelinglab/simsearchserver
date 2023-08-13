@@ -8,7 +8,7 @@ fn main() {
 }
 
 fn single_query() {
-    let directory = "/pool/smallsa/trees/8dim".to_string();
+    let directory = "/pool/together/".to_string();
 
     let mut tree = tree::Tree::read_from_directory(directory.clone());
 
@@ -22,7 +22,6 @@ fn single_query() {
 
 
     let nn = tree.get_nearest_neighbors(&descriptor, 10);
-    //tree.output_depths();
 
     dbg!(&nn);
 

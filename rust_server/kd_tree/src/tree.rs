@@ -491,6 +491,7 @@ impl Tree {
     pub fn get_record_page(&mut self, index: &usize) -> RecordPage {
 
         return self.record_handler.get_record_page(index).unwrap();
+    }
 
     pub fn output_depths(&mut self) {
 

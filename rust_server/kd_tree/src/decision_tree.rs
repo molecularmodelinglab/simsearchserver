@@ -1,7 +1,8 @@
 use std::fs::File;
 use std::io::prelude::*;
-use crate::node::{CompoundRecord, PagePointer};
-use crate::tree::{Tree, TreeConfig};
+use crate::node::{PagePointer};
+use crate::data::{CompoundRecord};
+use crate::tree::{Tree, TreeConfig, TreeRecord};
 use crate::page::RecordPage;
 use std::collections::{HashMap, VecDeque};
 
@@ -156,7 +157,7 @@ impl QuerySet {
 
 }
 
-pub fn check_record(query: &RangeQuery, record: &CompoundRecord) -> bool {
+pub fn check_record(query: &RangeQuery, record: &TreeRecord) -> bool {
 
 
     for i in 0..record.descriptor.data.len() {
@@ -228,7 +229,7 @@ pub fn run_range_query(tree: &mut Tree , query: &RangeQuery) -> Vec<CompoundReco
 
                         if check_record(&query, &record) {
                             //hits.push(record.clone());
-                            println!("HIT: {:?}", record.compound_identifier.to_string());
+                            println!("HIT: {:?}", record.index.to_string());
                             println!("HIT: {:?}", record.descriptor);
                             hit_count += 1;
                         }

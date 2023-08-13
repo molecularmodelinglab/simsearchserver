@@ -42,10 +42,6 @@ struct Args {
 
 fn main() {
 
-    build_from_smallsa_files();
-
-
-    /*
     let args = Args::parse();
     dbg!(&args);
 
@@ -55,8 +51,6 @@ fn main() {
         "param_sweep" => param_sweep(),
         _ => panic!("Unknown task: {}", args.task),
     }
-    */
-
 
 }
 
@@ -153,8 +147,8 @@ fn build_from_smallsa_files() {
                 //dbg!(&identifier);
 
                 let record = CompoundRecord{ 
-                    dataset_identifier: '0' as u8,
                     compound_identifier: identifier, 
+                    smiles: "no smiles".to_string(),
                     descriptor,
                     length: config.desc_length,};
 
@@ -165,28 +159,21 @@ fn build_from_smallsa_files() {
         }
 
     }
+
     tree.flush();
-
-
-
-
 }
 
 fn build_from_file(args: Args) {
 
-    let mut config = tree::TreeConfig::from_file(config_filename);
+
+    let mut config = tree::TreeConfig::default();
 
     config.desc_length = 8;
-    config.directory = "/pool/merge_test".to_string();
+    config.directory = args.output_dirname.unwrap();
 
-    let database_filename = config.directory.clone() + "/db.db";
-
-    let mut database = Database::new(&database_filename);
-
-
+    let mut tree = tree::Tree::create_with_config(config.clone());
 
     let n = 8;
-    use::std::fs::File;
     use std::io::prelude::*;
 
     let mut file = File::open("/home/josh/git/simsearchserver/rust_server/builder/test_full_data.csv").unwrap();
@@ -225,28 +212,9 @@ fn build_from_file(args: Args) {
 
         let cr = CompoundRecord::new(0, smiles, identifier, descriptor, n);
 
-        let idx = database.add_compound_record(&cr);
-
-        let idx = match idx {
-            Ok(idx) => idx,
-            Err(e) => {
-                dbg!(e);
-                continue;
-            }
-        };
-
         tree.add_record(&cr);
     }
     tree.flush();
-
-    //dbg!(&records.len());
-    //dbg!(&records[0]);
-
-
-    //for record in tqdm!(records.iter()) {
-        //tree.add_record(&record).unwrap();
-    //}
-
 
 }
 
