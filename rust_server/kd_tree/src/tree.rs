@@ -318,6 +318,11 @@ impl Tree {
         };
     }
 
+    pub fn get_record_page(&mut self, index: &usize) -> RecordPage {
+
+        return self.record_handler.get_record_page(index).unwrap();
+    }
+
     pub fn output_depths(&mut self) {
 
         let mut nodes_to_check: VecDeque<(PagePointer, usize)> = VecDeque::new();
@@ -463,7 +468,8 @@ impl Tree {
 
                             num_record_pages_visited += 1;
 
-                            let page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
+                            //let page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
+                            let page: RecordPage = self.record_handler.get_record_page_no_cache(&index).unwrap();
 
                             for record in page.get_records() {
                                 let dist = query_descriptor.distance(&record.descriptor);

@@ -26,4 +26,5 @@ pub mod layout;
 pub mod io;
 pub mod page;
 pub mod tree;
+pub mod decision_tree;
 //pub mod memory_tree;

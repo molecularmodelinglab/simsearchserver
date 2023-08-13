@@ -9,3 +9,4 @@ hyper = {version = "0.14", features = ["full"]}
 tokio = {version = "*", features = ["full"]}
 bytes = "*"
 rand = "*"
+clap = { version = "4.3.0", features = ["derive"] }

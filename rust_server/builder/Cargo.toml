@@ -11,3 +11,5 @@ kdam = "*"
 rand = "*"
 log = "*"
 env_logger = "*"
+glob = "*"
+clap = { version = "4.3.0", features = ["derive"] }

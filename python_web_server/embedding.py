@@ -26,7 +26,32 @@ def embed_morgan_pca_16(mol):
 def embed_smallsa_16():
     pass
 
-def embed_smallsa_8():
-    pass
+def embed_smallsa_8(mol):
+
+    from rdkit import Chem
+
+    smiles = Chem.MolToSmiles(mol)
+
+
+    if len(smiles) > 100:
+        raise Exception("SMILES TOO BIG")
+
+
+    import sys
+    sys.path.append("/home/josh/git/simsearchserver/salsa_test/salsa")
+    from salsa.chef import serve_salsa
+
+    import pandas as pd
+    df = pd.DataFrame([smiles], columns=['Smiles'])
+    print(df)
+
+    ds, latents = serve_salsa(df, "/home/josh/git/simsearchserver/salsa_test/models/10_202305151532")
+
+    print(latents)
+    print(latents.shape)
+
+
+    return latents
+
 
 

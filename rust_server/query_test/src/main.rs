@@ -8,19 +8,21 @@ fn main() {
 }
 
 fn single_query() {
-    let directory = "/home/josh/db/builder_test_12".to_string();
+    let directory = "/pool/smallsa/trees/8dim".to_string();
 
     let mut tree = tree::Tree::read_from_directory(directory.clone());
 
-    let descriptor = node::Descriptor::random(tree.config.desc_length);
+    let mut descriptor = node::Descriptor::random(tree.config.desc_length);
     dbg!(&descriptor);
 
 
+    descriptor.data = vec![-0.06, -0.03, 0.358, -0.03, 0.381, 0.049, 0.797, 0.298];
 
-    let nn = tree.get_nearest_neighbors(&descriptor, 1000);
+
+    let nn = tree.get_nearest_neighbors(&descriptor, 10);
     //tree.output_depths();
 
-    //dbg!(&nn);
+    dbg!(&nn);
 
 }
 

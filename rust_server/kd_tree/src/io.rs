@@ -233,6 +233,12 @@ impl RecordPager {
         return retval;
     }
 
+    pub fn get_record_page_no_cache(&mut self, address: &usize) -> Result<RecordPage, Error> {
+
+        let page = self._read_record_page(address)?;
+        Ok(page)
+    }
+
     pub fn _read_record_page(&mut self, address: &usize) -> Result<RecordPage, Error> {
 
         //let mut page: [u8; self.length] = [0x00; self.length];
