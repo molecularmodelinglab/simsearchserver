@@ -10,6 +10,25 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use hyper::server::Server;
 
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+
+    //Dirname containing tree
+    #[arg(short, long)]
+    dirname: String,
+
+    //Port to listen on
+    #[arg(short, long)]
+    port: Option<u16>,
+
+
+
+}
+
+
 async fn get_nn(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Response<Body>, Infallible> {
 
     let path = req.uri().path().to_string();
@@ -130,10 +149,19 @@ fn get_smiles_embedding(smiles: &String, len: usize) -> Descriptor {
 #[tokio::main]
 pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
-    let directory = std::env::args().nth(1).expect("No directory specified");
+    let args = Args::parse();
+    dbg!(&args);
+
+    let port = match args.port {
+        Some(p) => p,
+        None => 3000,
+    };
+
+
+    //let directory = std::env::args().nth(1).expect("No directory specified");
     
     //let directory = "/pool/1_bil_16".to_string();
-    let tree = Arc::new(Mutex::new(tree::Tree::read_from_directory(directory)));
+    let tree = Arc::new(Mutex::new(tree::Tree::read_from_directory(args.dirname)));
     //pretty_env_logger::init();
 
     // For every connection, we must make a `Service` to handle all
@@ -150,7 +178,7 @@ pub async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             ))}
     });
 
-    let addr = ([127, 0, 0, 1], 3000).into();
+    let addr = ([127, 0, 0, 1], port).into();
     //let addr = ([127, 0, 0, 1], layout::DESCRIPTOR_LENGTH0).into();
 
     let server = Server::bind(&addr).serve(make_svc);

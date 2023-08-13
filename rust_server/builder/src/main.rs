@@ -3,10 +3,60 @@ use kd_tree::database::{Database, DatabaseRecord};
 
 use kdam::tqdm;
 use kd_tree::tree;
+use glob::glob;
+use::std::fs::File;
+use std::io::prelude::*;
+use std::io::{self, BufRead};
+use std::path::Path;
+
+
+// The output is wrapped in a Result to allow matching on errors
+// Returns an Iterator to the Reader of the lines of the file.
+fn read_lines<P>(filename: P) -> io::Result<io::Lines<io::BufReader<File>>>
+where P: AsRef<Path>, {
+    let file = File::open(filename)?;
+    Ok(io::BufReader::new(file).lines())
+}
+
+
+use clap::Parser;
+#[derive(Parser, Debug)] #[command(author, version, about, long_about = None)]
+struct Args {
+
+    //Which task to carry out
+    #[arg(short, long)]
+    task: String,
+
+    //Input filename if task is build_from_file
+    #[arg(short, long)]
+    input_filename: Option<String>,
+
+    //Output dirname if task is build_from_file
+    #[arg(short, long)]
+    output_dirname: Option<String>,
+
+    //Dim if task is build_from_file
+    #[arg(short, long)]
+    dim: Option<usize>,
+}
 
 fn main() {
 
-    build_from_file();
+    build_from_smallsa_files();
+
+
+    /*
+    let args = Args::parse();
+    dbg!(&args);
+
+    match args.task.as_str() {
+        "build_from_file" => build_from_file(args),
+        "build_single" => build_single(),
+        "param_sweep" => param_sweep(),
+        _ => panic!("Unknown task: {}", args.task),
+    }
+    */
+
 
 }
 
@@ -37,9 +87,92 @@ fn build_single() {
     tree.flush();
 }
 
-fn build_from_file() {
+fn build_from_smallsa_files() {
 
-    let config_filename = "/home/josh/git/simsearchserver/rust_server/build_config.yaml".to_string();
+    let mut config = tree::TreeConfig::default();
+    config.desc_length = 16;
+    config.record_page_length = 16384;
+    config.directory = "/pool/smallsa/trees/16dim_16384/".to_string();
+    let mut tree = tree::Tree::force_create_with_config(config.clone());
+
+    let mut filenames: Vec<String> = glob("/pool/smallsa/16dim/*clean").expect("Glob failed").map(|x| x.unwrap().into_os_string().into_string().unwrap()).collect();
+
+    filenames.reverse();
+
+    for filename in filenames.iter(){
+
+        let clean_filename = filename.clone();
+        dbg!(&clean_filename);
+
+        let stem = clean_filename.split("/").last().unwrap().split("_").next().unwrap().clone();
+        dbg!(stem);
+        let lines = read_lines(&clean_filename).unwrap();
+
+        let mut counter = -1;
+        for line in lines {
+            if let Ok(good_line) = line {
+                if counter == -1 {
+                    counter += 1;
+                    continue;
+                }
+
+                //println!("{}", good_line);
+                let mut s = good_line.split(",");
+
+                let fields: Vec<&str> = s.collect();
+
+                match fields.len() {
+                    7 => {},
+                    _ => {
+                        println!("Skipping line due to bad fields: {}", good_line);
+                        continue;
+                    }
+                }
+                let id_val = fields[0];
+                let latent_string = fields[6];
+                let latent_string = latent_string.replace('"', "");
+                let latent_string = latent_string.replace("\\", "");
+                let latent_string = latent_string.replace("[", "");
+                let latent_string = latent_string.replace("]", "");
+
+                let split: Vec<&str> = latent_string.split_whitespace().collect();
+                let desc = split.iter().filter_map(|x| x.parse::<f32>().ok()).collect::<Vec<f32>>();
+                match desc.len() == config.desc_length {
+                    true => {},
+                    false => {
+                        dbg!(desc);
+                        println!("Skipping line due to bad descriptor: {}", good_line);
+                        continue;
+                    }
+                }
+                let descriptor = Descriptor{ data: desc.clone(), length: config.desc_length};
+                let id_string = format!("{}{}", stem, id_val);
+                //dbg!(&id_string);
+                let identifier = CompoundIdentifier::from_string(id_string);
+                //dbg!(desc);
+                //dbg!(&identifier);
+
+                let record = CompoundRecord{ 
+                    dataset_identifier: '0' as u8,
+                    compound_identifier: identifier, 
+                    descriptor,
+                    length: config.desc_length,};
+
+                tree.add_record(&record).unwrap();
+
+                counter += 1;
+            }
+        }
+
+    }
+    tree.flush();
+
+
+
+
+}
+
+fn build_from_file(args: Args) {
 
     let mut config = tree::TreeConfig::from_file(config_filename);
 
@@ -60,9 +193,9 @@ fn build_from_file() {
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
 
-    let mut records: Vec<CompoundRecord> = Vec::new();
+    //let mut records: Vec<CompoundRecord> = Vec::new();
 
-    for (i, line) in contents.split("\n").enumerate() {
+    for (i, line) in tqdm!(contents.split("\n").enumerate()) {
         if i == 0 {
             continue;
         }
@@ -82,7 +215,13 @@ fn build_from_file() {
         let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
         let descriptor = Descriptor{ data: s.clone(), length: n};
 
-        assert_eq!(s.len(), n);
+        let dim_matches = s.len() == n;
+        match dim_matches {
+            true => {},
+            false => {
+                panic!("Provided dimension ({}) does not match descriptor length from input file ({})", &n, &s.len());
+            }
+        }
 
         let cr = CompoundRecord::new(0, smiles, identifier, descriptor, n);
 
@@ -96,20 +235,18 @@ fn build_from_file() {
             }
         };
 
-        records.push(cr);
+        tree.add_record(&cr);
     }
-
-    dbg!(&records.len());
-    dbg!(&records[0]);
-
-    let mut tree = tree::Tree::force_create_with_config(config.clone());
-
-    for record in tqdm!(records.iter()) {
-        //tree.add_record(&record).unwrap();
-        tree.add_record(&record);
-    }
-
     tree.flush();
+
+    //dbg!(&records.len());
+    //dbg!(&records[0]);
+
+
+    //for record in tqdm!(records.iter()) {
+        //tree.add_record(&record).unwrap();
+    //}
+
 
 }
 

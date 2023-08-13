@@ -26,7 +26,7 @@ def smiles():
     print(request.args)
 
     #OVERRIDE
-    method = "morgan_pca_16"
+    method = "smallsa_8"
     drawn = False
     options = None
     #OVERRIDE
