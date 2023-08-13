@@ -5,22 +5,11 @@ use std::mem::size_of;
 use crate::error::Error;
 use std::convert::TryFrom;
 
-//pub const PAGE_SIZE: usize = 4096;
-//pub const PAGE_SIZE: usize = 8192;
-//pub const PAGE_SIZE: usize = 8192;
+use crate::data::{IDENTIFIER_SIZE};
+
+
 pub const PTR_SIZE: usize = size_of::<usize>(); 
 
-//pub const NODE_PAGE_SIZE: usize = 8192;
-//aub const NODE_PAGE_SIZE: usize = 4096;
-
-//pub const RECORD_PAGE_SIZE: usize = 16384;
-//jpub const RECORD_PAGE_SIZE: usize = 32768;
-//pub const RECORD_PAGE_SIZE: usize = 65536;
-//pub const RECORD_PAGE_SIZE: usize = 8192;
-
-//TODO: allow different values
-//pub const DESCRIPTOR_LENGTH: usize = 8;
-//pub const DESCRIPTOR_LENGTH: usize = 16;
 
 pub struct Value (pub usize);
 
@@ -43,17 +32,6 @@ impl TryFrom<[u8; 1]> for Value {
     }
 }
 
-//for InternalNode
-//pub const NODE_TYPE_OFFSET: usize = 0;
-//pub const NODE_TYPE_SIZE: usize = 1;
-
-//pub const PARENT_PAGE_START: usize = 0;
-//pub const PARENT_PAGE_SIZE: usize = PTR_SIZE;
-
-//pub const PARENT_NODE_OFFSET_START: usize = PARENT_PAGE_START + PARENT_PAGE_SIZE;
-//pub const PARENT_NODE_OFFSET_SIZE: usize = 1;
-
-//pub const LEFT_CHILD_PAGE_START: usize = PARENT_NODE_OFFSET_START + PARENT_NODE_OFFSET_SIZE;
 pub const LEFT_CHILD_INDEX_START: usize = 0;
 pub const LEFT_CHILD_INDEX_SIZE: usize = PTR_SIZE;
 
@@ -75,26 +53,19 @@ pub const SPLIT_VALUE_SIZE: usize = 4;
 pub const NODE_SIZE: usize = SPLIT_VALUE_OFFSET + SPLIT_VALUE_SIZE;
 
 
-//for CompoundRecord
+//for TreeRecord
 //TODO: make generic over different descriptor lengths
 //
-pub const DATASET_IDENTIFIER_START: usize = 0;
-pub const DATASET_IDENTIFIER_SIZE: usize = 1;
+pub const INDEX_START: usize = 0;
+pub const INDEX_SIZE: usize = 8;
 
-pub const COMPOUND_IDENTIFIER_START: usize = DATASET_IDENTIFIER_START + DATASET_IDENTIFIER_SIZE;
-pub const COMPOUND_IDENTIFIER_SIZE: usize = 16;
-
-pub const DESCRIPTOR_START: usize = COMPOUND_IDENTIFIER_START + COMPOUND_IDENTIFIER_SIZE;
-//pub const DESCRIPTOR_SIZE: usize = 32;
-
-//pub const COMPOUND_RECORD_SIZE: usize = DESCRIPTOR_START + DESCRIPTOR_SIZE;
+pub const DESCRIPTOR_START: usize = INDEX_START + INDEX_SIZE;
 
 //for generic Page
 pub const PAGE_TYPE_OFFSET: usize = 0;
 pub const PAGE_TYPE_SIZE: usize = 1;
 
 pub const TAIL_OFFSET: usize = PAGE_TYPE_OFFSET + PAGE_TYPE_SIZE;
-//pub const TAIL_SIZE: usize = 2; //2 bytes supports up to 65535 records
 pub const TAIL_SIZE: usize = 4; //2 bytes supports up to 65535 records, but 4 is easier to implement lol
 
 pub const IS_EMPTY_OFFSET: usize = TAIL_OFFSET + TAIL_SIZE;

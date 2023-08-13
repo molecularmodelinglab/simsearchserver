@@ -1,12 +1,12 @@
-use kd_tree::node::{CompoundRecord,CompoundIdentifier, Descriptor};
+use kd_tree::data::{CompoundIdentifier, Descriptor, CompoundRecord};
+use kd_tree::database::{Database, DatabaseRecord};
+
 use kdam::tqdm;
 use kd_tree::tree;
 
 fn main() {
 
     build_from_file();
-    //build_single();
-    //param_sweep();
 
 }
 
@@ -41,13 +41,22 @@ fn build_from_file() {
 
     let config_filename = "/home/josh/git/simsearchserver/rust_server/build_config.yaml".to_string();
 
-    let config = tree::TreeConfig::from_file(config_filename);
+    let mut config = tree::TreeConfig::from_file(config_filename);
 
-    let n = 16;
+    config.desc_length = 8;
+    config.directory = "/pool/merge_test".to_string();
+
+    let database_filename = config.directory.clone() + "/db.db";
+
+    let mut database = Database::new(&database_filename);
+
+
+
+    let n = 8;
     use::std::fs::File;
     use std::io::prelude::*;
 
-    let mut file = File::open("/home/josh/git/simsearchserver/embeddings/chembl_2mil_morgan_pca_16.csv").unwrap();
+    let mut file = File::open("/home/josh/git/simsearchserver/rust_server/builder/test_full_data.csv").unwrap();
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
 
@@ -63,7 +72,11 @@ fn build_from_file() {
         }
 
         let mut s = line.split(",");
-        let identifier = CompoundIdentifier::from_string(s.next().unwrap().to_string());
+        
+        let smiles = s.next().unwrap().to_string();
+
+        let identifier_string = s.next().unwrap().to_string();
+        let identifier = CompoundIdentifier::from_string(identifier_string);
         let s: Vec<_> = s.collect();
 
         let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
@@ -71,11 +84,16 @@ fn build_from_file() {
 
         assert_eq!(s.len(), n);
 
-        let cr = CompoundRecord {
-            compound_identifier: identifier,
-            descriptor,
-            dataset_identifier: 1,
-            length: n,
+        let cr = CompoundRecord::new(0, smiles, identifier, descriptor, n);
+
+        let idx = database.add_compound_record(&cr);
+
+        let idx = match idx {
+            Ok(idx) => idx,
+            Err(e) => {
+                dbg!(e);
+                continue;
+            }
         };
 
         records.push(cr);
