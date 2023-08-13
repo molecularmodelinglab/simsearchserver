@@ -1,4 +1,4 @@
-directory: "/pool/morgan_test/"
+directory: "/pool/merge_test/"
 desc_length: 16
 record_page_length: 16384
 node_page_length: 8192

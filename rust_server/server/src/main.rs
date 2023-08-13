@@ -1,5 +1,5 @@
 use kd_tree::tree;
-use kd_tree::node::Descriptor;
+use kd_tree::data::Descriptor;
 
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};

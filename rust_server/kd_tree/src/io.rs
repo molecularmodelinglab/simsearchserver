@@ -3,7 +3,8 @@
 //!
 
 use crate::error::Error;
-use crate::node::{CompoundIdentifier, InternalNode, PagePointer};
+use crate::data::{CompoundIdentifier};
+use crate::node::{InternalNode, PagePointer};
 use crate::page::RecordPage;
 use byteorder::{ByteOrder, BigEndian};
 use crate::layout;
@@ -262,7 +263,7 @@ impl RecordPager {
 
     pub fn print_records(&mut self) {
 
-        let mut records: Vec<(CompoundIdentifier, usize)> = Vec::new();
+        let mut records: Vec<(u64, usize)> = Vec::new();
         let mut curr_address = 0;
 
         loop {
@@ -275,7 +276,7 @@ impl RecordPager {
 
             let this_records = page.get_records();
 
-            let this_amended_records: Vec<_> = this_records.into_iter().map(|x| (x.compound_identifier, curr_address)).collect();
+            let this_amended_records: Vec<_> = this_records.into_iter().map(|x| (x.index, curr_address)).collect();
 
             records.extend(this_amended_records);
 

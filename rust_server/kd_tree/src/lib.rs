@@ -14,7 +14,7 @@
 //! - [x] prototype tree construction and querying with tests
 //! - [ ] explore alternate construction algorithms
 //! - [ ] implement parallel querying
-//! - [ ] implement server with whole tree in memory
+//! - [x] implement server with whole tree in memory
 //! - [ ] make descriptor size generic
 //!
 //!
@@ -27,4 +27,5 @@ pub mod io;
 pub mod page;
 pub mod tree;
 pub mod decision_tree;
-//pub mod memory_tree;
+pub mod database;
+pub mod data;

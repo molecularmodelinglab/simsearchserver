@@ -1,4 +1,4 @@
-use kd_tree::{tree, node};
+use kd_tree::{tree, node, data};
 //use rand::prelude::*;
 
 fn main() {
@@ -12,7 +12,9 @@ fn single_query() {
 
     let mut tree = tree::Tree::read_from_directory(directory.clone());
 
-    let mut descriptor = node::Descriptor::random(tree.config.desc_length);
+
+    let mut descriptor = data::Descriptor::random(tree.config.desc_length);
+  
     dbg!(&descriptor);
 
 
@@ -44,7 +46,7 @@ fn param_sweep() {
         for _ in 0..10 {
             for nn in [1,10,100,1000].into_iter() {
 
-                let descriptor = node::Descriptor::random(tree.config.desc_length);
+                let descriptor = data::Descriptor::random(tree.config.desc_length);
 
                 let start = Instant::now();
  
