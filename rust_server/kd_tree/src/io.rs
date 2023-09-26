@@ -242,19 +242,12 @@ impl RecordPager {
 
     pub fn _read_record_page(&mut self, address: &usize) -> Result<RecordPage, Error> {
 
-        //let mut page: [u8; self.length] = [0x00; self.length];
         let mut page: Vec<u8>  = vec![0; self.page_length];
 
         let start = self.calc_offset(address);
         self.file.seek(SeekFrom::Start(start))?;
 
-        match self.file.read_exact(&mut page) {
-            Ok(_) => {},
-            Err(_) => {
-                println!("Failed to read record page at {:?}", &address);
-            }
-
-        };
+        self.file.read_exact(&mut page)?;
 
         let page = RecordPage::from_arr(&page, self.page_length, self.desc_length);
 

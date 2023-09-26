@@ -256,3 +256,74 @@ fn param_sweep() {
     }
 }
 
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn actual_smiles_tree() {
+
+        let mut config = tree::TreeConfig::default();
+
+        config.desc_length = 8;
+        config.directory = "/tmp/actual_smiles_tree".to_string();
+
+        let mut tree = tree::Tree::force_create_with_config(config.clone());
+
+        let n = 8;
+        use std::io::prelude::*;
+
+        let mut file = File::open("/home/josh/git/simsearchserver/rust_server/builder/test_full_data.csv").unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+
+        let mut records: Vec<CompoundRecord> = Vec::new();
+
+        for (i, line) in tqdm!(contents.split("\n").enumerate()) {
+            if i == 0 {
+                continue;
+            }
+
+            if line == "" {
+                break;
+            }
+
+            let mut s = line.split(",");
+            
+            let smiles = s.next().unwrap().to_string();
+
+            let identifier_string = s.next().unwrap().to_string();
+            let identifier = CompoundIdentifier::from_string(identifier_string);
+            let s: Vec<_> = s.collect();
+
+            let s: Vec<f32> = s.into_iter().map(|x| x.parse::<f32>().unwrap()).collect();
+            let descriptor = Descriptor{ data: s.clone(), length: n};
+
+            let dim_matches = s.len() == n;
+            match dim_matches {
+                true => {},
+                false => {
+                    panic!("Provided dimension ({}) does not match descriptor length from input file ({})", &n, &s.len());
+                }
+            }
+
+            let cr = CompoundRecord::new(0, smiles, identifier, descriptor, n);
+
+            tree.add_record(&cr);
+            records.push(cr);
+        }
+        tree.flush();
+
+        let nn = tree.get_nearest_neighbors(&records[0].descriptor, 10).to_yaml();
+
+        dbg!(&records[0]);
+        println!("{}", nn);
+
+
+    }
+
+
+
+
+}
+
