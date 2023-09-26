@@ -4,11 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-kd_tree = { path = "../kd_tree" }
 hyper = {version = "0.14", features = ["full"]}
 tokio = {version = "*", features = ["full"]}
+serde_json = "*"
 bytes = "*"
 rand = "*"
-serde_json = "*"
-reqwest = "*"
-clap = { version = "4.3.0", features = ["derive"] }
+clap = { version = "4.3.21", features = ["derive"] }

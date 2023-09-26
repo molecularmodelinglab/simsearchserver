@@ -86,10 +86,14 @@ impl Descriptor {
 
     pub fn random(length: usize) -> Self {
 
-        let random_vec: Vec::<f32> = (0..length).map(|_| rand::random::<f32>()).collect();
+        use rand::{Rng, thread_rng};
+        use rand::distributions::Uniform;
+
+        let mut rng = thread_rng();
+        let side = Uniform::new(-1.0, 1.0);
+
+        let random_vec: Vec::<f32> = (0..length).map(|_| rng.sample(side)).collect();
         return Self { data: random_vec, length};
-
-
     }
 
     pub fn from_vec(v: Vec<f32>, length: usize) -> Self {
