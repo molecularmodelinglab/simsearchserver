@@ -66,7 +66,7 @@ async fn dispatch_nn(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result
         _ => (),
     };
 
-    let smiles_request = format!("http://localhost:3000/embed/contrast8/{}", smiles);
+    let smiles_request = format!("http://localhost:5000/smiles?{}", smiles);
     dbg!(&smiles_request);
 
     let response = reqwest::get(&smiles_request).await.unwrap();
