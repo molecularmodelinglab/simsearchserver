@@ -2,6 +2,7 @@
 
 members = [
 	"server",
+	"model",
 ]
 
 [profile.release-with-debug]
