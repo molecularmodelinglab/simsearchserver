@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from rdkit import Chem
 
 VOCAB = '#%()+-0123456789<=>BCFHILNOPRSX[]cnosp$'
 N_TOKENS = 39 # ... is len(VOCAB)
@@ -13,6 +14,12 @@ MAX_VEC_LEN = 122
 NAMED_LOSSES = ['Recon','SupCon']
 
 def process_smiles(smiles):
+
+    print(smiles)
+    #canonicalize smiles
+    mol = Chem.MolFromSmiles(smiles)
+    smiles = Chem.MolToSmiles(mol)
+    print(smiles)
 
     vec = _get_vec(_replace_unks(_do_BrCl_singles(smiles)) )
     pad_mask, avg_mask, _ = _get_masks_from_vec(vec)

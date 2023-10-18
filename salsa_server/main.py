@@ -3,6 +3,8 @@ sys.path.append(".")
 from flask import Flask, render_template, request, abort, Response, jsonify
 import threading
 
+from json import dumps
+
 from modeling.model import SalsaONNXModel
 
 app = Flask(__name__)
@@ -33,11 +35,16 @@ def smiles():
 
     smiles = args[0]
 
-    model_lock.acquire()
 
-    data = model.embed(smiles)
-
-    model_lock.release()
+    data = None
+    try:
+        model_lock.acquire()
+        data = model.embed(smiles)
+        model_lock.release()
+    except:
+        model_lock.release()
+        message = dumps({"error": "Smiles failed to parse"})
+        abort(Response(message, 406))
 
     if data is None:
         return abort(400)

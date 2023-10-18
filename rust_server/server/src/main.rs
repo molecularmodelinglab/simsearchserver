@@ -71,7 +71,17 @@ async fn dispatch_nn(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result
 
     let response = reqwest::get(&smiles_request).await.unwrap();
     dbg!(&response);
+
+    match response.status() {
+        reqwest::StatusCode::OK => (),
+        _ => {
+            let message = response.text().await.unwrap();
+                return Ok(Response::new(Body::from(message.to_string().as_bytes().to_vec())));
+            }
+
+    }
     let embedding = response.text().await.unwrap();
+    dbg!(&embedding);
 
     let embedding: Vec<f32> = serde_json::from_str(&embedding).unwrap();
     dbg!(&embedding);
