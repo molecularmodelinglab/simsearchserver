@@ -9,6 +9,8 @@ use std::io::prelude::*;
 use std::io::{self, BufRead};
 use std::path::Path;
 
+use std::time::Instant;
+
 
 // The output is wrapped in a Result to allow matching on errors
 // Returns an Iterator to the Reader of the lines of the file.
@@ -20,24 +22,34 @@ where P: AsRef<Path>, {
 
 
 use clap::Parser;
-#[derive(Parser, Debug)] #[command(author, version, about, long_about = None)]
+#[derive(Parser, Debug)] 
+#[command(author, version, about, long_about = None)]
 struct Args {
 
-    //Which task to carry out
+    ///Which task to carry out
     #[arg(short, long)]
     task: String,
 
-    //Input filename if task is build_from_file
+    ///Input filename if task is build_from_file
     #[arg(short, long)]
     input_filename: Option<String>,
 
-    //Output dirname if task is build_from_file
+    ///Output dirname if task is build_from_file
     #[arg(short, long)]
     output_dirname: Option<String>,
 
-    //Dim if task is build_from_file
+    ///Dim if task is build_from_file
     #[arg(short, long)]
     dim: Option<usize>,
+
+    ///Config if task is build_from_file
+    #[arg(short, long)]
+    config_filename: Option<String>,
+
+    ///Memory limit for cache, in GB (default 50GB)
+    #[arg(long)]
+    cache_limit: Option<f32>,
+
 }
 
 fn main() {
@@ -47,38 +59,51 @@ fn main() {
 
     match args.task.as_str() {
         "build_from_file" => build_from_file(args),
-        "build_single" => build_single(),
+        "build_random" => build_random(args),
         "param_sweep" => param_sweep(),
         _ => panic!("Unknown task: {}", args.task),
     }
 
 }
 
-fn build_single() {
+fn build_random(args: Args) {
 
-    let config_filename = "/home/josh/git/simsearchserver/build_config.yaml".to_string();
+    let config_filename = args.config_filename.unwrap();
 
-    let config = tree::TreeConfig::from_file(config_filename);
+    let cache_limit = args.cache_limit.unwrap_or(50.0);
 
-    /*
-    let mut config = tree::TreeConfig::default(); 
-    config.desc_length = 8;
-    config.node_page_length = 4096;
-    config.record_page_length = 65536;
-    */
+    dbg!(&config_filename);
+
+    let mut config = tree::TreeConfig::from_file(config_filename);
 
     dbg!(&config);
 
     let mut tree = tree::Tree::create_with_config(config.clone());
 
-    //tree.uniform_layout(20, 0.0, 1.0);
-
-    for _ in tqdm!(0..config.num_records.unwrap() as usize) {
+    let mut start = Instant::now();
+    for i in tqdm!(0..config.num_records.unwrap() as usize) {
         let rec = CompoundRecord::random(config.desc_length);
-        tree.add_record(&rec).unwrap();
+        let add_result = tree.add_record(&rec);
+        match add_result {
+            Ok(_) => {},
+            Err(e) => {
+                dbg!(e);
+                panic!("Error adding record");
+            },
+        }
+    
+
+
+        if i % 100000 == 0 {
+            let elapsed = start.elapsed();
+            println!("\nTIME REPORT: {} {}\n", i, elapsed.as_secs_f64());
+            dbg!(tree.record_handler.get_cache_size_gb());
+        }
     }
 
     tree.flush();
+
+    println!("Tree construction complete");
 }
 
 fn build_from_smallsa_files() {

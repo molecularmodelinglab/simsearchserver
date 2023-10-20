@@ -21,6 +21,8 @@ pub struct RecordPager {
     pub desc_length: usize,
     pub page_length: usize,
     cache: HashMap<usize, RecordPage>,
+    cache_limit: Option<f32>,
+    cache_check_counter: usize,
 }
 
 #[derive(Debug)]
@@ -160,7 +162,7 @@ impl FastNodePager {
 
 impl RecordPager {
 
-    pub fn new(path: &Path, page_length: usize, desc_length: usize, create: bool) -> Result<Self, Error> {
+    pub fn new(path: &Path, page_length: usize, desc_length: usize, create: bool, cache_limit: Option<f32>) -> Result<Self, Error> {
 
         match create {
             true => {
@@ -177,6 +179,8 @@ impl RecordPager {
                     desc_length,
                     page_length,
                     cache: HashMap::new(),
+                    cache_limit: cache_limit,
+                    cache_check_counter: 0,
                 })
             },
             false => {
@@ -203,7 +207,9 @@ impl RecordPager {
                         desc_length,
                         page_length,
                         cache: HashMap::new(),
-                    })
+                        cache_limit: cache_limit,
+                        cache_check_counter: 0,
+                })
 
             }
         }
@@ -222,8 +228,13 @@ impl RecordPager {
     pub fn get_record_page(&mut self, address: &usize) -> Result<RecordPage, Error> {
 
         let retval = match self.cache.get(address) {
-            Some(x) => Ok(x.clone()),
+            Some(x) => {
+                //dbg!("CACHE HIT");
+                Ok(x.clone())
+            }
             None => {
+                //dbg!("CACHE MISS");
+
                 
                 let page = self._read_record_page(address)?;
                 self.cache.insert(address.clone(), page.clone());
@@ -287,6 +298,10 @@ impl RecordPager {
 
     }
 
+    pub fn get_cache_len(&self) -> usize {
+        return self.cache.len();
+    }
+
     pub fn len(&self) -> usize {
         return self.next_free_index;
     }
@@ -296,6 +311,19 @@ impl RecordPager {
         for (key, value) in self.cache.clone().iter() {
 
             self._write_page_at_offset(value, &key);
+
+        }
+
+    }
+
+    pub fn flush_keys(&mut self, keys: Vec<usize>) {
+
+        for key in keys.iter() {
+
+            let value = self.cache.get(key).unwrap().clone();
+
+            self._write_page_at_offset(&value, &key);
+            self.cache.remove(key);
 
         }
 
@@ -320,13 +348,49 @@ impl RecordPager {
         Ok(())
     }
 
+    pub fn get_cache_size_gb(&self) -> f32 {
+        return self.get_cache_len() as f32 * self.page_length as f32 / 1000000000 as f32;
+    }
+
     pub fn check_cache(&mut self) {
 
-        //world's worst eviction policy
-        if self.cache.len() > 1000000 {
-            self.flush();
-            self.cache = HashMap::new();
+        if self.cache_check_counter > 1000 {
+            self.cache_check_counter = 0;
+        } else {
+            self.cache_check_counter += 1;
+            ()
         }
+
+        match self.cache_limit {
+            None => {},
+            Some(limit) => {
+                let current_cache_size_gb = self.get_cache_size_gb();
+                //println!("{:?}", current_cache_size_gb);
+
+                if current_cache_size_gb > limit as f32 {
+                    println!("CACHE SIZE {:?} EXCEEDED: {:?} GB", current_cache_size_gb, limit);
+                    self._evict();
+                }
+            }
+        }
+    }
+
+    fn _evict(&mut self) {
+
+        let evict_prop = 0.3;
+        let evict_num = self.cache.len() as f32 * evict_prop;
+        let mut keys_to_flush: Vec<usize> = Vec::new();
+
+        let mut key_iter = self.cache.keys();
+        for _ in 0..evict_num as usize {
+            let key = key_iter.next().unwrap().clone();
+            keys_to_flush.push(key);
+        }
+
+        self.flush_keys(keys_to_flush);
+
+        println!("CACHE SIZE AFTER EVICT: {:?}", self.get_cache_size_gb());
+
     }
 
     pub fn _write_page(&mut self, page: &RecordPage) -> Result<PagePointer, Error> {

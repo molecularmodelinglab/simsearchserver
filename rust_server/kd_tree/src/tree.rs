@@ -105,6 +105,11 @@ impl TreeRecord {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct BuildConfig {
+}
+
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TreeConfig {
@@ -113,7 +118,10 @@ pub struct TreeConfig {
     pub record_page_length: usize,
     pub node_page_length: usize,
     pub num_records: Option<usize>,
+    pub cache_limit: Option<f32>,
 }
+
+
 
 impl TreeConfig {
 
@@ -124,6 +132,7 @@ impl TreeConfig {
             record_page_length: 4096,
             node_page_length: 4096,
             num_records: None,
+            cache_limit: None,
         }
     }
 
@@ -414,7 +423,7 @@ impl Tree {
         dbg!(&record_filename);
 
         let node_handler = FastNodePager::from_file(&node_filename).unwrap();
-        let record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, false).unwrap();
+        let record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, false, config.cache_limit).unwrap();
 
         let database = Database::open(&config.get_database_filename());
 
@@ -467,7 +476,7 @@ impl Tree {
         let config_filename = config.get_config_filename();
 
         let node_handler = FastNodePager::new();
-        let mut record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, true).unwrap();
+        let mut record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, true, config.cache_limit).unwrap();
 
         let first_record_page = RecordPage::new(config.record_page_length, config.desc_length);
         //record_handler.write_page(&first_record_page).unwrap();
