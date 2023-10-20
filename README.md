@@ -1,9 +1,5 @@
 To get the server running, there are three components:
 
-1. The KD Tree server ('rust_server') that takes in a descriptor for a nearest neighbor search
-3. The Flask server ('python_web_server') that handles all of the frontend
-
-TODO:
-- [ ] get salsa embeddings working
-- [ ] get salsa and morgan on the ~40mil enamine diversity set
-- [ ] the big 40bil run
+1. The KD Tree server (`rust_server`) that takes in a SMILES string and return nearest neighbors
+2. The SALSA server (`salsa_server`) that takes in a SMILES string and returns an embedding
+3. The Flask server (`python_web_server`) that is a user interface for the `rust_server`
