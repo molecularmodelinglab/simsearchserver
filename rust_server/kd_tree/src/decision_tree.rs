@@ -3,6 +3,7 @@ use std::io::prelude::*;
 use crate::node::{PagePointer};
 use crate::data::{CompoundRecord};
 use crate::tree::{Tree, TreeConfig, TreeRecord};
+use crate::io::{GetNode};
 use crate::page::RecordPage;
 use std::collections::{HashMap, VecDeque};
 

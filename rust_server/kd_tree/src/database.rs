@@ -139,6 +139,61 @@ impl DatabaseRecord {
 }
 
 #[derive(Debug)]
+
+pub struct ImmutDatabase {
+    filename: String,
+    num_entries: u64,
+}
+
+impl ImmutDatabase {
+
+    pub fn open(filename: &str) -> Self {
+
+        let path = Path::new(filename);
+
+        let mut fd = OpenOptions::new()
+                    .create(false)
+                    .read(true)
+                    .write(false)
+                    .truncate(false)
+                    .open(path).unwrap();
+
+        let mut buf = [0u8; ENTRIES_SIZE];
+        fd.seek(SeekFrom::Start(ENTRIES_START as u64)).unwrap();
+        fd.read(&mut buf).unwrap();
+
+        let num_entries = u64::from_le_bytes(buf);
+
+        Self {
+            filename: filename.to_string(),
+            num_entries: num_entries,
+        }
+    }
+
+    pub fn query(&self, id: &u64) -> Option<DatabaseRecord> {
+
+        let mut buf = [0u8; DATABASE_ENTRY_SIZE];
+
+        let mut fd = OpenOptions::new()
+                    .create(false)
+                    .read(true)
+                    .write(false)
+                    .truncate(false)
+                    .open(&self.filename).unwrap();
+
+            
+        fd.seek(SeekFrom::Start((id) * (DATABASE_ENTRY_SIZE as u64))).unwrap();
+        fd.read(&mut buf).unwrap();
+
+        let entry = DatabaseRecord::from_arr(buf);
+
+        return Some(entry);
+    }
+}
+
+
+
+#[derive(Debug)]
 pub struct Database {
     filename: String,
     fd: File,

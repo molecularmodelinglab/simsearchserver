@@ -8,9 +8,9 @@ fn main() {
 }
 
 fn single_query() {
-    let directory = "/pool/together/".to_string();
+    let directory = "/data/small_cache_test/".to_string();
 
-    let mut tree = tree::Tree::read_from_directory(directory.clone());
+    let mut tree = tree::ImmutTree::read_from_directory(directory.clone());
 
 
     let mut descriptor = data::Descriptor::random(tree.config.desc_length);
@@ -18,15 +18,13 @@ fn single_query() {
     dbg!(&descriptor);
 
 
-    descriptor.data = vec![-0.06, -0.03, 0.358, -0.03, 0.381, 0.049, 0.797, 0.298];
-
-
-    let nn = tree.get_nearest_neighbors(&descriptor, 10);
+    let nn = tree.get_nearest_neighbors(&descriptor, 100);
 
     dbg!(&nn);
 
 }
 
+/*
 fn param_sweep() {
 
 
@@ -59,4 +57,4 @@ fn param_sweep() {
 
 
     }
-}
+*/

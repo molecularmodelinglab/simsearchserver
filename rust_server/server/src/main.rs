@@ -4,6 +4,8 @@ use kd_tree::data::Descriptor;
 use std::convert::Infallible;
 use std::sync::{Arc, Mutex};
 
+use bytes::Bytes;
+
 //use rand::prelude::*;
 
 use hyper::service::{make_service_fn, service_fn};
@@ -28,7 +30,7 @@ struct Args {
     #[arg(short, long)]
     port: Option<u16>,
 }
-async fn handle_request(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Response<Body>> {
+async fn handle_request(req: Request<Body>, tree: Arc<Mutex<tree::ImmutTree>>) -> Result<Response<Body>> {
 
     let path = req.uri().path().to_string();
     dbg!(&path);
@@ -42,6 +44,7 @@ async fn handle_request(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Res
 
         "nn" => dispatch_nn(req, tree).await,
         "range" => dispatch_range(req, tree).await,
+        "test" => dispatch_test(tree).await,
         _ => Ok(Response::new(Body::from("method not recognized".to_string().as_bytes().to_vec()))),
     };
     
@@ -49,7 +52,20 @@ async fn handle_request(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Res
     return retval;
 }
 
-async fn dispatch_nn(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Response<Body>> {
+async fn dispatch_test(tree: Arc<Mutex<tree::ImmutTree>>) -> Result<Response<Body>> {
+
+    let mut mg = tree.lock().unwrap();
+    let length = mg.config.desc_length;
+    let descriptor = Descriptor::random(length);
+
+    dbg!(&descriptor);
+
+    let nn = mg.get_nearest_neighbors(&descriptor, 100);
+    let s = nn.to_yaml();
+
+    Ok(Response::new(Body::from(s.as_bytes().to_vec())))
+}
+async fn dispatch_nn(req: Request<Body>, tree: Arc<Mutex<tree::ImmutTree>>) -> Result<Response<Body>> {
 
     dbg!("in dispatch_nn");
     let path = req.uri().path().to_string();
@@ -97,7 +113,7 @@ async fn dispatch_nn(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result
     Ok(Response::new(Body::from(s.as_bytes().to_vec())))
 }
 
-async fn dispatch_range(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Result<Response<Body>> {
+async fn dispatch_range(req: Request<Body>, tree: Arc<Mutex<tree::ImmutTree>>) -> Result<Response<Body>> {
 
     let path = req.uri().path().to_string();
 
@@ -146,7 +162,7 @@ async fn dispatch_range(req: Request<Body>, tree: Arc<Mutex<tree::Tree>>) -> Res
 }
 */
 
-fn query_smiles(data_string: &String, tree: Arc<Mutex<tree::Tree>>) -> Result<Response<Body>> {
+fn query_smiles(data_string: &String, tree: Arc<Mutex<tree::ImmutTree>>) -> Result<Response<Body>> {
 
     let data = "direct smiles query not implemented".to_string();
 
@@ -190,19 +206,20 @@ pub async fn main() -> Result<()> {
     };
 
 
-    let tree = Arc::new(Mutex::new(tree::Tree::read_from_directory(args.dirname)));
+    let tree = tree::ImmutTree::read_from_directory(args.dirname);
+    let arc_tree = Arc::new(Mutex::new(tree));
 
     // For every connection, we must make a `Service` to handle all
     // incoming HTTP requests on said connection.
     let make_svc = make_service_fn(move |_conn| {
-        let tree = tree.clone();
+        let arc_tree = arc_tree.clone();
 
         // This is the `Service` that will handle the connection.
         // `service_fn` is a helper to convert a function that
         // returns a Response into a `Service`.
         async move { Ok::<_, Infallible>(service_fn( move |req| {
-            let tree = tree.clone();
-            handle_request(req, tree)
+            //let tree = tree.clone();
+            handle_request(req, arc_tree.clone())
         }
             ))}
     });

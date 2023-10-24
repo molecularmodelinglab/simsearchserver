@@ -16,7 +16,8 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct RecordPager {
-    file: File,
+    //file: File,
+    path: String,
     pub next_free_index: usize, //this is the next available slot
     pub desc_length: usize,
     pub page_length: usize,
@@ -25,10 +26,100 @@ pub struct RecordPager {
     cache_check_counter: usize,
 }
 
+pub struct ImmutNodePager {
+    pub store: Vec<InternalNode>
+}
+
+pub trait GetNode {
+
+    fn get_node(&self, index: &usize) -> Result<&InternalNode, String>;
+
+}
+
+impl ImmutNodePager {
+
+    pub fn len(&self) -> usize {
+        return self.store.len();
+    }
+
+    fn calc_offset(index: usize) -> usize {
+
+        return layout::FILE_DATA_START + (index * layout::NODE_SIZE);
+
+    }
+
+    pub fn from_file(filename: &String) -> Result<Self, Error> {
+
+        let path = Path::new(filename);
+
+        let mut fd = OpenOptions::new()
+                    .create(false)
+                    .read(true)
+                    .write(false)
+                    .truncate(false)
+                    .open(path)?;
+
+        let mut next_free_index_arr: [u8; layout::HEADER_CURSOR_SIZE] = [0x00; layout::HEADER_CURSOR_SIZE];
+        fd.seek(SeekFrom::Start(layout::HEADER_CURSOR_START as u64))?;
+        fd.read_exact(&mut next_free_index_arr)?;
+
+        //let mut pager = Self::new();
+        let mut store: Vec<InternalNode> = Vec::new();
+
+        let attempted_usize = layout::Value::try_from(next_free_index_arr);
+        let layout::Value(value) = attempted_usize.unwrap();
+        
+        for i in 0..(value + 1) {
+            let mut node_arr: [u8; layout::NODE_SIZE] = [0x00; layout::NODE_SIZE];
+            let start = Self::calc_offset(i);
+            fd.seek(SeekFrom::Start(start as u64))?;
+            fd.read_exact(&mut node_arr)?;
+            let node = InternalNode::from_slice(&node_arr).unwrap();
+            store.push(node);
+
+        }
+        
+        Ok(Self{store})
+
+    }
+
+
+}
+impl GetNode for ImmutNodePager {
+
+    fn get_node(&self, index: &usize) -> Result<&InternalNode, String> {
+
+        let ret = match self.store.get(index.clone()) {
+            Some(node) => Ok(node),
+            None => Err(format!("Node not found at address: {:?}", index)),
+        };
+
+        return ret;
+    }
+}
+
+
 #[derive(Debug)]
 pub struct FastNodePager {
     pub store: Vec<InternalNode>,
 }
+
+
+
+impl GetNode for FastNodePager {
+
+    fn get_node(&self, index: &usize) -> Result<&InternalNode, String> {
+
+        //let node = self.map.get(&pointer.to_tuple()).unwrap();
+        let ret = match self.store.get(index.clone()) {
+            Some(node) => Ok(node),
+            None => Err(format!("Node not found at address: {:?}", index)),
+        };
+
+        return ret;
+    }
+}
+
 
 impl FastNodePager {
 
@@ -122,21 +213,8 @@ impl FastNodePager {
 
     }
 
-
     pub fn num_nodes(&self) -> usize {
         return self.store.len();
-    }
-
-    //TODO: return only node references, user can clone if they need to
-    pub fn get_node(&mut self, index: &usize) -> Result<&InternalNode, String> {
-
-        //let node = self.map.get(&pointer.to_tuple()).unwrap();
-        let ret = match self.store.get(index.clone()) {
-            Some(node) => Ok(node),
-            None => Err(format!("Node not found at address: {:?}", index)),
-        };
-
-        return ret;
     }
 
     pub fn add_node(&mut self, node: &InternalNode) -> Result<PagePointer, Error> {
@@ -162,19 +240,12 @@ impl FastNodePager {
 
 impl RecordPager {
 
-    pub fn new(path: &Path, page_length: usize, desc_length: usize, create: bool, cache_limit: Option<f32>) -> Result<Self, Error> {
+    pub fn new(path: String, page_length: usize, desc_length: usize, create: bool, cache_limit: Option<f32>) -> Result<Self, Error> {
 
         match create {
             true => {
-                let fd = OpenOptions::new()
-                    .create(true)
-                    .read(true)
-                    .write(true)
-                    .truncate(true)
-                    .open(path)?;
-
-                return Ok(Self {
-                    file: fd,
+                    return Ok(Self{
+                    path: path,
                     next_free_index: 0,
                     desc_length,
                     page_length,
@@ -189,7 +260,7 @@ impl RecordPager {
                     .read(true)
                     .write(false)
                     .truncate(false)
-                    .open(path)?;
+                    .open(path.clone())?;
 
                     //fn coerce_pointer(value: &[u8]) -> [u8; layout::PTR_SIZE] {
                     //    value.try_into().expect("slice with incorrect length")
@@ -202,7 +273,7 @@ impl RecordPager {
                     let layout::Value(value) = attempted_usize.unwrap();
                     
                     return Ok(Self {
-                        file: fd,
+                        path: path,
                         next_free_index: value,
                         desc_length,
                         page_length,
@@ -225,7 +296,8 @@ impl RecordPager {
 
     }
 
-    pub fn get_record_page(&mut self, address: &usize) -> Result<RecordPage, Error> {
+    //pub fn get_record_page(&mut self, address: &usize) -> Result<RecordPage, Error> {
+    pub fn get_record_page(&self, address: &usize) -> Result<RecordPage, Error> {
 
         let retval = match self.cache.get(address) {
             Some(x) => {
@@ -237,7 +309,7 @@ impl RecordPager {
 
                 
                 let page = self._read_record_page(address)?;
-                self.cache.insert(address.clone(), page.clone());
+                //self.cache.insert(address.clone(), page.clone());
                 Ok(page)
             }
         };
@@ -245,20 +317,30 @@ impl RecordPager {
         return retval;
     }
 
-    pub fn get_record_page_no_cache(&mut self, address: &usize) -> Result<RecordPage, Error> {
+    pub fn get_record_page_no_cache(&self, address: &usize) -> Result<RecordPage, Error> {
 
         let page = self._read_record_page(address)?;
         Ok(page)
     }
 
-    pub fn _read_record_page(&mut self, address: &usize) -> Result<RecordPage, Error> {
+    //pub fn _read_record_page(&mut self, address: &usize) -> Result<RecordPage, Error> {
+    pub fn _read_record_page(&self, address: &usize) -> Result<RecordPage, Error> {
 
         let mut page: Vec<u8>  = vec![0; self.page_length];
 
         let start = self.calc_offset(address);
-        self.file.seek(SeekFrom::Start(start))?;
 
-        self.file.read_exact(&mut page)?;
+        let mut file = OpenOptions::new()
+                    .create(false)
+                    .read(true)
+                    .write(false)
+                    .truncate(false)
+                    .open(self.path.clone())?;
+
+
+        file.seek(SeekFrom::Start(start))?;
+
+        file.read_exact(&mut page)?;
 
         let page = RecordPage::from_arr(&page, self.page_length, self.desc_length);
 
@@ -395,12 +477,20 @@ impl RecordPager {
 
     pub fn _write_page(&mut self, page: &RecordPage) -> Result<PagePointer, Error> {
 
+        let mut file = OpenOptions::new()
+                    .create(false)
+                    .read(true)
+                    .write(false)
+                    .truncate(false)
+                    .open(self.path.clone())?;
+
+
         let start = self.calc_offset(&self.next_free_index);
-        self.file.seek(SeekFrom::Start(start))?;
+        file.seek(SeekFrom::Start(start))?;
 
         let data = page.get_data();
 
-        self.file.write(data)?;
+        file.write(data)?;
 
         let res = self.next_free_index.clone();
         self.next_free_index += 1;
@@ -410,19 +500,28 @@ impl RecordPager {
 
         BigEndian::write_u64(&mut next_free_index_arr, self.next_free_index as u64);
 
-        self.file.seek(SeekFrom::Start(layout::HEADER_CURSOR_START as u64))?;
-        self.file.write(&next_free_index_arr)?;
+
+        file.seek(SeekFrom::Start(layout::HEADER_CURSOR_START as u64))?;
+        file.write(&next_free_index_arr)?;
 
         Ok(PagePointer::Leaf(res))
     }
 
     pub fn _write_page_at_offset(&mut self, page: &RecordPage, address: &usize) -> Result<(), Error> {
         let start = self.calc_offset(address);
-        self.file.seek(SeekFrom::Start(start))?;
+
+        let mut file = OpenOptions::new()
+                    .create(false)
+                    .read(true)
+                    .write(false)
+                    .truncate(false)
+                    .open(self.path.clone())?;
+
+        file.seek(SeekFrom::Start(start))?;
 
         let data = page.get_data();
 
-        self.file.write(data)?;
+        file.write(data)?;
         //let res = self.next_free_index.clone();
 
         Ok(())

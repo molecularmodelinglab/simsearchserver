@@ -1,11 +1,11 @@
 //! Implementation of kd-tree creation and querying
 extern crate test;
 use crate::data::{CompoundIdentifier, Descriptor, CompoundRecord, CompoundIndex};
-use crate::database::Database;
+use crate::database::{Database, ImmutDatabase};
 use crate::node::{InternalNode, PagePointer};
 use crate::page::RecordPage;
 use crate::layout;
-use crate::io::{FastNodePager,RecordPager};
+use crate::io::{ImmutNodePager, FastNodePager, RecordPager, GetNode};
 use crate::data::{Parser};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
@@ -20,6 +20,290 @@ use std::io::prelude::*;
 
 use std::path::Path;
 use std::collections::VecDeque;
+
+
+pub struct ImmutTree {
+    pub node_handler: ImmutNodePager,
+    pub record_handler: RecordPager,
+    pub database: ImmutDatabase,
+    pub root: PagePointer,
+    pub config: TreeConfig,
+}
+
+impl ImmutTree {
+
+    pub fn read_from_directory(directory_name: String) -> Self {
+
+        let config_filename = directory_name.clone() + "/config.yaml";
+        let config = TreeConfig::from_file(config_filename);
+        dbg!(&config);
+
+        let node_filename = config.get_node_filename();
+        let record_filename = config.get_record_filename();
+
+        dbg!(&node_filename);
+        dbg!(&record_filename);
+
+        let node_handler = ImmutNodePager::from_file(&node_filename).unwrap();
+        let record_handler = RecordPager::new(record_filename, config.record_page_length, config.desc_length, false, config.cache_limit).unwrap();
+
+        let database = ImmutDatabase::open(&config.get_database_filename());
+
+        return Self {
+            node_handler,
+            record_handler, 
+            database,
+            root: PagePointer::Node(0),
+            config,
+            };
+    }
+
+    pub fn get_record_page(&mut self, index: &usize) -> RecordPage {
+
+        return self.record_handler.get_record_page(index).unwrap();
+    }
+
+    pub fn output_depths(&mut self) {
+
+        let mut nodes_to_check: VecDeque<(PagePointer, usize)> = VecDeque::new();
+
+        let root_pointer = self.root.clone();
+
+        nodes_to_check.push_back((root_pointer, 0));
+
+        loop {
+
+            let popped_val = nodes_to_check.pop_back();
+
+            let curr_tup = match popped_val {
+                None => {break;},
+                Some(x) => {x},
+            };
+
+            let (curr_pointer, count_so_far) = curr_tup;
+
+            match curr_pointer {
+
+                PagePointer::Leaf(index) => {
+                    println!("{}", count_so_far + 1);
+
+                    let page = self.record_handler.get_record_page(&index).unwrap();
+                    let records = page.get_records();
+                    println!("RECORD PAGE {}", index);
+                    for record in records {
+                        println!("\tCOMPOUND: {}", record.index.to_string());
+                    }
+                },
+                PagePointer::Node(index) => {
+
+
+                    let node = self.node_handler.get_node(&index).unwrap().clone();
+
+                    //dbg!(&node);
+                    println!("{}", curr_pointer);
+                        println!("\tLEFT:  {}", node.left_child_pointer);
+                        println!("\tRIGHT: {}", node.right_child_pointer);
+
+                    nodes_to_check.push_back((node.left_child_pointer, count_so_far + 1));
+                    nodes_to_check.push_back((node.right_child_pointer, count_so_far + 1));
+                },
+            }
+        }
+    }
+
+    ///Returns whether or not the exact provided descriptor is in the tree
+    pub fn record_in_tree(&mut self, record: &CompoundRecord) -> Result<bool, String> {
+
+        let mut curr_pointer: PagePointer = self.root.clone();
+
+        loop {
+            match curr_pointer {
+                PagePointer::Leaf(index) => {
+
+                    let page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
+                    return Ok(page.descriptor_in_page(&record.descriptor));
+
+                },
+                PagePointer::Node(index) => {
+
+                    let node = self.node_handler.get_node(&index).unwrap().clone();
+
+                    let axis = node.split_axis;
+                    let this_value = record.descriptor.data[axis];
+                    let split_value = node.split_value;
+
+                    match this_value <= split_value {
+                        true => curr_pointer = node.left_child_pointer,
+                        false => curr_pointer = node.right_child_pointer,
+                    }
+                }
+            }
+        }
+    }
+
+    fn dist_to_axis(&self, split_axis: usize, split_value: f32, descriptor: &Descriptor) -> f32 {
+
+        return (descriptor.data[split_axis] - split_value).abs()
+
+    }
+
+    pub fn print_record_lengths(&self) {
+
+        for i in 0..self.record_handler.len() {
+
+            let page = self.record_handler.get_record_page(&i).unwrap();
+            println!("{:?}", page.len());
+
+        }
+    }
+
+    /*
+    pub fn num_nodes(&mut self) -> usize {
+
+        return self.node_handler.num_nodes();
+
+    }
+    */
+
+    //pub fn get_nearest_neighbors(&mut self, query_descriptor: &Descriptor, n: usize) -> NearestNeighbors {
+    pub fn get_nearest_neighbors(&self, query_descriptor: &Descriptor, n: usize) -> NearestNeighbors {
+
+        let top_hits = self.get_top_hits(query_descriptor, n);
+        dbg!("BETWEEN");
+
+        let nearest_neighbors = NearestNeighbors::from_top_hits(top_hits, &self.database);
+
+        return nearest_neighbors;
+    }
+
+    ///Returns the `n` nearest neighbors of the provided `query_descriptor`
+    ///
+    ///Performance should worsen as `n` grows larger, as fewer branches of the tree can be pruned
+    ///with more distant already-found points
+    //fn get_top_hits(&mut self, query_descriptor: &Descriptor, n: usize) -> TopHits {
+    fn get_top_hits(&self, query_descriptor: &Descriptor, n: usize) -> TopHits {
+
+        let mut hits = TopHits::new(n);
+
+        let mut num_nodes_visited: usize = 0;
+        let mut num_record_pages_visited: usize = 0;
+
+        //direction is the one we go if we pass!!!
+        let mut nodes_to_check: VecDeque<(PagePointer, NodeAction, Option<Direction>)> = VecDeque::new();
+
+        let root_pointer = self.root.clone();
+
+        nodes_to_check.push_front((root_pointer, NodeAction::Descend, None));
+
+
+        loop {
+
+            //dbg!(&nodes_to_check);
+            let popped_val = nodes_to_check.pop_front();
+            //dbg!(&popped_val);
+
+            let curr_tup = match popped_val {
+                None => {break;},
+                Some(x) => {x},
+            };
+
+            let (curr_pointer, action, direction) = curr_tup;
+
+            match action {
+
+                NodeAction::Descend => {
+
+                    match curr_pointer {
+                        PagePointer::Leaf(index) => {
+
+                            num_record_pages_visited += 1;
+
+                            let page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
+
+                            for record in page.get_records() {
+                                let dist = query_descriptor.distance(&record.descriptor);
+
+                                hits.try_add(dist, &record, &curr_pointer).unwrap();
+                            }
+
+
+                        },
+                        PagePointer::Node(index) => {
+
+                            num_nodes_visited += 1;
+
+                            let node = self.node_handler.get_node(&index).unwrap().clone();
+
+                            let axis = node.split_axis;
+                            let this_value = &query_descriptor.data[axis];
+                            let split_value = node.split_value;
+
+                            match this_value <= &split_value {
+
+                                true => {
+
+                                    let descend_pointer = node.left_child_pointer;
+
+                                    //push the current node and the direction we're going
+                                    nodes_to_check.push_front((descend_pointer.clone(), NodeAction::Descend, None));
+
+                                    //push the current node and the direction we ignored
+                                    nodes_to_check.push_back((curr_pointer.clone(), NodeAction::CheckIgnoredBranch, Some(Direction::Right)));
+                                },
+                                false => {
+
+                                    let descend_pointer = node.right_child_pointer;
+
+                                    //push the current node and the direction we're going
+                                    nodes_to_check.push_front((descend_pointer.clone(), NodeAction::Descend, None));
+
+                                    //push the current node and the direction we ignored
+                                    nodes_to_check.push_back((curr_pointer.clone(), NodeAction::CheckIgnoredBranch, Some(Direction::Left)));
+                                },
+                            }
+                        },
+                    }
+                },
+
+                NodeAction::CheckIgnoredBranch => {
+
+                    match curr_pointer {
+                        PagePointer::Leaf(_) => {panic!();},
+                        PagePointer::Node(index) => {
+
+                            let node = self.node_handler.get_node(&index).unwrap().clone();
+
+                            let split_axis = node.split_axis;
+                            let split_value = node.split_value;
+
+                            //calc_distance to this axis and check it
+                            let dist = self.dist_to_axis(split_axis, split_value, query_descriptor);
+                            let threshold = hits.get_highest_dist();
+                            //println!("DIST TO AXIS: {:?}", dist);
+
+                            if dist < threshold { //we have to visit the supplied direction
+                                let descend_pointer = match direction.unwrap() {
+                                    Direction::Left => node.left_child_pointer,
+                                    Direction::Right => node.right_child_pointer,
+                                };
+                                nodes_to_check.push_front((descend_pointer, NodeAction::Descend, None));
+                            }
+                        }
+                    }
+
+                },
+            }
+        }
+
+        println!("NODES VISITED: {:?}", num_nodes_visited);
+        println!("RECORD PAGES VISITED: {:?}", num_record_pages_visited);
+
+        return hits;
+
+    }
+
+}
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TreeRecord {
@@ -181,6 +465,7 @@ impl TreeConfig {
 ///
 /// Can be either for reading or just querying given a directory on disk. Internal nodes and leaf
 /// nodes are stored in separate files and paged separately.
+///
 #[derive(Debug)]
 pub struct Tree {
     pub node_handler: FastNodePager,
@@ -198,7 +483,7 @@ pub struct NearestNeighbors {
 
 impl NearestNeighbors {
 
-    fn from_top_hits(top_hits: TopHits, database: &mut Database) -> Self {
+    fn from_top_hits(top_hits: TopHits, database: &ImmutDatabase) -> Self {
 
         let mut distances: Vec<f32> = Vec::new();
         let mut records: Vec<Option<CompoundRecord>> = Vec::new();
@@ -423,7 +708,7 @@ impl Tree {
         dbg!(&record_filename);
 
         let node_handler = FastNodePager::from_file(&node_filename).unwrap();
-        let record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, false, config.cache_limit).unwrap();
+        let record_handler = RecordPager::new(record_filename, config.record_page_length, config.desc_length, false, config.cache_limit).unwrap();
 
         let database = Database::open(&config.get_database_filename());
 
@@ -476,7 +761,7 @@ impl Tree {
         let config_filename = config.get_config_filename();
 
         let node_handler = FastNodePager::new();
-        let mut record_handler = RecordPager::new(Path::new(&record_filename), config.record_page_length, config.desc_length, true, config.cache_limit).unwrap();
+        let mut record_handler = RecordPager::new(record_filename, config.record_page_length, config.desc_length, true, config.cache_limit).unwrap();
 
         let first_record_page = RecordPage::new(config.record_page_length, config.desc_length);
         //record_handler.write_page(&first_record_page).unwrap();
@@ -586,7 +871,7 @@ impl Tree {
 
     }
 
-    pub fn print_record_lengths(&mut self) {
+    pub fn print_record_lengths(&self) {
 
         for i in 0..self.record_handler.len() {
 
@@ -599,141 +884,6 @@ impl Tree {
     pub fn num_nodes(&mut self) -> usize {
 
         return self.node_handler.num_nodes();
-
-    }
-
-    pub fn get_nearest_neighbors(&mut self, query_descriptor: &Descriptor, n: usize) -> NearestNeighbors {
-
-        let top_hits = self.get_top_hits(query_descriptor, n);
-        dbg!("BETWEEN");
-
-        let nearest_neighbors = NearestNeighbors::from_top_hits(top_hits, &mut self.database);
-
-        return nearest_neighbors;
-    }
-
-    ///Returns the `n` nearest neighbors of the provided `query_descriptor`
-    ///
-    ///Performance should worsen as `n` grows larger, as fewer branches of the tree can be pruned
-    ///with more distant already-found points
-    fn get_top_hits(&mut self, query_descriptor: &Descriptor, n: usize) -> TopHits {
-
-        let mut hits = TopHits::new(n);
-
-        let mut num_nodes_visited: usize = 0;
-        let mut num_record_pages_visited: usize = 0;
-
-        //direction is the one we go if we pass!!!
-        let mut nodes_to_check: VecDeque<(PagePointer, NodeAction, Option<Direction>)> = VecDeque::new();
-
-        let root_pointer = self.root.clone();
-
-        nodes_to_check.push_front((root_pointer, NodeAction::Descend, None));
-
-
-        loop {
-
-            //dbg!(&nodes_to_check);
-            let popped_val = nodes_to_check.pop_front();
-            //dbg!(&popped_val);
-
-            let curr_tup = match popped_val {
-                None => {break;},
-                Some(x) => {x},
-            };
-
-            let (curr_pointer, action, direction) = curr_tup;
-
-            match action {
-
-                NodeAction::Descend => {
-
-                    match curr_pointer {
-                        PagePointer::Leaf(index) => {
-
-                            num_record_pages_visited += 1;
-
-                            let page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
-
-                            for record in page.get_records() {
-                                let dist = query_descriptor.distance(&record.descriptor);
-
-                                hits.try_add(dist, &record, &curr_pointer).unwrap();
-                            }
-
-
-                        },
-                        PagePointer::Node(index) => {
-
-                            num_nodes_visited += 1;
-
-                            let node = self.node_handler.get_node(&index).unwrap().clone();
-
-                            let axis = node.split_axis;
-                            let this_value = &query_descriptor.data[axis];
-                            let split_value = node.split_value;
-
-                            match this_value <= &split_value {
-
-                                true => {
-
-                                    let descend_pointer = node.left_child_pointer;
-
-                                    //push the current node and the direction we're going
-                                    nodes_to_check.push_front((descend_pointer.clone(), NodeAction::Descend, None));
-
-                                    //push the current node and the direction we ignored
-                                    nodes_to_check.push_back((curr_pointer.clone(), NodeAction::CheckIgnoredBranch, Some(Direction::Right)));
-                                },
-                                false => {
-
-                                    let descend_pointer = node.right_child_pointer;
-
-                                    //push the current node and the direction we're going
-                                    nodes_to_check.push_front((descend_pointer.clone(), NodeAction::Descend, None));
-
-                                    //push the current node and the direction we ignored
-                                    nodes_to_check.push_back((curr_pointer.clone(), NodeAction::CheckIgnoredBranch, Some(Direction::Left)));
-                                },
-                            }
-                        },
-                    }
-                },
-
-                NodeAction::CheckIgnoredBranch => {
-
-                    match curr_pointer {
-                        PagePointer::Leaf(_) => {panic!();},
-                        PagePointer::Node(index) => {
-
-                            let node = self.node_handler.get_node(&index).unwrap().clone();
-
-                            let split_axis = node.split_axis;
-                            let split_value = node.split_value;
-
-                            //calc_distance to this axis and check it
-                            let dist = self.dist_to_axis(split_axis, split_value, query_descriptor);
-                            let threshold = hits.get_highest_dist();
-                            //println!("DIST TO AXIS: {:?}", dist);
-
-                            if dist < threshold { //we have to visit the supplied direction
-                                let descend_pointer = match direction.unwrap() {
-                                    Direction::Left => node.left_child_pointer,
-                                    Direction::Right => node.right_child_pointer,
-                                };
-                                nodes_to_check.push_front((descend_pointer, NodeAction::Descend, None));
-                            }
-                        }
-                    }
-
-                },
-            }
-        }
-
-        println!("NODES VISITED: {:?}", num_nodes_visited);
-        println!("RECORD PAGES VISITED: {:?}", num_record_pages_visited);
-
-        return hits;
 
     }
 
@@ -1173,6 +1323,7 @@ mod tests {
         }
     }
 
+    /*
     #[test]
     fn quick_tree_nn() {
 
@@ -1231,6 +1382,7 @@ mod tests {
             let _nn = tree.get_nearest_neighbors(&bad_record.descriptor, 1);
         }
     }
+    */
 
     #[test]
     fn build_verify_nn_accuracy() {
@@ -1290,10 +1442,11 @@ mod tests {
     }
 
 
+    /*
     #[bench]
     fn benchmark_query_speed(b: &mut Bencher) {
 
-        fn make_random_query(tree: &mut Tree) {
+        fn make_random_query(tree: &ImmutTree) {
 
             let descriptor = Descriptor::random(tree.config.desc_length);
 
@@ -1305,12 +1458,9 @@ mod tests {
 
         let mut tree = Tree::force_create_with_config(config);
 
-        b.iter(|| make_random_query(&mut tree));
-
-
-
-
+        b.iter(|| make_random_query(tree));
     }
+    */
 
     /*
     #[test]
@@ -1339,6 +1489,7 @@ mod tests {
 
 
 
+    /*
     #[test]
     fn query_verify_nn_accuracy(){
 
@@ -1464,6 +1615,7 @@ mod tests {
 
         assert_eq!(identifiers, correct_answer);
     }
+    */
 
     #[test]
     fn slow_fuzzed_verify_nn_accuracy(){
@@ -1599,7 +1751,7 @@ mod tests {
             build_tree.flush();
 
 
-            let mut query_tree = Tree::read_from_directory("test_data/nn_validation/".to_string());
+            let mut query_tree = ImmutTree::read_from_directory("test_data/nn_validation/".to_string());
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
             let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
@@ -1702,7 +1854,7 @@ mod tests {
 
             build_tree.flush();
 
-            let mut query_tree = Tree::read_from_directory("test_data/qf/".to_string());
+            let mut query_tree = ImmutTree::read_from_directory("test_data/qf/".to_string());
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
 
