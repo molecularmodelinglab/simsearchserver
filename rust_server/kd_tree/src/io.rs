@@ -26,6 +26,43 @@ pub struct RecordPager {
     cache_check_counter: usize,
 }
 
+pub struct DiskNodePager {
+    filename: String
+}
+
+impl DiskNodePager {
+
+    pub fn from_file(filename: &String) -> Result<Self, Error> {
+        return Ok(Self{filename: filename.clone()});
+    }
+
+    fn calc_offset(index: usize) -> usize {
+
+        return layout::FILE_DATA_START + (index * layout::NODE_SIZE);
+
+    }
+
+    pub fn get_node(&self, index: &usize) -> Result<InternalNode, String> {
+
+        let mut fd = OpenOptions::new()
+                    .create(false)
+                    .read(true)
+                    .write(false)
+                    .truncate(false)
+                    .open(&self.filename).unwrap();
+
+        let start = Self::calc_offset(*index);
+        let mut node_arr: [u8; layout::NODE_SIZE] = [0x00; layout::NODE_SIZE];
+        fd.seek(SeekFrom::Start(start as u64)).unwrap();
+        fd.read_exact(&mut node_arr).unwrap();
+        let node = InternalNode::from_slice(&node_arr).unwrap();
+
+        Ok(node)
+
+    }
+
+}
+
 pub struct ImmutNodePager {
     pub store: Vec<InternalNode>
 }
@@ -60,6 +97,7 @@ impl ImmutNodePager {
                     .open(path)?;
 
         let mut next_free_index_arr: [u8; layout::HEADER_CURSOR_SIZE] = [0x00; layout::HEADER_CURSOR_SIZE];
+
         fd.seek(SeekFrom::Start(layout::HEADER_CURSOR_START as u64))?;
         fd.read_exact(&mut next_free_index_arr)?;
 
@@ -71,6 +109,7 @@ impl ImmutNodePager {
         
         for i in 0..(value + 1) {
             let mut node_arr: [u8; layout::NODE_SIZE] = [0x00; layout::NODE_SIZE];
+
             let start = Self::calc_offset(i);
             fd.seek(SeekFrom::Start(start as u64))?;
             fd.read_exact(&mut node_arr)?;
@@ -244,6 +283,15 @@ impl RecordPager {
 
         match create {
             true => {
+
+                    let mut file = OpenOptions::new()
+                            .create(true)
+                            .read(true)
+                            .write(true)
+                            .open(path.clone())?;
+
+                    file.write("empty".as_bytes())?;
+
                     return Ok(Self{
                     path: path,
                     next_free_index: 0,
@@ -256,10 +304,7 @@ impl RecordPager {
             },
             false => {
                 let mut fd = OpenOptions::new()
-                    .create(false)
                     .read(true)
-                    .write(false)
-                    .truncate(false)
                     .open(path.clone())?;
 
                     //fn coerce_pointer(value: &[u8]) -> [u8; layout::PTR_SIZE] {
@@ -331,10 +376,7 @@ impl RecordPager {
         let start = self.calc_offset(address);
 
         let mut file = OpenOptions::new()
-                    .create(false)
                     .read(true)
-                    .write(false)
-                    .truncate(false)
                     .open(self.path.clone())?;
 
 
@@ -404,7 +446,12 @@ impl RecordPager {
 
             let value = self.cache.get(key).unwrap().clone();
 
-            self._write_page_at_offset(&value, &key);
+            let res = self._write_page_at_offset(&value, &key);
+
+            match res {
+                Ok(_) => {},
+                Err(e) => {panic!("{:?}", e)},
+            }
             self.cache.remove(key);
 
         }
@@ -450,7 +497,7 @@ impl RecordPager {
                 //println!("{:?}", current_cache_size_gb);
 
                 if current_cache_size_gb > limit as f32 {
-                    println!("CACHE SIZE {:?} EXCEEDED: {:?} GB", current_cache_size_gb, limit);
+                    //println!("CACHE SIZE {:?} EXCEEDED: {:?} GB", current_cache_size_gb, limit);
                     self._evict();
                 }
             }
@@ -459,7 +506,7 @@ impl RecordPager {
 
     fn _evict(&mut self) {
 
-        let evict_prop = 0.3;
+        let evict_prop = 0.1;
         let evict_num = self.cache.len() as f32 * evict_prop;
         let mut keys_to_flush: Vec<usize> = Vec::new();
 
@@ -471,62 +518,28 @@ impl RecordPager {
 
         self.flush_keys(keys_to_flush);
 
-        println!("CACHE SIZE AFTER EVICT: {:?}", self.get_cache_size_gb());
+        //println!("CACHE SIZE AFTER EVICT: {:?}", self.get_cache_size_gb());
 
-    }
-
-    pub fn _write_page(&mut self, page: &RecordPage) -> Result<PagePointer, Error> {
-
-        let mut file = OpenOptions::new()
-                    .create(false)
-                    .read(true)
-                    .write(false)
-                    .truncate(false)
-                    .open(self.path.clone())?;
-
-
-        let start = self.calc_offset(&self.next_free_index);
-        file.seek(SeekFrom::Start(start))?;
-
-        let data = page.get_data();
-
-        file.write(data)?;
-
-        let res = self.next_free_index.clone();
-        self.next_free_index += 1;
-        
-        //update next_free_index on disk
-        let mut next_free_index_arr: [u8; layout::HEADER_CURSOR_SIZE] = [0x00; layout::HEADER_CURSOR_SIZE];
-
-        BigEndian::write_u64(&mut next_free_index_arr, self.next_free_index as u64);
-
-
-        file.seek(SeekFrom::Start(layout::HEADER_CURSOR_START as u64))?;
-        file.write(&next_free_index_arr)?;
-
-        Ok(PagePointer::Leaf(res))
     }
 
     pub fn _write_page_at_offset(&mut self, page: &RecordPage, address: &usize) -> Result<(), Error> {
         let start = self.calc_offset(address);
 
         let mut file = OpenOptions::new()
-                    .create(false)
-                    .read(true)
-                    .write(false)
-                    .truncate(false)
+                    .write(true)
                     .open(self.path.clone())?;
 
         file.seek(SeekFrom::Start(start))?;
 
+
         let data = page.get_data();
 
         file.write(data)?;
+        //file.sync_all()?;
         //let res = self.next_free_index.clone();
 
         Ok(())
     }
-
 }
 
 #[cfg(test)]

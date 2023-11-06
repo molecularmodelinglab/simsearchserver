@@ -5,7 +5,7 @@ use crate::database::{Database, ImmutDatabase};
 use crate::node::{InternalNode, PagePointer};
 use crate::page::RecordPage;
 use crate::layout;
-use crate::io::{ImmutNodePager, FastNodePager, RecordPager, GetNode};
+use crate::io::{DiskNodePager, FastNodePager, RecordPager, GetNode};
 use crate::data::{Parser};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
@@ -23,7 +23,7 @@ use std::collections::VecDeque;
 
 
 pub struct ImmutTree {
-    pub node_handler: ImmutNodePager,
+    pub node_handler: DiskNodePager,
     pub record_handler: RecordPager,
     pub database: ImmutDatabase,
     pub root: PagePointer,
@@ -44,7 +44,7 @@ impl ImmutTree {
         dbg!(&node_filename);
         dbg!(&record_filename);
 
-        let node_handler = ImmutNodePager::from_file(&node_filename).unwrap();
+        let node_handler = DiskNodePager::from_file(&node_filename).unwrap();
         let record_handler = RecordPager::new(record_filename, config.record_page_length, config.desc_length, false, config.cache_limit).unwrap();
 
         let database = ImmutDatabase::open(&config.get_database_filename());
@@ -912,7 +912,11 @@ impl Tree {
                     let mut page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
 
                     //dbg!("ADD CHECK", &curr_pointer);
-                    page.add_record(&tree_record).unwrap();
+                    let res = page.add_record(&tree_record);
+                    match res {
+                        Ok(_) => {},
+                        Err(e) => {panic!("{:?}", e);},
+                    }
 
                     //dbg!("POST CHECK", &curr_pointer);
                     match page.is_full() {

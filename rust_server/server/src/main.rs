@@ -30,7 +30,7 @@ struct Args {
     #[arg(short, long)]
     port: Option<u16>,
 }
-async fn handle_request(req: Request<Body>, tree: Arc<Mutex<tree::ImmutTree>>) -> Result<Response<Body>> {
+async fn handle_request(req: Request<Body>, dirname: String) -> Result<Response<Body>> {
 
     let path = req.uri().path().to_string();
     dbg!(&path);
@@ -42,9 +42,9 @@ async fn handle_request(req: Request<Body>, tree: Arc<Mutex<tree::ImmutTree>>) -
     dbg!(&path);
     let retval = match method {
 
-        "nn" => dispatch_nn(req, tree).await,
-        "range" => dispatch_range(req, tree).await,
-        "test" => dispatch_test(tree).await,
+        //"nn" => dispatch_nn(req, dirname).await,
+        //"range" => dispatch_range(req, dirname).await,
+        "test" => dispatch_test(&dirname).await,
         _ => Ok(Response::new(Body::from("method not recognized".to_string().as_bytes().to_vec()))),
     };
     
@@ -52,15 +52,15 @@ async fn handle_request(req: Request<Body>, tree: Arc<Mutex<tree::ImmutTree>>) -
     return retval;
 }
 
-async fn dispatch_test(tree: Arc<Mutex<tree::ImmutTree>>) -> Result<Response<Body>> {
+async fn dispatch_test(dirname: &String) -> Result<Response<Body>> {
 
-    let mut mg = tree.lock().unwrap();
-    let length = mg.config.desc_length;
+    let tree = tree::ImmutTree::read_from_directory(dirname.clone());
+    let length = tree.config.desc_length;
     let descriptor = Descriptor::random(length);
 
     dbg!(&descriptor);
 
-    let nn = mg.get_nearest_neighbors(&descriptor, 100);
+    let nn = tree.get_nearest_neighbors(&descriptor, 10);
     let s = nn.to_yaml();
 
     Ok(Response::new(Body::from(s.as_bytes().to_vec())))
@@ -206,20 +206,17 @@ pub async fn main() -> Result<()> {
     };
 
 
-    let tree = tree::ImmutTree::read_from_directory(args.dirname);
-    let arc_tree = Arc::new(Mutex::new(tree));
-
     // For every connection, we must make a `Service` to handle all
     // incoming HTTP requests on said connection.
     let make_svc = make_service_fn(move |_conn| {
-        let arc_tree = arc_tree.clone();
+        let dirname = args.dirname.clone();
 
         // This is the `Service` that will handle the connection.
         // `service_fn` is a helper to convert a function that
         // returns a Response into a `Service`.
         async move { Ok::<_, Infallible>(service_fn( move |req| {
             //let tree = tree.clone();
-            handle_request(req, arc_tree.clone())
+            handle_request(req, dirname.clone())
         }
             ))}
     });
