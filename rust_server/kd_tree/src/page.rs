@@ -93,7 +93,7 @@ impl RecordPage {
 
         //dbg!("ADD CHECK");
         match self.is_full() {
-            true => return Err("Node is full".to_string()),
+            true => {return Err("Record page is full".to_string())},
             false => {},
         }
 

@@ -10,5 +10,6 @@ tokio = {version = "*", features = ["full"]}
 bytes = "*"
 rand = "*"
 serde_json = "*"
+serde_yaml = "*"
 reqwest = "*"
 clap = { version = "4.3.0", features = ["derive"] }

@@ -1,13 +1,16 @@
 use kd_tree::data::{CompoundIdentifier, Descriptor, CompoundRecord};
 use kd_tree::database::{Database, DatabaseRecord};
 
-use kdam::tqdm;
+use kdam::{tqdm, BarExt};
 use kd_tree::tree;
 use glob::glob;
 use::std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufRead};
 use std::path::Path;
+
+use rand::thread_rng;
+use rand::seq::SliceRandom;
 
 use std::time::Instant;
 
@@ -20,7 +23,72 @@ where P: AsRef<Path>, {
     Ok(io::BufReader::new(file).lines())
 }
 
+use clap::{Args, Parser, Subcommand};
 
+/// Here's my app!
+#[derive(Debug, Parser, Clone)]
+#[clap(name = "my-app", version)]
+pub struct App {
+    #[clap(flatten)]
+    global_opts: GlobalOpts,
+
+    #[clap(subcommand)]
+    command: Command,
+}
+
+#[derive(Debug, Subcommand, Clone)]
+enum Command {
+
+    /// Help message for read.
+    TestRandom(TestRandomArgs),    /// Help message for write.
+    BuildFromFiles(BuildFromFileArgs),
+    // ...other commands (can #[clap(flatten)] other enum variants here)
+}
+
+#[derive(Debug, Args, Clone)]
+struct TestRandomArgs {
+
+    ///Filenames of source data
+    #[arg(long, num_args(1..))]
+    filenames: Vec<String>,
+
+    ///Config filename
+    #[clap(long)]
+    config_filename: String,
+
+    ///Cache size for build, in GB
+    #[clap(long, default_value_t = 1.0)]
+    cache_size: f32,
+
+}
+
+#[derive(Debug, Args, Clone)]
+struct BuildFromFileArgs {
+
+    ///Filenames of source data
+    #[arg(long, num_args(1..))]
+    filenames: Vec<String>,
+
+    ///Config filename
+    #[clap(long)]
+    config_filename: String,
+
+    ///Cache size for build, in GB
+    #[clap(long, default_value_t = 1.0)]
+    cache_size: f32,
+
+}
+
+#[derive(Debug, Args, Clone)]
+struct GlobalOpts {
+    /// Color
+    #[clap(long, global = true)]
+    color: bool,
+
+    //... other global options
+}
+
+/*
 use clap::Parser;
 #[derive(Parser, Debug)] 
 #[command(author, version, about, long_about = None)]
@@ -50,23 +118,28 @@ struct Args {
     #[arg(long)]
     cache_limit: Option<f32>,
 
+    ///Filenames for task build_from_files
+    #[arg(long, num_args(0..))]
+    build_filenames: Vec<String>,
+
+
 }
+*/
 
 fn main() {
 
-    let args = Args::parse();
+    let args = App::parse();
     dbg!(&args);
 
-    match args.task.as_str() {
-        "build_from_file" => build_from_file(args),
-        "build_random" => build_random(args),
-        "param_sweep" => param_sweep(),
-        _ => panic!("Unknown task: {}", args.task),
+    dbg!(&args.command);
+    match &args.command {
+        Command::TestRandom(_) => {dbg!("TEST RANDOM");},
+        Command::BuildFromFiles(bargs) => {build_from_files(&bargs);},
     }
-
 }
 
-fn build_random(args: Args) {
+/*
+fn build_random(args: GlobalOpts) {
 
     let config_filename = args.config_filename.unwrap();
 
@@ -105,82 +178,89 @@ fn build_random(args: Args) {
 
     println!("Tree construction complete");
 }
+*/
 
-fn build_from_smallsa_files() {
+fn build_from_files(args: &BuildFromFileArgs) {
 
-    let mut config = tree::TreeConfig::default();
-    config.desc_length = 16;
-    config.record_page_length = 16384;
-    config.directory = "/pool/smallsa/trees/16dim_16384/".to_string();
+
+    let mut config = tree::TreeConfig::from_file(args.config_filename.clone());
+
     let mut tree = tree::Tree::force_create_with_config(config.clone());
 
-    let mut filenames: Vec<String> = glob("/pool/smallsa/16dim/*clean").expect("Glob failed").map(|x| x.unwrap().into_os_string().into_string().unwrap()).collect();
+    match args.filenames.len() {
+        0 => panic!("No filenames supplied"),
+        _ => {},
+    }
 
-    filenames.reverse();
-
-    for filename in filenames.iter(){
+    for filename in tqdm!(args.filenames.iter()) {
 
         let clean_filename = filename.clone();
-        dbg!(&clean_filename);
 
         let stem = clean_filename.split("/").last().unwrap().split("_").next().unwrap().clone();
-        dbg!(stem);
-        let lines = read_lines(&clean_filename).unwrap();
+
+        let lines = read_lines(&clean_filename).expect(&format!("Could not read file: {:?}", &clean_filename));
 
         let mut counter = -1;
+        let mut pb = tqdm!();
         for line in lines {
-            if let Ok(good_line) = line {
+            if let Ok(mut good_line) = line {
                 if counter == -1 {
                     counter += 1;
                     continue;
                 }
 
-                //println!("{}", good_line);
+                if good_line.contains("|") {
+
+                    let mut keep_string: Vec<char> = Vec::new();
+                    let mut keep = true;
+                    for char in good_line.chars() {
+                        if char == '|' { keep = !keep; continue }
+                        if keep {
+                            
+                            keep_string.push(char.clone());
+                        }
+
+                    }
+
+                    good_line = keep_string.into_iter().collect();
+                }
+
                 let mut s = good_line.split(",");
 
                 let fields: Vec<&str> = s.collect();
 
-                match fields.len() {
-                    7 => {},
-                    _ => {
-                        println!("Skipping line due to bad fields: {}", good_line);
-                        continue;
-                    }
-                }
-                let id_val = fields[0];
-                let latent_string = fields[6];
-                let latent_string = latent_string.replace('"', "");
-                let latent_string = latent_string.replace("\\", "");
-                let latent_string = latent_string.replace("[", "");
-                let latent_string = latent_string.replace("]", "");
+                let mut field_iter = fields.into_iter();
 
-                let split: Vec<&str> = latent_string.split_whitespace().collect();
-                let desc = split.iter().filter_map(|x| x.parse::<f32>().ok()).collect::<Vec<f32>>();
-                match desc.len() == config.desc_length {
-                    true => {},
-                    false => {
-                        dbg!(desc);
-                        println!("Skipping line due to bad descriptor: {}", good_line);
-                        continue;
-                    }
-                }
-                let descriptor = Descriptor{ data: desc.clone(), length: config.desc_length};
+                let smiles = field_iter.next().unwrap();
+                let id_val = field_iter.next().unwrap();
+
+                let descriptor_fields: Vec<&str> = field_iter.collect();
+
+                let descriptor_values = match parse_descriptor_vec(descriptor_fields) {
+                    Ok(a) => a,
+                    Err(s) => {dbg!(&good_line); dbg!(s);continue},
+                };
+                
+                let mut descriptor = Descriptor{ data: descriptor_values.clone(), length: config.desc_length};
+
+                descriptor.add_small_noise();
+
                 let id_string = format!("{}{}", stem, id_val);
-                //dbg!(&id_string);
+
                 let identifier = CompoundIdentifier::from_string(id_string);
-                //dbg!(desc);
-                //dbg!(&identifier);
 
                 let record = CompoundRecord{ 
                     compound_identifier: identifier, 
-                    smiles: "no smiles".to_string(),
+                    smiles: smiles.to_string(),
                     descriptor,
                     length: config.desc_length,};
 
                 tree.add_record(&record).unwrap();
 
                 counter += 1;
+                pb.update(1).unwrap();
             }
+
         }
 
     }
@@ -188,7 +268,23 @@ fn build_from_smallsa_files() {
     tree.flush();
 }
 
-fn build_from_file(args: Args) {
+fn parse_descriptor_vec(v: Vec<&str>) -> Result<Vec<f32>, std::num::ParseFloatError> {
+
+    let descriptor_values: Result<Vec<f32>,_> = v.iter()
+        .map(|x| x
+                  .replace("[","")
+                  .replace("]","")
+                  .replace(" ","")
+                  .parse::<f32>()
+            )
+        .collect();
+    return descriptor_values;
+
+
+}
+
+/*
+fn build_from_file(args: GlobalOpts) {
 
 
     let mut config = tree::TreeConfig::default();
@@ -242,7 +338,9 @@ fn build_from_file(args: Args) {
     tree.flush();
 
 }
+*/
 
+/*
 fn param_sweep() {
 
     use std::time::Instant;
@@ -280,7 +378,9 @@ fn param_sweep() {
         }
     }
 }
+*/
 
+/*
 mod tests {
 
     use super::*;
@@ -350,5 +450,7 @@ mod tests {
 
 
 
+
 }
+*/
 

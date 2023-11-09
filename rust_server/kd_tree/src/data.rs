@@ -6,6 +6,8 @@ use crate::layout;
 use crate::tree::TreeRecord;
 use crate::error::{Error};
 
+use serde::Serialize;
+
 pub type CompoundIndex = u64;
 
 pub const IDENTIFIER_SIZE: usize = 30;
@@ -13,7 +15,7 @@ pub const IDENTIFIER_SIZE: usize = 30;
 pub const MAX_SMILES_LENGTH: usize = 100;
 pub const MAX_IDENTIFIER_LENGTH: usize = 30;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct CompoundRecord {
     pub smiles: String,
     pub compound_identifier: CompoundIdentifier,
@@ -62,7 +64,7 @@ impl CompoundRecord {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct Descriptor {
     pub data: Vec<f32>,
     pub length: usize,
@@ -116,10 +118,25 @@ impl Descriptor {
 
         return s;
     }
+
+    pub fn add_small_noise(&mut self) {
+
+        let mut rng = rand::thread_rng();
+        let noise: Vec<f32> = (0..self.length).map(|_| rng.gen_range(0.0..0.0001)).collect();
+
+        let mut result: Vec<f32> = vec![0.0; self.length];
+
+        for i in 0..self.length {
+            result[i] = self.data[i] + noise[i];
+        }
+
+        self.data = result;
+    }
 }
 
-#[derive(PartialEq, Clone)]
-pub struct CompoundIdentifier(pub [u8; IDENTIFIER_SIZE]);
+#[derive(PartialEq, Clone, Serialize)]
+//pub struct CompoundIdentifier(pub [u8; IDENTIFIER_SIZE]);
+pub struct CompoundIdentifier(pub String);
 
 impl CompoundIdentifier {
 
@@ -140,16 +157,38 @@ impl CompoundIdentifier {
 
         let s: [u8;IDENTIFIER_SIZE] = fill_arr.try_into().expect("slice with incorrect length");
 
-        return Self(s);
+        return Self::_from_arr(&s);
+
+
+    }
+
+    fn _from_arr(data: &[u8]) -> Self {
+
+        let s: [u8;IDENTIFIER_SIZE] = data.try_into().expect("slice with incorrect length");
+        let identifier_str: AsciiString = AsciiString::from_ascii(s.clone()).unwrap();
+        let s = String::from(identifier_str);
+
+        let mut string_vec: Vec<char> = Vec::new();
+        for char in s.chars() {
+            if char != '\0' { string_vec.push(char) };
+        }
+
+        let cleaned_string: String = string_vec.iter().collect();
+        
+        return Self(cleaned_string);
+
+
     }
 
     pub fn from_ascii_array(data: &[u8], offset: usize, length: usize) -> Self {
 
         let bytes = &data[offset..offset + length];
-        let s: [u8;IDENTIFIER_SIZE] = bytes.try_into().expect("slice with incorrect length");
-        return Self(s);
+
+        return Self::_from_arr(bytes);
+
 
     }
+
 
     pub fn random() -> Self {
 
@@ -161,15 +200,23 @@ impl CompoundIdentifier {
             *x = rng.gen_range(65..91);
         }
 
-        return Self(bytes);
+        let identifier_str: AsciiString = AsciiString::from_ascii(bytes.clone()).unwrap();
+        return Self(String::from(identifier_str));
     }
 
     pub fn to_string(&self) -> String {
 
         let identifier_str: AsciiString = AsciiString::from_ascii(self.0.clone()).unwrap();
         let identifier_string = String::from(identifier_str);
+
+        let mut string_vec: Vec<char> = Vec::new();
+        for char in identifier_string.chars() {
+            if char != '\0' { string_vec.push(char) };
+        }
+
+        let cleaned_string: String = string_vec.iter().collect();
         
-        return identifier_string;
+        return cleaned_string;
     }
 }
 

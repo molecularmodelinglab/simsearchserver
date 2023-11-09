@@ -5,44 +5,33 @@ import threading
 
 from json import dumps
 
-from modeling.model import SalsaONNXModel
+from modeling.model import SalsaONNXModel, MorganPCAModel
 
 app = Flask(__name__)
 
-model = SalsaONNXModel("modeling/models/salsa_bigmat.onnx")
+#model = SalsaONNXModel("modeling/models/salsa_bigmat.onnx")
+model = MorganPCAModel()
 model_lock = threading.Lock()
 
 @app.route('/')
 def home():
     print("main")
 
-@app.route('/smiles', methods=['GET', 'POST'])
-def smiles():
+@app.route('/smiles/<smiles_value>', methods=['GET', 'POST'])
+def smiles(smiles_value):
 
-    '''
-    print(dir(request))
-    print(request.form)
-    print(request.values)
-    print(request.json)
-    '''
+    print("SMILES: ", smiles_value)
 
-    print(request.args)
-    args = list(request.args)
-    try:
-        assert(len(args) == 1)
-    except:
-        return "Invalid input"
-
-    smiles = args[0]
-
+    print(type(smiles_value))
 
     data = None
     try:
         model_lock.acquire()
-        data = model.embed(smiles)
+        data = model.embed(smiles_value)
         model_lock.release()
-    except:
+    except Exception as e:
         model_lock.release()
+        print(e)
         message = dumps({"error": "Smiles failed to parse"})
         abort(Response(message, 406))
 

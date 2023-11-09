@@ -12,7 +12,7 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Request, Response};
 use hyper::server::Server;
 
-use serde_json::Result;
+use serde_yaml::Result;
 
 use reqwest::Error;
 
@@ -42,7 +42,7 @@ async fn handle_request(req: Request<Body>, dirname: String) -> Result<Response<
     dbg!(&path);
     let retval = match method {
 
-        //"nn" => dispatch_nn(req, dirname).await,
+        "nn" => dispatch_nn(req, &dirname).await,
         //"range" => dispatch_range(req, dirname).await,
         "test" => dispatch_test(&dirname).await,
         _ => Ok(Response::new(Body::from("method not recognized".to_string().as_bytes().to_vec()))),
@@ -61,12 +61,14 @@ async fn dispatch_test(dirname: &String) -> Result<Response<Body>> {
     dbg!(&descriptor);
 
     let nn = tree.get_nearest_neighbors(&descriptor, 10);
-    let s = nn.to_yaml();
+    let s = serde_yaml::to_string(&nn).unwrap();
+    //let s = nn.to_yaml();
 
     Ok(Response::new(Body::from(s.as_bytes().to_vec())))
 }
-async fn dispatch_nn(req: Request<Body>, tree: Arc<Mutex<tree::ImmutTree>>) -> Result<Response<Body>> {
+async fn dispatch_nn(req: Request<Body>, dirname: &String) -> Result<Response<Body>> {
 
+    let tree = tree::ImmutTree::read_from_directory(dirname.clone());
     dbg!("in dispatch_nn");
     let path = req.uri().path().to_string();
 
@@ -82,7 +84,7 @@ async fn dispatch_nn(req: Request<Body>, tree: Arc<Mutex<tree::ImmutTree>>) -> R
         _ => (),
     };
 
-    let smiles_request = format!("http://localhost:5000/smiles?{}", smiles);
+    let smiles_request = format!("http://localhost:5000/smiles/{}", smiles);
     dbg!(&smiles_request);
 
     let response = reqwest::get(&smiles_request).await.unwrap();
@@ -106,8 +108,11 @@ async fn dispatch_nn(req: Request<Body>, tree: Arc<Mutex<tree::ImmutTree>>) -> R
 
     dbg!(&descriptor);
 
+    /*
     let mut mg = tree.lock().unwrap();
     let nn = mg.get_nearest_neighbors(&descriptor, num_nn);
+    */
+    let nn = tree.get_nearest_neighbors(&descriptor, num_nn);
     let s = nn.to_yaml();
 
     Ok(Response::new(Body::from(s.as_bytes().to_vec())))

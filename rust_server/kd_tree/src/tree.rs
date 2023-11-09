@@ -475,7 +475,7 @@ pub struct Tree {
     pub config: TreeConfig,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize)]
 pub struct NearestNeighbors {
     pub distances: Vec<f32>,
     pub records: Vec<Option<CompoundRecord>>,
@@ -887,6 +887,26 @@ impl Tree {
 
     }
 
+    pub fn print_record_page(&mut self, page: RecordPage) {
+
+        let records = page.get_records();
+
+        for record in records.iter() {
+
+            dbg!(record.index);
+            dbg!(self.database.query(&record.index));
+        }
+
+
+    }
+
+    pub fn get_records_per_page(&mut self) -> usize {
+
+        return (self.config.record_page_length - layout::PAGE_DATA_START) / TreeRecord::compute_record_size(self.config.desc_length);
+
+    }
+
+
     ///Adds the records to the tree. Descends down the tree until a leaf node is found, and appends
     ///the records to that node. If this fills the node, the node is split at its median and two
     ///half-filled leaf nodes are created. A new internal node is created to point to these two
@@ -915,7 +935,7 @@ impl Tree {
                     let res = page.add_record(&tree_record);
                     match res {
                         Ok(_) => {},
-                        Err(e) => {panic!("{:?}", e);},
+                        Err(e) => {self.print_record_page(page); panic!();},
                     }
 
                     //dbg!("POST CHECK", &curr_pointer);

@@ -5,6 +5,9 @@ import numpy as np
 import torch
 
 from modeling.preprocess import process_smiles
+from rdkit.Chem.AllChem import GetHashedMorganFingerprint
+
+from rdkit import Chem
 
 class SalsaONNXModel():
 
@@ -24,4 +27,40 @@ class SalsaONNXModel():
         embedding = [float(x) for x in embedding]
 
         return embedding
+
+class MorganPCAModel():
+
+    def __init__(self):
+
+
+        import pickle
+
+        pca_filename = "/data/Enamine_REAL_DATASET_PCA/pca_model_1024.pkl"
+        pca_model = pickle.load(open(pca_filename, 'rb'))
+        self.pca_model = pca_model
+
+    def _get_fp(self, smiles):
+
+        mol = Chem.MolFromSmiles(smiles)
+        fp = np.array(list(GetHashedMorganFingerprint(mol, radius=3, nBits=1024)))
+
+        fp = fp.reshape((1, fp.shape[0]))
+        print(fp)
+
+        return fp
+
+
+    def embed(self, smiles):
+        print("embed")
+
+
+        fp = self._get_fp(smiles)
+
+    
+        small = self.pca_model.transform(fp)
+
+        return list(small[0])
+
+
+
 
