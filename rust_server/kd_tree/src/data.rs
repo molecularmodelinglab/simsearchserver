@@ -12,7 +12,7 @@ pub type CompoundIndex = u64;
 
 pub const IDENTIFIER_SIZE: usize = 30;
 
-pub const MAX_SMILES_LENGTH: usize = 100;
+pub const MAX_SMILES_LENGTH: usize = 200;
 pub const MAX_IDENTIFIER_LENGTH: usize = 30;
 
 #[derive(Debug, PartialEq, Clone, Serialize)]

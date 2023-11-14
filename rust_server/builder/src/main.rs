@@ -192,16 +192,19 @@ fn build_from_files(args: &BuildFromFileArgs) {
         _ => {},
     }
 
+    let mut total_counter: usize = 0;
+
+    let mut start = Instant::now();
     for filename in tqdm!(args.filenames.iter()) {
 
         let clean_filename = filename.clone();
+        println!("{:?}", clean_filename);
 
         let stem = clean_filename.split("/").last().unwrap().split("_").next().unwrap().clone();
 
         let lines = read_lines(&clean_filename).expect(&format!("Could not read file: {:?}", &clean_filename));
 
         let mut counter = -1;
-        let mut pb = tqdm!();
         for line in lines {
             if let Ok(mut good_line) = line {
                 if counter == -1 {
@@ -223,6 +226,11 @@ fn build_from_files(args: &BuildFromFileArgs) {
                     }
 
                     good_line = keep_string.into_iter().collect();
+                }
+
+                if total_counter % 1000000 == 0 {
+                    let elapsed = start.elapsed().as_secs_f64();
+                    println!("Total records added: {:?} in {:?} seconds", total_counter, elapsed);
                 }
 
                 let mut s = good_line.split(",");
@@ -257,8 +265,9 @@ fn build_from_files(args: &BuildFromFileArgs) {
 
                 tree.add_record(&record).unwrap();
 
+                total_counter += 1;
+
                 counter += 1;
-                pb.update(1).unwrap();
             }
 
         }
