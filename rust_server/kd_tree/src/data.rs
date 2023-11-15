@@ -10,10 +10,11 @@ use serde::Serialize;
 
 pub type CompoundIndex = u64;
 
-pub const IDENTIFIER_SIZE: usize = 30;
+pub const IDENTIFIER_SIZE: usize = 50;
 
 pub const MAX_SMILES_LENGTH: usize = 200;
-pub const MAX_IDENTIFIER_LENGTH: usize = 30;
+//pub const MAX_IDENTIFIER_LENGTH: usize = 30;
+pub const MAX_IDENTIFIER_LENGTH: usize = IDENTIFIER_SIZE;
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct CompoundRecord {

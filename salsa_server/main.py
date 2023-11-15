@@ -9,16 +9,28 @@ from modeling.model import SalsaONNXModel, MorganPCAModel
 
 app = Flask(__name__)
 
-#model = SalsaONNXModel("modeling/models/salsa_bigmat.onnx")
-model = MorganPCAModel()
+salsa16_model = SalsaONNXModel("modeling/models/salsa16.onnx")
+salsa8_model = SalsaONNXModel("modeling/models/salsa8.onnx")
+morgan_model = MorganPCAModel()
 model_lock = threading.Lock()
 
 @app.route('/')
 def home():
     print("main")
 
-@app.route('/smiles/<smiles_value>', methods=['GET', 'POST'])
-def smiles(smiles_value):
+@app.route('/smiles/<method>/<smiles_value>', methods=['GET', 'POST'])
+def smiles(smiles_value, method):
+
+    if method.lower() == "salsa16":
+        model = salsa16_model
+    elif method.lower() == "salsa8":
+        model = salsa8_model
+    elif method.lower() == "morganpca16":
+        model = morgan_model
+    else:
+        message = dumps({"error": f"Embedding method not recognized: {method}"})
+        abort(Response(message, 406))
+
 
     print("SMILES: ", smiles_value)
 
@@ -40,3 +52,4 @@ def smiles(smiles_value):
 
     print(data)
     return data
+

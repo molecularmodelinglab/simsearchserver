@@ -4,15 +4,15 @@ use kd_tree::database::{Database, DatabaseRecord};
 use kdam::{tqdm, BarExt};
 use kd_tree::tree;
 use glob::glob;
-use::std::fs::File;
 use std::io::prelude::*;
 use std::io::{self, BufRead};
 use std::path::Path;
+use std::fs::{File, OpenOptions};
+use std::time::Instant;
 
 use rand::thread_rng;
 use rand::seq::SliceRandom;
 
-use std::time::Instant;
 
 
 // The output is wrapped in a Result to allow matching on errors
@@ -183,35 +183,48 @@ fn build_random(args: GlobalOpts) {
 fn build_from_files(args: &BuildFromFileArgs) {
 
 
-    let mut config = tree::TreeConfig::from_file(args.config_filename.clone());
+    let config = tree::TreeConfig::from_file(args.config_filename.clone());
 
-    let mut tree = tree::Tree::force_create_with_config(config.clone());
+    let mut tree = tree::Tree::create_with_config(config.clone());
 
     match args.filenames.len() {
         0 => panic!("No filenames supplied"),
         _ => {},
     }
 
-    let mut total_counter: usize = 0;
+    let log_file_path = config.directory + "/build_log.txt";
 
-    let mut start = Instant::now();
+    let mut log_file = OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(log_file_path.clone()).unwrap();
+
+    let mut success_counter: usize = 0;
+    let mut error_counter: usize = 0;
+
+    let start = Instant::now();
     for filename in tqdm!(args.filenames.iter()) {
 
         let clean_filename = filename.clone();
         println!("{:?}", clean_filename);
 
-        let stem = clean_filename.split("/").last().unwrap().split("_").next().unwrap().clone();
+        let stem = clean_filename.split("/").last().unwrap().split("_").next().unwrap();
 
         let lines = read_lines(&clean_filename).expect(&format!("Could not read file: {:?}", &clean_filename));
 
         let mut counter = -1;
         for line in lines {
+
             if let Ok(mut good_line) = line {
+
+                //ignore header
                 if counter == -1 {
                     counter += 1;
                     continue;
                 }
 
+                //strip out smiles extension stuff
                 if good_line.contains("|") {
 
                     let mut keep_string: Vec<char> = Vec::new();
@@ -228,12 +241,14 @@ fn build_from_files(args: &BuildFromFileArgs) {
                     good_line = keep_string.into_iter().collect();
                 }
 
-                if total_counter % 1000000 == 0 {
+
+                if (success_counter % 1000000 == 0) & (success_counter != 0) {
                     let elapsed = start.elapsed().as_secs_f64();
-                    println!("Total records added: {:?} in {:?} seconds", total_counter, elapsed);
+                    let log_string = format!("Total records added: {:?} in {:?} seconds\n", success_counter, elapsed);
+                    log_file.write(log_string.as_bytes());
                 }
 
-                let mut s = good_line.split(",");
+                let s = good_line.split(",");
 
                 let fields: Vec<&str> = s.collect();
 
@@ -246,7 +261,11 @@ fn build_from_files(args: &BuildFromFileArgs) {
 
                 let descriptor_values = match parse_descriptor_vec(descriptor_fields) {
                     Ok(a) => a,
-                    Err(s) => {dbg!(&good_line); dbg!(s);continue},
+                    Err(s) => {
+                        let error_line = format!("Error parsing descriptor vec:\n\t{}\n\t{}\n", &good_line, &s);
+                        log_file.write(error_line.as_bytes());
+                        error_counter += 1;
+                        continue},
                 };
                 
                 let mut descriptor = Descriptor{ data: descriptor_values.clone(), length: config.desc_length};
@@ -263,18 +282,25 @@ fn build_from_files(args: &BuildFromFileArgs) {
                     descriptor,
                     length: config.desc_length,};
 
-                tree.add_record(&record).unwrap();
+                match tree.add_record(&record) {
+                    Ok(_) => {},
+                    Err(e) => {
+                        let error_line = format!("Error adding record to tree:\n\t{}\n\t{}\n", &good_line, &e);
+                        log_file.write(error_line.as_bytes());
+                        error_counter += 1;
+                        continue
+                    },
+                }
 
-                total_counter += 1;
-
+                success_counter += 1;
                 counter += 1;
             }
-
         }
-
     }
 
     tree.flush();
+
+    println!("{} records failed to be added to tree, logged in {}", error_counter, log_file_path);
 }
 
 fn parse_descriptor_vec(v: Vec<&str>) -> Result<Vec<f32>, std::num::ParseFloatError> {

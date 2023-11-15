@@ -84,7 +84,7 @@ async fn dispatch_nn(req: Request<Body>, dirname: &String) -> Result<Response<Bo
         _ => (),
     };
 
-    let smiles_request = format!("http://localhost:5000/smiles/{}", smiles);
+    let smiles_request = format!("http://localhost:5000/smiles/salsa16/{}", smiles);
     dbg!(&smiles_request);
 
     let response = reqwest::get(&smiles_request).await.unwrap();
