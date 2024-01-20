@@ -1,13 +1,3 @@
-from sklearn.datasets import make_classification
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-
-X, y = make_classification(n_samples=1000, weights=[0.01, 0.99])
-X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0)
-clf = RandomForestClassifier(random_state=0, n_estimators=10, n_jobs=-1)
-clf.fit(X_train, y_train)
-
-
 class Step:
     def __init__(self, id_, direction, threshold: float, feature_id):
         self.id_ = id_
@@ -18,11 +8,13 @@ class Step:
     def __repr__(self):
         return f"{self.id_} {'Left' if self.direction == 1 else 'Right'}"
 
+
 class Leaf:
     def __init__(self, id_, binary_class: int, class_proba: float):
         self.id_ = id_
         self.binary_class = binary_class
         self.class_proba = class_proba
+
 
 class Path:
     def __init__(self, leaf: Leaf, steps: list[Step] = None):
@@ -41,6 +33,7 @@ class Path:
 
     def __len__(self):
         return len(self.steps)
+
 
 class Bound:
     def __init__(self, num_features: int, mins: list[float], maxs: list[float]):
@@ -125,3 +118,17 @@ def get_number_of_range_queries_in_forest(forest):
 
 def estimate_runtime(num_queries, sec_per_query=30.0):
     return num_queries * sec_per_query
+
+
+if __name__ == '__main__':
+    # for testing
+    from sklearn.datasets import make_classification
+    from sklearn.model_selection import train_test_split
+    from sklearn.ensemble import RandomForestClassifier
+
+    X, y = make_classification(n_samples=1000, weights=[0.01, 0.99])
+    X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0)
+    clf = RandomForestClassifier(random_state=0, n_estimators=10, n_jobs=-1)
+    clf.fit(X_train, y_train)
+    paths = [p for dt in clf.estimators_ for p in get_leaf_paths(dt.tree_)]
+    bounds = [get_bounds_from_path(path, 20) for path in paths]
