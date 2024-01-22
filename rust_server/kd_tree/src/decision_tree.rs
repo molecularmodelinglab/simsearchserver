@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::fs;
 use std::io::prelude::*;
 use crate::node::{PagePointer};
 use crate::data::{CompoundRecord};
@@ -193,6 +194,37 @@ impl QuerySet {
 
     }
 
+    pub fn from_file(filename: &str) -> Self {
+
+        let file_contents = fs::read_to_string(filename).unwrap();
+    
+        let lines = file_contents.split("\n").collect::<Vec<&str>>();
+
+        let mut v: Vec<(RangeQuery, f32)> = Vec::new();
+        for line in lines {
+            if line == "" {
+                continue;
+            }
+
+            let chunks = line.split("|").collect::<Vec<&str>>();
+            let mut chunk_iter = chunks.iter();
+            let prob = chunk_iter.next().unwrap().parse::<f32>().unwrap();
+
+            let mut s = String::new();
+            for thing in chunk_iter {
+                s += "|";
+                s += thing;
+            }
+            
+            let query = RangeQuery::from_string(&s);
+            v.push((query, prob));
+        }
+
+        let mut qs = QuerySet{queries: v};
+        qs.sort();
+        return qs;
+    }
+
     pub fn to_file(&self, filename: &str) {
 
         dbg!(&filename);
@@ -204,30 +236,6 @@ impl QuerySet {
     pub fn from_string(s: &str) -> Self {
         return serde_json::from_str(s).unwrap();
     }
-    /*
-    pub fn from_string(s: &str) -> Self {
-        
-        let chunks = s.split("\n").collect::<Vec<&str>>();
-        dbg!(&chunks);
-
-
-        let mut v: Vec<(RangeQuery, f32)> = Vec::new();
-        for chunk in chunks {
-            if chunk == "" {
-                continue;
-            }
-            let fields = chunk.split("&").collect::<Vec<&str>>();
-            let bound_string = fields[0];
-            let prob = fields[1].parse::<f32>().unwrap();
-            let query = RangeQuery::from_string(bound_string);
-            v.push((query, prob));
-        }
-
-        let mut qs = QuerySet{queries: v};
-        qs.sort();
-        return qs;
-    }
-    */
 
     pub fn sort(&mut self) {
         self.queries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
@@ -464,6 +472,15 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn range_query_from_file() {
+
+        let qs = QuerySet::from_file("bounds.txt");
+        dbg!(qs);
+
+
     }
 }
 

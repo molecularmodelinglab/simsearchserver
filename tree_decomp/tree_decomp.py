@@ -37,12 +37,13 @@ class Path:
 
 
 class Bound:
-    def __init__(self, num_features: int, mins: list[float], maxs: list[float]):
+    def __init__(self, num_features: int, mins: list[float], maxs: list[float], prob: float):
         if len(mins) != len(maxs): raise ValueError("mins and maxs must have the same length")
         if num_features != len(maxs): raise ValueError("num_features must be equal to number of mins/maxs")
 
         self.num_features = num_features
 
+        self.prob = prob
         self.mins = mins
         self.maxs = maxs
 
@@ -77,10 +78,11 @@ def get_leaf_paths(tree, node_id=0):
         for path in right_paths:
             path.add_step(Step(node_id, 0, threshold, feature), left=True)
         paths = left_paths + right_paths
+
     else:
         _value = tree.value[node_id].squeeze()
 
-        paths = [Path(leaf=Leaf(node_id, min(range(len(_value)), key=lambda x: _value[x]), _value[1]/_value.sum()))]
+        paths = [Path(leaf=Leaf(node_id, min(range(len(_value)), key=lambda x: _value[x]), _value[0]/_value.sum()))]
     return paths
 
 
@@ -103,7 +105,7 @@ def get_bounds_from_path(path, num_features):
         else:
             _mins[step.feature_id] = step.threshold
 
-    return Bound(num_features=num_features, mins=_mins, maxs=_maxs)
+    return Bound(num_features=num_features, mins=_mins, maxs=_maxs, prob = path.class_proba)
 
 
 def write_bounds_to_file(bounds, filename):
@@ -151,8 +153,9 @@ def test_with_fake_model():
 
     for bound in pos_bounds:
 
+        f.write(f"{bound.prob}|")
         for i in range(bound.num_features):
-            f.write(f"{bound.mins[i]},{bound.maxs[i]} ")
+            f.write(f"{bound.mins[i]:.2f},{bound.maxs[i]:.2f}|")
         f.write("\n")
 
     f.close() 
@@ -169,5 +172,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.action == "test":
-        print("test")
+        test_with_fake_model()
    
