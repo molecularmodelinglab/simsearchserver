@@ -1,3 +1,4 @@
+
 class Step:
     def __init__(self, id_, direction, threshold: float, feature_id):
         self.id_ = id_
@@ -40,6 +41,8 @@ class Bound:
         if len(mins) != len(maxs): raise ValueError("mins and maxs must have the same length")
         if num_features != len(maxs): raise ValueError("num_features must be equal to number of mins/maxs")
 
+        self.num_features = num_features
+
         self.mins = mins
         self.maxs = maxs
 
@@ -63,6 +66,7 @@ def get_leaf_paths(tree, node_id=0):
     right_child = tree.children_right[node_id]
     threshold = tree.threshold[node_id]
     feature = tree.feature[node_id]
+    
 
     if left_child != -1:
         left_paths = get_leaf_paths(tree, left_child)
@@ -75,6 +79,7 @@ def get_leaf_paths(tree, node_id=0):
         paths = left_paths + right_paths
     else:
         _value = tree.value[node_id].squeeze()
+
         paths = [Path(leaf=Leaf(node_id, min(range(len(_value)), key=lambda x: _value[x]), _value[1]/_value.sum()))]
     return paths
 
@@ -89,8 +94,8 @@ def get_bounds_from_path(path, num_features):
         bounds: a list of Bounds objects
     """
     # TODO I think SALSA is capped from -1 to 1, but for now this should cover it
-    _mins = [-1000]*num_features
-    _maxs = [1000]*num_features
+    _mins = [-10]*num_features
+    _maxs = [10]*num_features
 
     for step in path.steps:
         if step.direction == 1:
@@ -120,15 +125,49 @@ def estimate_runtime(num_queries, sec_per_query=30.0):
     return num_queries * sec_per_query
 
 
-if __name__ == '__main__':
+
+def test_with_fake_model():
+
     # for testing
     from sklearn.datasets import make_classification
     from sklearn.model_selection import train_test_split
     from sklearn.ensemble import RandomForestClassifier
 
+    import pickle
+
     X, y = make_classification(n_samples=1000, weights=[0.01, 0.99])
     X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=0)
-    clf = RandomForestClassifier(random_state=0, n_estimators=10, n_jobs=-1)
+    clf = RandomForestClassifier(random_state=0, n_estimators=100, n_jobs=-1)
     clf.fit(X_train, y_train)
+
+    # save model
+    with open("test_model.pkl", "wb") as f:
+        pickle.dump(clf, f)
+
     paths = [p for dt in clf.estimators_ for p in get_leaf_paths(dt.tree_)]
-    bounds = [get_bounds_from_path(path, 20) for path in paths]
+    pos_bounds = [get_bounds_from_path(path, 20) for path in paths if path.is_positive()]
+
+    f = open("bounds.txt", "w")
+
+    for bound in pos_bounds:
+
+        for i in range(bound.num_features):
+            f.write(f"{bound.mins[i]},{bound.maxs[i]} ")
+        f.write("\n")
+
+    f.close() 
+
+if __name__ == '__main__':
+
+
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Generate bounds for SmallSA queries from scikit models')
+
+    parser.add_argument('action')
+
+    args = parser.parse_args()
+
+    if args.action == "test":
+        print("test")
+   
