@@ -188,6 +188,16 @@ impl RangeQuery {
 
 impl QuerySet {
 
+    pub fn random(size: usize, num_axes: usize, lower_bound: f32, upper_bound: f32) -> Self {
+
+        let queries = (0..size).map(|_| (RangeQuery::random(num_axes, lower_bound, upper_bound), 0.9)).collect();
+
+        return Self{queries};
+
+    }
+
+
+
     pub fn to_string(&self) -> String {
 
         return serde_json::to_string(&self).unwrap();
@@ -241,6 +251,11 @@ impl QuerySet {
         self.queries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     }
 
+    pub fn proportion(&mut self) -> f32 {
+
+        return self.queries.iter().map(|x| x.0.proportion()).sum();
+    }
+
 }
 
 pub fn check_record(query: &RangeQuery, record: &TreeRecord) -> bool {
@@ -268,6 +283,14 @@ pub fn check_record(query: &RangeQuery, record: &TreeRecord) -> bool {
     }
 
     return true;
+}
+
+pub fn run_query_set(tree: &mut Tree, query_set: &QuerySet) -> Vec<CompoundRecord> {
+
+    dbg!(&query_set);
+
+    return query_set.queries.iter().map(|x| run_range_query(tree, &x.0)).flatten().collect();
+
 }
 
 pub fn run_range_query(tree: &mut Tree , query: &RangeQuery) -> Vec<CompoundRecord> {
@@ -445,6 +468,7 @@ mod tests {
         }
         let qs = QuerySet{queries: v};
     }
+
     #[test]
     fn random_range_query() {
 
@@ -474,6 +498,35 @@ mod tests {
         }
     }
 
+    #[test]
+    fn random_query_set_query() {
+
+        for n in [16] {
+
+            let mut config = TreeConfig::default();
+            config.desc_length = n;
+            config.directory = "test_data/rrq".to_string();
+
+            let mut tree = Tree::force_create_with_config(config.clone());
+
+            for _ in tqdm!(0..200000) {
+
+                let cr = CompoundRecord::random(n);
+                tree.add_record(&cr).unwrap();
+            }
+
+            for size in 3..5 {
+
+                for i in tqdm!(0..100) {
+
+                    let query = QuerySet::random(5, 16, -1.0, 1.0);
+                    dbg!(&query);
+                    run_query_set(&mut tree, &query);
+                }
+            }
+        }
+    }
+    
     #[test]
     fn range_query_from_file() {
 

@@ -740,7 +740,8 @@ impl Tree {
 
         
 
-        fs::create_dir(Path::new(&config.directory)).expect("could not create directory for tree");
+        fs::create_dir(Path::new(&config.directory))
+            .expect(&format!("could not create directory for tree: {:?}", &config.directory));
 
 
 
