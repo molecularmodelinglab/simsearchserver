@@ -202,6 +202,10 @@ pub struct Database {
 
 impl Database {
 
+    pub fn num_entries(&self) -> usize {
+        self.num_entries.try_into().unwrap()
+    }
+
     pub fn new(filename: &str) -> Self {
 
         let path = Path::new(filename);

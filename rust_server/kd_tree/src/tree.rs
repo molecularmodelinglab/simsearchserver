@@ -7,6 +7,7 @@ use crate::page::RecordPage;
 use crate::layout;
 use crate::io::{DiskNodePager, FastNodePager, RecordPager, GetNode};
 use crate::data::{Parser};
+use crate::decision_tree::{QuerySet};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use std::time::Instant;
@@ -695,6 +696,15 @@ pub enum NodeAction {
 
 impl Tree {
 
+    pub fn estimate_hit_count(&self, query: &QuerySet) -> f32 {
+
+        let prop = query.proportion();
+
+        let count = self.database.num_entries() as f32 * prop;
+        
+        return count;
+    }
+
     pub fn read_from_directory(directory_name: String) -> Self {
 
         let config_filename = directory_name.clone() + "/config.yaml";
@@ -1287,6 +1297,47 @@ mod tests {
             tree.add_record(&cr).unwrap();
         }
     }
+    
+    #[test]
+    fn query_prop() {
+
+        let n: usize = 8;
+
+        let mut config = TreeConfig::default();
+        config.directory = "/tmp/qtn/".to_string();
+
+        let mut tree = Tree::force_create_with_config(config);
+
+        let cr = CompoundRecord::random(n);
+        tree.add_record(&cr).unwrap();
+
+        let cr = CompoundRecord::random(n);
+        tree.add_record(&cr).unwrap();
+
+        for _ in 0..2000 {
+
+            let cr = CompoundRecord::random(n);
+            tree.add_record(&cr).unwrap();
+        }
+
+        let query1 = QuerySet::random(5, 16, -1.0, 1.0);
+        let query2 = QuerySet::random(50, 16, -1.0, 1.0);
+        let query3 = QuerySet::random(500, 16, -1.0, 1.0);
+
+        let count1 = tree.estimate_hit_count(&query1);
+        let count2 = tree.estimate_hit_count(&query2);
+        let count3 = tree.estimate_hit_count(&query3);
+
+        dbg!(count1);
+        dbg!(count2);
+        dbg!(count3);
+
+        assert!(count1 < count2);
+        assert!(count2 < count3);
+    }
+
+    
+    
 
     #[test]
     fn quick_tree_find() {

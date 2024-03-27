@@ -251,7 +251,7 @@ impl QuerySet {
         self.queries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap());
     }
 
-    pub fn proportion(&mut self) -> f32 {
+    pub fn proportion(&self) -> f32 {
 
         return self.queries.iter().map(|x| x.0.proportion()).sum();
     }
@@ -496,6 +496,16 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn query_proportion() {
+
+        let prop1 = QuerySet::random(5, 16, -1.0, 1.0).proportion();
+        let prop2 = QuerySet::random(50, 16, -1.0, 1.0).proportion();
+        let prop3 = QuerySet::random(500, 16, -1.0, 1.0).proportion();
+        assert!(prop1 < prop2);
+        assert!(prop2 < prop3);
     }
 
     #[test]
