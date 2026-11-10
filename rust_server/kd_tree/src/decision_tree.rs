@@ -444,7 +444,7 @@ mod tests {
 
             let mut config = TreeConfig::default();
             config.desc_length = n;
-            config.directory = "test_data/rrq".to_string();
+            config.directory = "/tmp/kd_tree_test/rrq".to_string();
 
             let mut tree = Tree::force_create_with_config(config.clone());
 

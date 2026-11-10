@@ -1,11 +1,10 @@
 //! Implementation of kd-tree creation and querying
-extern crate test;
 use crate::data::{CompoundIdentifier, Descriptor, CompoundRecord, CompoundIndex};
 use crate::database::{Database, ImmutDatabase};
 use crate::node::{InternalNode, PagePointer};
 use crate::page::RecordPage;
 use crate::layout;
-use crate::io::{DiskNodePager, FastNodePager, RecordPager, GetNode};
+use crate::io::{ImmutNodePager, FastNodePager, RecordPager, GetNode};
 use crate::data::{Parser};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
@@ -23,7 +22,7 @@ use std::collections::VecDeque;
 
 
 pub struct ImmutTree {
-    pub node_handler: DiskNodePager,
+    pub node_handler: ImmutNodePager,
     pub record_handler: RecordPager,
     pub database: ImmutDatabase,
     pub root: PagePointer,
@@ -44,7 +43,7 @@ impl ImmutTree {
         dbg!(&node_filename);
         dbg!(&record_filename);
 
-        let node_handler = DiskNodePager::from_file(&node_filename).unwrap();
+        let node_handler = ImmutNodePager::from_file(&node_filename).unwrap();
         let record_handler = RecordPager::new(record_filename, config.record_page_length, config.desc_length, false, config.cache_limit).unwrap();
 
         let database = ImmutDatabase::open(&config.get_database_filename());
@@ -723,7 +722,32 @@ impl Tree {
 
     pub fn force_create_with_config(config: TreeConfig) -> Self {
 
-        fs::remove_dir_all(&config.directory);
+        let dir_path = Path::new(&config.directory);
+
+        let mut last_error: Option<std::io::Error> = None;
+
+        for attempt in 0..5 {
+
+            if !dir_path.exists() {
+                last_error = None;
+                break;
+            }
+
+            match fs::remove_dir_all(dir_path) {
+                Ok(_) => {
+                    last_error = None;
+                },
+                Err(e) => {
+                    last_error = Some(e);
+                    std::thread::sleep(std::time::Duration::from_millis(50 * (attempt + 1)));
+                },
+            }
+        }
+
+        match last_error {
+            Some(e) => panic!("could not remove existing tree directory {}: {}", config.directory, e),
+            None => {},
+        }
 
         return Self::create_with_config(config);
     }
@@ -738,11 +762,8 @@ impl Tree {
             false => {},
         }
 
-        
-
-        fs::create_dir(Path::new(&config.directory)).expect("could not create directory for tree");
-
-
+        fs::create_dir_all(dir_path)
+            .unwrap_or_else(|e| panic!("could not create directory for tree {}: {}", config.directory, e));
 
         return Self::new(config);
     }
@@ -1260,9 +1281,80 @@ impl Tree {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use test::Bencher;
     use crate::data::{CompoundIdentifier, Descriptor};
     use kdam::tqdm;
+
+    fn brute_force_top_k(
+        records: &[CompoundRecord],
+        query: &Descriptor,
+        k: usize,
+    ) -> (Vec<String>, Vec<f32>) {
+
+        let mut scored: Vec<(f32, String)> = records
+            .iter()
+            .map(|r| (query.distance(&r.descriptor), r.compound_identifier.to_string()))
+            .collect();
+
+        scored.sort_by(|a, b| {
+            a.0.partial_cmp(&b.0)
+                .expect("descriptor distances are finite")
+                .then_with(|| a.1.cmp(&b.1))
+        });
+
+        scored.truncate(k);
+
+        let identifiers = scored.iter().map(|(_, id)| id.clone()).collect();
+        let distances = scored.iter().map(|(d, _)| *d).collect();
+
+        return (identifiers, distances);
+    }
+
+    fn assert_is_true_knn(
+        nn: &NearestNeighbors,
+        records: &[CompoundRecord],
+        query: &Descriptor,
+        k: usize,
+    ) {
+
+        let (expected_ids, expected_dists) = brute_force_top_k(records, query, k);
+
+        let mut got_ids: Vec<String> = nn
+            .records
+            .iter()
+            .map(|r| {
+                r.as_ref()
+                    .expect("every hit should carry a record")
+                    .compound_identifier
+                    .to_string()
+            })
+            .collect();
+
+        assert_eq!(
+            got_ids.len(),
+            expected_ids.len(),
+            "tree returned {} hits, expected {}",
+            got_ids.len(),
+            expected_ids.len()
+        );
+
+        for i in 0..expected_dists.len() {
+            let delta = (nn.distances[i] - expected_dists[i]).abs();
+            assert!(
+                delta < 1e-5,
+                "hit {} is at distance {} but the true {}th nearest is at {}",
+                i,
+                nn.distances[i],
+                i,
+                expected_dists[i],
+            );
+        }
+
+        let mut expected_ids = expected_ids;
+        got_ids.sort();
+        expected_ids.sort();
+
+        assert_eq!(got_ids, expected_ids, "tree returned a different set of records than brute force");
+    }
 
     #[test]
     fn quick_tree_new() {
@@ -1454,7 +1546,7 @@ mod tests {
 
         let mut config = TreeConfig::default();
         config.desc_length = n;
-        config.directory = "test_data/bvnnacc/".to_string();
+        config.directory = "/tmp/kd_tree_test/bvnnacc/".to_string();
 
         let mut tree = Tree::force_create_with_config(config);
 
@@ -1463,6 +1555,16 @@ mod tests {
             tree.add_record(&record.clone()).unwrap();
         }
 
+        tree.flush();
+
+        let query_tree = ImmutTree::read_from_directory("/tmp/kd_tree_test/bvnnacc/".to_string());
+
+        for record in records.iter().take(20) {
+
+            let nn = query_tree.get_nearest_neighbors(&record.descriptor, 10);
+
+            assert_is_true_knn(&nn, &records, &record.descriptor, 10);
+        }
     }
 
 
@@ -1478,7 +1580,7 @@ mod tests {
         }
 
         let mut config = TreeConfig::default();
-        config.directory = "test_data/bqs".to_string();
+        config.directory = "/tmp/kd_tree_test/bqs".to_string();
 
         let mut tree = Tree::force_create_with_config(config);
 
@@ -1495,7 +1597,7 @@ mod tests {
         config.record_page_length = 4096;
         config.node_page_length = 256;
 
-        config.directory = "test_data/qut/".to_string();
+        config.directory = "/tmp/kd_tree_test/qut/".to_string();
 
         let mut tree = Tree::force_create_with_config(config.clone());
 
@@ -1570,64 +1672,10 @@ mod tests {
         };
 
 
-        let correct_answer = vec![
-            "5ZLD00MOT36ZK6DX",
-            "WYE97K70U18Y9SA8",
-            "ZID354YZTEAEWOZC",
-            "DD8HKDRP2N4CPUO6",
-            "PTFLJ2OZHFOG2DYL",
-            "IPWJNLZNC0P879Q2",
-            "WVLV4I96MD0LNN3N",
-            "U7TSZERO313NXQ4U",
-            "MBGRRIRL213LQFUO",
-            "MJ255VPHOK7HW558",
-            "HH7M5H7BGC3KYE6I",
-            "NXSYU67FL5SUZPBZ",
-            "ARDU41VA315KNZ83",
-            "TVLSWP3H7GZ8HKRW",
-            "B8OSVJGNI69DBHKC",
-            "0G3FS1H1MAFCMAQP",
-            "BKSQDVKLXK93DWN6",
-            "VL6P6BBJQ9VT0CCH",
-            "0P9XMJBDOZGSVBM6",
-            "3G142EYTW4S1M51F",
-            "4QK1E64E9U7FXDXD",
-            "ERWUTVVNZOVNHO7B",
-            "MWV7OONG9Q4H3V1A",
-            "AJ9A47HXJ30EXTVG",
-            "OOCZMI28YAZBZ0LO",
-            "ID22JZRXE1XZCWM8",
-            "RN7XN70ESJW1IAUF",
-            "R87OPQE6O5XDR0BG",
-            "7PHMBEBZ0W4GNUCU",
-            "9MAHZ2P344HVHHGC",
-            "Z0GHGZAHYLME8YXA",
-            "AKHK9V00BIIVD1EY",
-            "LJFEPE6VYX5PL9NV",
-            "34Y7VBX74LKDMOEH",
-            "HVVL8PGOTA4WNVF2",
-            "X6LGJ1VGB2B4PIUD",
-            "LS560FKNAVULNIZG",
-            "JYO0U92T1J0G72I1",
-            "16NZY2Z8D5FAACKT",
-            "PJDZGXQ9XCK7YRCN",
-            "6BMGSLFBFFUJZ2BE",
-            "GFUT7B5EO34ZV7L5",
-            "RYF3P46R6ZI0I9LK",
-            "LAXTER0MXHK4IDV4",
-            "XAW840BTPR7UG7TR",
-            "JUA6LNX66CC66AZ7",
-            "OL7RKTO4PIT1XPER",
-            "PO4QNRJU4K5N19IP",
-            "D4ROAW3YEDV1JNEO",
-            "QZILPO1CS5JLY4VZ",
-        ];
-
-        let correct_answer: Vec<_> = correct_answer.into_iter().map(|x| CompoundIdentifier::from_string(x.to_string())).collect();
 
         let mut config = TreeConfig::default();
         config.desc_length = 8;
-        config.directory = "test_data/qvnnacc/".to_string();
+        config.directory = "/tmp/kd_tree_test/qvnnacc/".to_string();
 
         let mut tree = Tree::force_create_with_config(config);
 
@@ -1763,7 +1811,7 @@ mod tests {
 
             let mut config = TreeConfig::default();
             config.desc_length = 8;
-            config.directory = "test_data/nn_validation".to_string();
+            config.directory = "/tmp/kd_tree_test/nn_validation".to_string();
 
             let mut build_tree = Tree::force_create_with_config(config);
 
@@ -1775,12 +1823,11 @@ mod tests {
             build_tree.flush();
 
 
-            let mut query_tree = ImmutTree::read_from_directory("test_data/nn_validation/".to_string());
+            let mut query_tree = ImmutTree::read_from_directory("/tmp/kd_tree_test/nn_validation/".to_string());
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
-            let identifiers: Vec<_> = nn.records.into_iter().map(|x| x.clone().unwrap().compound_identifier.clone()).collect();
 
-            assert_eq!(identifiers, correct_answer);
+            assert_is_true_knn(&nn, &records, &descriptor, 50);
         }
     }
 
@@ -1837,26 +1884,6 @@ mod tests {
             length: n,
         };
 
-        let correct_answer = vec![
-           "VDSYOSB36FAKWD2A", "011KIZEK6CTTETKF", "X0ZDKRU5TVHI3WWH",
-           "2K9VBRZ99OA797VH", "6NJO4GB3YOCQ3GBI", "P702HIO2HPRTSELC",
-           "EB4GCJAHBNDN0DBN", "GM2TR9EL0PIV08N9", "I9MP78DM70A3VQZ6",
-           "V3UTSP2J7LUMNWP2", "MUV3E634V1MFUC9X", "FZ4ZE0AG1TGZ091W",
-           "6Z4UPG2DNPK23QLN", "G38K1PE4A7ES6U2S", "AHVE2P24VBSGR14X",
-           "BKOX77ILZZQ0JTCJ", "6IET816V235S8CS8", "72181A2R9TO1HZBB",
-           "21T5RLEMEY9PUJEX", "JH7J68CPBS9H20HA", "V5EYF5CT6BOBIPCX",
-           "VIS7Z7JZBDAMI0DW", "S7E4Z0YB99O2BG09", "PB6I6IK22CKPL3GU",
-           "6ZEOQV45TQ6FU6Z1", "B5KCEVK99YQML5GY", "LKW13X8KBYWLE71D",
-           "82UNF7I8TB06DQHP", "OJOID5GNIRX0SC2R", "LGIFGG2SCEYCN3YE",
-           "WN0GPONNZFVZS4KD", "BOJ7KG4PX2I42PL0", "W0Z7PR44B20VUY6J",
-           "RMNC1MWQW3LZLNG7", "LU2DGTI12CY5R2AU", "0249P6QT4S3J5CPH",
-           "34V5RHOJ19CGI2CJ", "BUTU4YHRTHDE00XO", "X6TRZOF18686RIRD",
-           "V89CHTIJOK42XDG0", "GO4BSC1VHO4F1IGF", "SZDPXUHVB663JAJL",
-           "3FFVXGL6JV5SSYCT", "IPYLLPTEQIN2UAL2", "G4NMB8WURS7GKEH6",
-           "W6B4IXXKHP0JRYU4", "X0K3MXLDSU2L0KFN", "JEHVACT7QJ8D81CI",
-           "E0NO9UXRAV6PQEUQ", "LLOA71UE951B3IRE"];
-
-        let correct_answer = correct_answer.into_iter().map(|x| CompoundIdentifier::from_string(x.to_string())).collect::<Vec<_>>();
 
         use rand::thread_rng;
         use rand::seq::SliceRandom;
@@ -1867,7 +1894,7 @@ mod tests {
 
             let mut config = TreeConfig::default();
             config.desc_length = 8;
-            config.directory = "test_data/qf".to_string();
+            config.directory = "/tmp/kd_tree_test/qf".to_string();
 
             let mut build_tree = Tree::force_create_with_config(config);
 
@@ -1878,21 +1905,11 @@ mod tests {
 
             build_tree.flush();
 
-            let mut query_tree = ImmutTree::read_from_directory("test_data/qf/".to_string());
+            let mut query_tree = ImmutTree::read_from_directory("/tmp/kd_tree_test/qf/".to_string());
 
             let nn = query_tree.get_nearest_neighbors(&descriptor, 50);
 
-            let identifiers = nn.records.into_iter().map(|x| x.unwrap().compound_identifier.clone()).collect::<Vec<_>>();
-
-            if identifiers != correct_answer {
-
-                query_tree.output_depths();
-                for i in 0..identifiers.len() {
-                    println!("{}: {} | {}", i, correct_answer[i].to_string(), identifiers[i].to_string());
-                }
-                panic!();
-             
-            }
+            assert_is_true_knn(&nn, &records, &descriptor, 50);
         }
     }
 
@@ -1982,7 +1999,7 @@ mod tests {
 
             let mut config = TreeConfig::default();
             config.desc_length = 8;
-            config.directory = "test_data/qf".to_string();
+            config.directory = "/tmp/kd_tree_test/qf".to_string();
 
             let mut build_tree = Tree::force_create_with_config(config.clone());
 

@@ -8,5 +8,7 @@ kd_tree/test_data
 *.log
 *.lock
 *cache*
+*.venv*
+__pycache__
 out
 

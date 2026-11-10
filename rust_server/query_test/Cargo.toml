@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 kd_tree = { path = "../kd_tree" }
-rand = "*"
-glob = "*"
-log = "*"
-env_logger = "*"
+rand = "0.8"
+glob = "0.3"
+log = "0.4"
+env_logger = "0.11"

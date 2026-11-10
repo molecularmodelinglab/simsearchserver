@@ -16,10 +16,10 @@
 //! - [ ] implement parallel querying
 //! - [x] implement server with whole tree in memory
 //! - [ ] make descriptor size generic
+//! - [ ] restore a read-path page cache
 //!
 //!
 //!
-#![feature(test)]
 pub mod node;
 pub mod error;
 pub mod layout;

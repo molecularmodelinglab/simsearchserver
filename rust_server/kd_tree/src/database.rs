@@ -1,6 +1,7 @@
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::fs::FileExt;
 use std::path::Path;
 use kdam::tqdm;
 
@@ -142,6 +143,7 @@ impl DatabaseRecord {
 
 pub struct ImmutDatabase {
     filename: String,
+    read_fd: File,
     num_entries: u64,
 }
 
@@ -160,34 +162,40 @@ impl ImmutDatabase {
 
         let mut buf = [0u8; ENTRIES_SIZE];
         fd.seek(SeekFrom::Start(ENTRIES_START as u64)).unwrap();
-        fd.read(&mut buf).unwrap();
+        fd.read_exact(&mut buf).unwrap();
 
         let num_entries = u64::from_le_bytes(buf);
 
         Self {
             filename: filename.to_string(),
+            read_fd: fd,
             num_entries: num_entries,
         }
     }
 
+    pub fn num_entries(&self) -> u64 {
+        return self.num_entries;
+    }
+
     pub fn query(&self, id: &u64) -> Option<DatabaseRecord> {
+
+        if *id >= self.num_entries {
+            return None;
+        }
 
         let mut buf = [0u8; DATABASE_ENTRY_SIZE];
 
-        let mut fd = OpenOptions::new()
-                    .create(false)
-                    .read(true)
-                    .write(false)
-                    .truncate(false)
-                    .open(&self.filename).unwrap();
+        let offset = id * (DATABASE_ENTRY_SIZE as u64);
 
-            
-        fd.seek(SeekFrom::Start((id) * (DATABASE_ENTRY_SIZE as u64))).unwrap();
-        fd.read(&mut buf).unwrap();
+        match self.read_fd.read_exact_at(&mut buf, offset) {
+            Ok(_) => {},
+            Err(e) => {
+                dbg!(&self.filename, id, e);
+                return None;
+            },
+        }
 
-        let entry = DatabaseRecord::from_arr(buf);
-
-        return Some(entry);
+        return Some(DatabaseRecord::from_arr(buf));
     }
 }
 

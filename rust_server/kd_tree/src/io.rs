@@ -11,12 +11,13 @@ use crate::layout;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::io::{Read, Seek, SeekFrom};
+use std::os::unix::fs::FileExt;
 use std::path::Path;
 use std::collections::HashMap;
 
 #[derive(Debug)]
 pub struct RecordPager {
-    //file: File,
+    read_fd: File,
     path: String,
     pub next_free_index: usize, //this is the next available slot
     pub desc_length: usize,
@@ -292,7 +293,12 @@ impl RecordPager {
 
                     file.write("empty".as_bytes())?;
 
+                    let read_fd = OpenOptions::new()
+                            .read(true)
+                            .open(path.clone())?;
+
                     return Ok(Self{
+                    read_fd,
                     path: path,
                     next_free_index: 0,
                     desc_length,
@@ -316,8 +322,9 @@ impl RecordPager {
 
                     let attempted_usize = layout::Value::try_from(next_free_index_from_disk);
                     let layout::Value(value) = attempted_usize.unwrap();
-                    
+
                     return Ok(Self {
+                        read_fd: fd,
                         path: path,
                         next_free_index: value,
                         desc_length,
@@ -368,21 +375,13 @@ impl RecordPager {
         Ok(page)
     }
 
-    //pub fn _read_record_page(&mut self, address: &usize) -> Result<RecordPage, Error> {
     pub fn _read_record_page(&self, address: &usize) -> Result<RecordPage, Error> {
 
         let mut page: Vec<u8>  = vec![0; self.page_length];
 
         let start = self.calc_offset(address);
 
-        let mut file = OpenOptions::new()
-                    .read(true)
-                    .open(self.path.clone())?;
-
-
-        file.seek(SeekFrom::Start(start))?;
-
-        file.read_exact(&mut page)?;
+        self.read_fd.read_exact_at(&mut page, start)?;
 
         let page = RecordPage::from_arr(&page, self.page_length, self.desc_length);
 
@@ -563,7 +562,9 @@ mod tests {
                     pager.add_node(&node).unwrap();
                 }
                 
-                let filename = "test_data/node".to_string();
+                std::fs::create_dir_all("/tmp/kd_tree_test").unwrap();
+
+                let filename = "/tmp/kd_tree_test/io_node".to_string();
                 pager.to_file(&filename).unwrap();
                 pager = FastNodePager::from_file(&filename).unwrap();
 
