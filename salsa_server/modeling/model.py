@@ -1,66 +1,52 @@
-import onnxruntime as ort
-import pickle
-import time
-import numpy as np
+import os
+
+from salsa_lit import load_model
+from salsa_lit.data.tokenizer import SMILESTokenizer
+from salsa_lit.utils.chemistry import get_cansmiles
+
 import torch
 
-from modeling.preprocess import process_smiles
-from rdkit.Chem.AllChem import GetHashedMorganFingerprint
-
-from rdkit import Chem
-
-class SalsaONNXModel():
-
-    def __init__(self, path):
-
-        #read in ONNX model and set up environment
-        self.sess = ort.InferenceSession(path, providers = ["CPUExecutionProvider"])
-
-    def embed(self, smiles):
-
-        input = process_smiles(smiles)
-
-        outputs = self.sess.run(None, {"big_mat": input})
-
-        embedding = outputs[0]
-        embedding = embedding.reshape((embedding.shape[1]))
-        embedding = [float(x) for x in embedding]
-
-        return embedding
-
-class MorganPCAModel():
-
-    def __init__(self):
+MODEL_PATH_ENV = "SALSA_MODEL_PATH"
 
 
-        import pickle
+class SalsaModel:
 
-        pca_filename = "/data/Enamine_REAL_DATASET_PCA/pca_model_1024.pkl"
-        pca_model = pickle.load(open(pca_filename, 'rb'))
-        self.pca_model = pca_model
+    def __init__(self, path=None, device="cpu"):
 
-    def _get_fp(self, smiles):
+        path = path or os.environ.get(MODEL_PATH_ENV)
 
-        mol = Chem.MolFromSmiles(smiles)
-        fp = np.array(list(GetHashedMorganFingerprint(mol, radius=3, nBits=1024)))
+        if not path:
+            raise RuntimeError(
+                f"No model path given. Set {MODEL_PATH_ENV} to a salsa checkpoint "
+                f"or model directory."
+            )
 
-        fp = fp.reshape((1, fp.shape[0]))
-        print(fp)
+        self.path = path
+        self.device = torch.device(device)
 
-        return fp
+        self.model = load_model(path, map_location=str(self.device))
+        self.model.to(self.device)
 
+        self.tokenizer = SMILESTokenizer()
+
+        # Determine the embedding dimension by embedding a simple molecule
+        self.dim = len(self.embed("CCO"))
 
     def embed(self, smiles):
-        print("embed")
 
+        canonical = get_cansmiles(smiles)
 
-        fp = self._get_fp(smiles)
+        if canonical == "":
+            raise ValueError(f"Could not parse SMILES: {smiles!r}")
 
-    
-        small = self.pca_model.transform(fp)
+        batch = self.tokenizer.batch_encode([canonical])
 
-        return list(small[0])
+        with torch.no_grad():
+            latent, _ = self.model.embed(
+                batch["seq"].to(self.device),
+                batch["pad_mask"].to(self.device),
+                batch["avg_mask"].to(self.device),
+                batch["out_mask"].to(self.device),
+            )
 
-
-
-
+        return [float(x) for x in latent[0].cpu().numpy()]

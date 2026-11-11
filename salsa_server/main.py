@@ -5,51 +5,39 @@ import threading
 
 from json import dumps
 
-from modeling.model import SalsaONNXModel, MorganPCAModel
+from modeling.model import SalsaModel
 
 app = Flask(__name__)
 
-salsa16_model = SalsaONNXModel("modeling/models/salsa16.onnx")
-salsa8_model = SalsaONNXModel("modeling/models/salsa8.onnx")
-morgan_model = MorganPCAModel()
+salsa_model = SalsaModel()
 model_lock = threading.Lock()
+
+print(f"Loaded salsa model from {salsa_model.path}, embedding dimension {salsa_model.dim}")
+
 
 @app.route('/')
 def home():
     print("main")
 
+
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({"status": "ok", "dim": salsa_model.dim, "model": salsa_model.path})
+
+
 @app.route('/smiles/<method>/<smiles_value>', methods=['GET', 'POST'])
 def smiles(smiles_value, method):
 
-    if method.lower() == "salsa16":
-        model = salsa16_model
-    elif method.lower() == "salsa8":
-        model = salsa8_model
-    elif method.lower() == "morganpca16":
-        model = morgan_model
-    else:
+    if method.lower() != "salsa16":
         message = dumps({"error": f"Embedding method not recognized: {method}"})
         abort(Response(message, 406))
 
-
-    print("SMILES: ", smiles_value)
-
-    print(type(smiles_value))
-
-    data = None
     try:
-        model_lock.acquire()
-        data = model.embed(smiles_value)
-        model_lock.release()
+        with model_lock:
+            data = salsa_model.embed(smiles_value)
     except Exception as e:
-        model_lock.release()
         print(e)
-        message = dumps({"error": "Smiles failed to parse"})
+        message = dumps({"error": f"Could not embed SMILES: {e}"})
         abort(Response(message, 406))
 
-    if data is None:
-        return abort(400)
-
-    print(data)
-    return data
-
+    return jsonify(data)
