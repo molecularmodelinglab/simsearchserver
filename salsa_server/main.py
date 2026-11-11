@@ -25,12 +25,19 @@ def health():
     return jsonify({"status": "ok", "dim": salsa_model.dim, "model": salsa_model.path})
 
 
-@app.route('/smiles/<method>/<smiles_value>', methods=['GET', 'POST'])
-def smiles(smiles_value, method):
+@app.route('/smiles/<method>', methods=['GET', 'POST'])
+def smiles(method):
 
     if method.lower() != "salsa16":
         message = dumps({"error": f"Embedding method not recognized: {method}"})
         abort(Response(message, 406))
+
+    payload = request.get_json(silent=True) or {}
+    smiles_value = payload.get("smiles") or request.args.get("smiles")
+
+    if not smiles_value:
+        message = dumps({"error": "No SMILES supplied; send {\"smiles\": ...} or ?smiles="})
+        abort(Response(message, 400))
 
     try:
         with model_lock:

@@ -1,41 +1,29 @@
+import os
+
 import requests
-import yaml
 
-def query_morgan_pca_16(embedding):
-
-    port = 3000
-    query_descriptor = embedding
-    query_descriptor_string = ",".join([f"{x:.4f}" for x in query_descriptor])
-
-    query_string = f"http://127.0.0.1:{port}/descriptor/10/{query_descriptor_string}"
-    r = requests.get(query_string)
-    s = r.content.decode()
-    print(s)
-    d = yaml.safe_load(s[:-1])
-
-    print(d)
-    return d
+KDTREE_URL = os.environ.get("KDTREE_URL", "http://127.0.0.1:3000")
+NUM_NEIGHBORS = int(os.environ.get("NUM_NEIGHBORS", "100"))
+REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "30"))
 
 
+def query_descriptor(embedding, num_neighbors=None):
 
-def query_smallsa_16():
-    raise NotImplementedError
+    k = num_neighbors or NUM_NEIGHBORS
 
-def query_smallsa_8(embedding):
+    response = requests.post(
+        f"{KDTREE_URL}/nn/{k}",
+        json={"descriptor": list(embedding)},
+        timeout=REQUEST_TIMEOUT,
+    )
+    response.raise_for_status()
 
-
-    port = 3001
-    query_descriptor = embedding
-    query_descriptor_string = ",".join([f"{x:.4f}" for x in query_descriptor])
-
-    query_string = f"http://127.0.0.1:{port}/descriptor/100/{query_descriptor_string}"
-    r = requests.get(query_string)
-    s = r.content.decode()
-    print(s)
-    d = yaml.safe_load(s[:-1])
-
-    print(d)
-    return d
+    return response.json()
 
 
+def index_info():
 
+    response = requests.get(f"{KDTREE_URL}/health", timeout=REQUEST_TIMEOUT)
+    response.raise_for_status()
+
+    return response.json()
