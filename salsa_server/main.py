@@ -12,7 +12,7 @@ app = Flask(__name__)
 salsa_model = SalsaModel()
 model_lock = threading.Lock()
 
-print(f"Loaded salsa model from {salsa_model.path}, embedding dimension {salsa_model.dim}")
+print(f"Loaded salsa model {salsa_model.model_name}, embedding dimension {salsa_model.dim}")
 
 
 @app.route('/')
@@ -22,14 +22,14 @@ def home():
 
 @app.route('/health', methods=['GET'])
 def health():
-    return jsonify({"status": "ok", "dim": salsa_model.dim, "model": salsa_model.path})
+    return jsonify({"status": "ok", "dim": salsa_model.dim, "model": salsa_model.model_name})
 
 
 @app.route('/smiles/<method>', methods=['GET', 'POST'])
 def smiles(method):
 
-    if method.lower() != "salsa16":
-        message = dumps({"error": f"Embedding method not recognized: {method}"})
+    if method.lower() != salsa_model.model_name.lower():
+        message = dumps({"error": f"This server serves {salsa_model.model_name}, not {method}"})
         abort(Response(message, 406))
 
     payload = request.get_json(silent=True) or {}

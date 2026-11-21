@@ -1,0 +1,10 @@
+# The embedding model and all chemistry handling.
+salsa-lit @ git+https://github.com/molecularmodelinglab/SALSA.git
+
+flask
+gunicorn
+mols2grid
+pandas
+pyarrow
+rdkit
+requests
