@@ -35,13 +35,10 @@ impl ImmutTree {
 
         let config_filename = directory_name.clone() + "/config.yaml";
         let config = TreeConfig::from_file(config_filename);
-        dbg!(&config);
 
         let node_filename = config.get_node_filename();
         let record_filename = config.get_record_filename();
 
-        dbg!(&node_filename);
-        dbg!(&record_filename);
 
         let node_handler = ImmutNodePager::from_file(&node_filename).unwrap();
         let record_handler = RecordPager::new(record_filename, config.record_page_length, config.desc_length, false, config.cache_limit).unwrap();
@@ -168,7 +165,6 @@ impl ImmutTree {
     pub fn get_nearest_neighbors(&self, query_descriptor: &Descriptor, n: usize) -> NearestNeighbors {
 
         let top_hits = self.get_top_hits(query_descriptor, n);
-        dbg!("BETWEEN");
 
         let nearest_neighbors = NearestNeighbors::from_top_hits(top_hits, &self.database);
 
@@ -294,8 +290,6 @@ impl ImmutTree {
             }
         }
 
-        println!("NODES VISITED: {:?}", num_nodes_visited);
-        println!("RECORD PAGES VISITED: {:?}", num_record_pages_visited);
 
         return hits;
 

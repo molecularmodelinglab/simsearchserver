@@ -79,6 +79,13 @@ impl DatabaseRecord {
 
         let bytes = self.smiles.as_bytes();
 
+        if bytes.len() > SMILES_SIZE {
+            return Err(format!(
+                "SMILES is {} bytes, over the {} byte limit: {}",
+                bytes.len(), SMILES_SIZE, self.smiles,
+            ));
+        }
+
         fill_arr[..bytes.len()].copy_from_slice(bytes);
 
 
@@ -89,6 +96,13 @@ impl DatabaseRecord {
 
         let identifier = self.identifier.to_string();
         let bytes = identifier.as_bytes();
+
+        if bytes.len() > ID_SIZE {
+            return Err(format!(
+                "identifier is {} bytes, over the {} byte limit: {}",
+                bytes.len(), ID_SIZE, identifier,
+            ));
+        }
 
         fill_arr[..bytes.len()].copy_from_slice(bytes);
 
