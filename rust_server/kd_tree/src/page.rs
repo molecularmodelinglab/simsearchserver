@@ -13,6 +13,79 @@ pub enum PageType {
     Leaf = 2,
 }
 
+// Byte-level accessors, shared by the owned `RecordPage` and the borrowed
+// `RecordPageRef`. Everything here works directly on page bytes so the query
+// path can scan a page without allocating.
+
+/// Number of records written to this page
+#[inline]
+pub fn page_tail(data: &[u8]) -> usize {
+    let bytes = data[layout::TAIL_OFFSET..layout::TAIL_OFFSET + layout::TAIL_SIZE]
+        .try_into()
+        .expect("tail field is TAIL_SIZE bytes");
+
+    return u32::from_be_bytes(bytes) as usize;
+}
+
+/// Byte range of the record at `offset` within the page
+#[inline]
+pub fn record_slice(data: &[u8], offset: usize, desc_length: usize) -> &[u8] {
+    let size = TreeRecord::compute_record_size(desc_length);
+    let start = layout::PAGE_DATA_START + (offset * size);
+
+    return &data[start..start + size];
+}
+
+/// Squared Euclidean distance between `query` and the descriptor stored in
+/// `record`, read straight from the page bytes
+#[inline]
+pub fn squared_distance(record: &[u8], query: &Descriptor) -> f32 {
+    let mut sum = 0.0f32;
+
+    for i in 0..query.length {
+        let at = layout::DESCRIPTOR_START + i * 4;
+        let bytes = record[at..at + 4].try_into().expect("descriptor component is 4 bytes");
+        let value = f32::from_be_bytes(bytes);
+        let delta = query.data[i] - value;
+        sum += delta * delta;
+    }
+
+    return sum;
+}
+
+/// Read-only view over a leaf page that borrows its bytes
+pub struct RecordPageRef<'a> {
+    data: &'a [u8],
+    tail: usize,
+    desc_length: usize,
+}
+
+impl<'a> RecordPageRef<'a> {
+
+    pub fn from_slice(data: &'a [u8], desc_length: usize) -> Self {
+        return Self { tail: page_tail(data), data, desc_length };
+    }
+
+    pub fn len(&self) -> usize {
+        return self.tail;
+    }
+
+    #[inline]
+    pub fn squared_distance_at(&self, offset: usize, query: &Descriptor) -> f32 {
+        return squared_distance(record_slice(self.data, offset, self.desc_length), query);
+    }
+
+    /// Materialises a record. Called only for the few that make the top-k.
+    pub fn get_record_at(&self, offset: usize) -> Result<TreeRecord, String> {
+
+        if offset >= self.tail {
+            return Err("Provided offset greater than number of records".to_string());
+        }
+
+        return TreeRecord::from_slice(record_slice(self.data, offset, self.desc_length), self.desc_length);
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct RecordPage {
 
@@ -42,20 +115,17 @@ impl RecordPage {
         &self.data
     }
 
-    pub fn from_arr(arr: &[u8], page_length: usize, desc_length: usize) -> Self {
+    /// Takes ownership of a buffer already holding the page.
+    pub fn from_vec(data: Vec<u8>, page_length: usize, desc_length: usize) -> Self {
 
-        let tail = Some(u32::from_be_bytes(arr[layout::TAIL_OFFSET..layout::TAIL_OFFSET+layout::TAIL_SIZE].try_into().unwrap()) as usize);
+        let tail = Some(page_tail(&data));
 
-        let mut vec = vec![0u8; page_length];
-        vec.copy_from_slice(arr);
-
-        let page = Self {
-            data: vec,
+        return Self {
+            data,
             tail,
             desc_length,
             page_length,
         };
-        return page;
     }
 
     pub fn descriptor_in_page(&self, query_desc: &Descriptor) -> bool {
@@ -122,16 +192,14 @@ impl RecordPage {
         if offset >= self.tail.unwrap() {
             return Err("Provided offset greater than number of nodes".to_string());
         }
-        else {
-            let start = layout::PAGE_DATA_START + (offset * TreeRecord::compute_record_size(self.desc_length)); 
-            let size = TreeRecord::compute_record_size(self.desc_length);
-            let slice = &self.data[start..start + size];
 
-            let cr = TreeRecord::from_slice(slice, self.desc_length);
-            return cr;
-        }
+        return TreeRecord::from_slice(record_slice(&self.data, offset, self.desc_length), self.desc_length);
+    }
 
-
+    /// Squared distance to the record at `offset`, without materialising it.
+    #[inline]
+    pub fn squared_distance_at(&self, offset: usize, query: &Descriptor) -> f32 {
+        return squared_distance(record_slice(&self.data, offset, self.desc_length), query);
     }
 
     pub fn is_full(&self) -> bool {

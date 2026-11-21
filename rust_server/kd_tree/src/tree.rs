@@ -175,7 +175,6 @@ impl ImmutTree {
     ///
     ///Performance should worsen as `n` grows larger, as fewer branches of the tree can be pruned
     ///with more distant already-found points
-    //fn get_top_hits(&mut self, query_descriptor: &Descriptor, n: usize) -> TopHits {
     fn get_top_hits(&self, query_descriptor: &Descriptor, n: usize) -> TopHits {
 
         let mut hits = TopHits::new(n);
@@ -213,12 +212,22 @@ impl ImmutTree {
 
                             num_record_pages_visited += 1;
 
-                            let page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
+                            // Borrowed straight from the memory map, then
+                            // scanned in place: a record is only materialised
+                            // if it beats the current k-th best.
+                            let page = self.record_handler.page_ref(&index).unwrap();
 
-                            for record in page.get_records() {
-                                let dist = query_descriptor.distance(&record.descriptor);
+                            for offset in 0..page.len() {
 
-                                hits.try_add(dist, &record, &curr_pointer).unwrap();
+                                let squared = page.squared_distance_at(offset, query_descriptor);
+
+                                if squared >= hits.get_highest_squared_dist() {
+                                    continue;
+                                }
+
+                                let record = page.get_record_at(offset).unwrap();
+
+                                hits.try_add(squared, &record, &curr_pointer).unwrap();
                             }
 
 
@@ -273,10 +282,13 @@ impl ImmutTree {
 
                             //calc_distance to this axis and check it
                             let dist = self.dist_to_axis(split_axis, split_value, query_descriptor);
-                            let threshold = hits.get_highest_dist();
-                            //println!("DIST TO AXIS: {:?}", dist);
 
-                            if dist < threshold { //we have to visit the supplied direction
+                            // TopHits keeps squared distances, so square the
+                            // axis distance rather than rooting the threshold.
+                            let squared = dist * dist;
+                            let threshold = hits.get_highest_squared_dist();
+
+                            if squared < threshold { //we have to visit the supplied direction
                                 let descend_pointer = match direction.unwrap() {
                                     Direction::Left => node.left_child_pointer,
                                     Direction::Right => node.right_child_pointer,
@@ -494,7 +506,7 @@ impl NearestNeighbors {
                     length: record.length,
                 };
 
-                distances.push(top_hits.distances[i]);
+                distances.push(top_hits.squared_distances[i].sqrt());
                 records.push(Some(compound_record));
 
         }
@@ -562,28 +574,27 @@ impl NearestNeighbors {
 #[derive(Debug)]
 pub struct TopHits {
     pub max_length: usize,
-    pub distances: Vec<f32>,
+    pub squared_distances: Vec<f32>,
     pub records: Vec<Option<TreeRecord>>,
     pub pointers: Vec<Option<PagePointer>>,
 }
 
 impl TopHits {
 
-    ///Distances are initially set to max f32 value
     /// Behavior is undefined if we don't visit at least `max_lengths` records
     pub fn new(max_length: usize) -> Self {
 
-        let mut distances: Vec<f32> = Vec::new();
+        let mut squared_distances: Vec<f32> = Vec::new();
         let mut records: Vec<Option<TreeRecord>> = Vec::new();
         let mut pointers: Vec<Option<PagePointer>> = Vec::new();
         for _ in 0..max_length {
-            distances.push(f32::MAX);
+            squared_distances.push(f32::MAX);
             records.push(None);
             pointers.push(None);
         }
         return Self {
             max_length,
-            distances,
+            squared_distances,
             records,
             pointers,
         }
@@ -597,7 +608,7 @@ impl TopHits {
 
         //find insertion point
         let mut insert_index: Option<usize> = None;
-        for (i, item) in self.distances.iter().enumerate() {
+        for (i, item) in self.squared_distances.iter().enumerate() {
             if item > &distance {
                 insert_index = Some(i);
                 break;
@@ -609,12 +620,12 @@ impl TopHits {
             Some(x) => x,
         };
 
-        self.distances.insert(insert_index, distance);
+        self.squared_distances.insert(insert_index, distance);
         self.records.insert(insert_index, Some(record.clone()));
         self.pointers.insert(insert_index, Some(page_pointer.clone()));
 
         //trim to correct size
-        self.distances.truncate(self.max_length);
+        self.squared_distances.truncate(self.max_length);
         self.records.truncate(self.max_length);
         self.pointers.truncate(self.max_length);
 
@@ -624,7 +635,7 @@ impl TopHits {
     ///Public method to be called on every record for consideration as a neighbor
     pub fn try_add(&mut self, distance: f32, record: &TreeRecord, page_pointer: &PagePointer) -> Result<(), String> {
 
-        let worst_best_distance = self.get_highest_dist();
+        let worst_best_distance = self.get_highest_squared_dist();
         if distance < worst_best_distance {
             self._add(distance, record, page_pointer)?;
         }
@@ -635,12 +646,12 @@ impl TopHits {
 
     ///# Returns
     ///
-    ///the highest distance of the list (e.g. the Nth highest distance where N=`max_length`
+    ///the highest squared distance of the list (the Nth, where N=`max_length`)
     ///
     ///Should be constant time access, it's just looking at the back of the vector?
-    pub fn get_highest_dist(&self) -> f32 {
+    pub fn get_highest_squared_dist(&self) -> f32 {
 
-        return self.distances[self.max_length - 1];
+        return self.squared_distances[self.max_length - 1];
     }
 
     pub fn to_json(&self) -> String {
@@ -656,7 +667,7 @@ impl TopHits {
 
             let index = record.index.to_string();
             s = s + &format!("  \"{:?}\": {{\n", index);
-            s = s + &format!("  \"distance\": \"{}\"", &self.distances[i]).to_string();
+            s = s + &format!("  \"distance\": \"{}\"", &self.squared_distances[i].sqrt()).to_string();
             s = s + "," + "\n";
         s += "},\n";
         }

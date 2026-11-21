@@ -5,9 +5,10 @@
 use crate::error::Error;
 use crate::data::{CompoundIdentifier};
 use crate::node::{InternalNode, PagePointer};
-use crate::page::RecordPage;
+use crate::page::{RecordPage, RecordPageRef};
 use byteorder::{ByteOrder, BigEndian};
 use crate::layout;
+use memmap2::{Advice, Mmap, MmapOptions};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::io::{Read, Seek, SeekFrom};
@@ -18,6 +19,9 @@ use std::collections::HashMap;
 #[derive(Debug)]
 pub struct RecordPager {
     read_fd: File,
+    /// Whole-file map, present when the pager was opened rather than created.
+    /// `page_ref` serves pages out of it with no read and no copy.
+    mmap: Option<Mmap>,
     path: String,
     pub next_free_index: usize, //this is the next available slot
     pub desc_length: usize,
@@ -299,6 +303,7 @@ impl RecordPager {
 
                     return Ok(Self{
                     read_fd,
+                    mmap: None,
                     path: path,
                     next_free_index: 0,
                     desc_length,
@@ -323,8 +328,12 @@ impl RecordPager {
                     let attempted_usize = layout::Value::try_from(next_free_index_from_disk);
                     let layout::Value(value) = attempted_usize.unwrap();
 
+                    let mmap = unsafe { MmapOptions::new().map(&fd) }?;
+                    let _ = mmap.advise(Advice::Random);
+
                     return Ok(Self {
                         read_fd: fd,
+                        mmap: Some(mmap),
                         path: path,
                         next_free_index: value,
                         desc_length,
@@ -383,9 +392,25 @@ impl RecordPager {
 
         self.read_fd.read_exact_at(&mut page, start)?;
 
-        let page = RecordPage::from_arr(&page, self.page_length, self.desc_length);
+        return Ok(RecordPage::from_vec(page, self.page_length, self.desc_length));
+    }
 
-        return Ok(page);
+    /// Borrowed view of a leaf page, served from the memory map.
+    pub fn page_ref(&self, address: &usize) -> Result<RecordPageRef<'_>, Error> {
+
+        let mmap = match &self.mmap {
+            Some(m) => m,
+            None => return Err(Error::UnexpectedError),
+        };
+
+        let start = self.calc_offset(address) as usize;
+        let end = start + self.page_length;
+
+        if end > mmap.len() {
+            return Err(Error::KeyNotFound);
+        }
+
+        return Ok(RecordPageRef::from_slice(&mmap[start..end], self.desc_length));
     }
 
     pub fn print_records(&mut self) {
