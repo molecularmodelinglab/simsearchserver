@@ -3,6 +3,7 @@ kd_tree/test_data
 *.data
 *.trace
 *.txt
+!requirements.txt
 *.ipynb
 *.old
 *.log
@@ -11,4 +12,5 @@ kd_tree/test_data
 *.venv*
 __pycache__
 out
-
+data/
+logs/
