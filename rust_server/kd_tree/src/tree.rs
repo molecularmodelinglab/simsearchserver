@@ -18,7 +18,28 @@ use std::fs;
 use std::io::prelude::*;
 
 use std::path::Path;
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
 use std::collections::VecDeque;
+
+const KIND_NODE: u8 = 0;
+const KIND_LEAF: u8 = 1;
+
+#[inline]
+fn encode_pointer(pointer: &PagePointer) -> (u8, usize) {
+    return match pointer {
+        PagePointer::Node(i) => (KIND_NODE, *i),
+        PagePointer::Leaf(i) => (KIND_LEAF, *i),
+    };
+}
+
+#[inline]
+fn decode_pointer(kind: u8, index: usize) -> PagePointer {
+    return match kind {
+        KIND_LEAF => PagePointer::Leaf(index),
+        _ => PagePointer::Node(index),
+    };
+}
 
 
 pub struct ImmutTree {
@@ -179,129 +200,87 @@ impl ImmutTree {
 
         let mut hits = TopHits::new(n);
 
-        let mut num_nodes_visited: usize = 0;
-        let mut num_record_pages_visited: usize = 0;
+        // Best-first traversal. Deferred subtrees wait in a min-heap keyed by a
+        // lower bound on the distance to anything inside them, so the most
+        // promising branch is always taken next. That tightens the k-th
+        // distance sooner, which prunes more of the tree.
+        //
+        // The previous version kept deferred branches in a FIFO, visiting them
+        // in order of depth from the root regardless of how promising they
+        // were. Same bound, same results: only the order changes.
+        //
+        // Bounds are non-negative, and IEEE-754 bit patterns of non-negative
+        // floats compare in the same order as the floats, so the raw bits work
+        // as a heap key without needing a total order on f32.
+        let mut frontier: BinaryHeap<Reverse<(u32, u8, usize)>> = BinaryHeap::new();
 
-        //direction is the one we go if we pass!!!
-        let mut nodes_to_check: VecDeque<(PagePointer, NodeAction, Option<Direction>)> = VecDeque::new();
+        let (kind, index) = encode_pointer(&self.root);
+        frontier.push(Reverse((0u32, kind, index)));
 
-        let root_pointer = self.root.clone();
+        while let Some(Reverse((bound_bits, kind, index))) = frontier.pop() {
 
-        nodes_to_check.push_front((root_pointer, NodeAction::Descend, None));
+            // The threshold only ever shrinks, so a branch that cannot beat it
+            // now will never beat it later.
+            if f32::from_bits(bound_bits) >= hits.get_highest_squared_dist() {
+                continue;
+            }
 
+            let mut current = decode_pointer(kind, index);
 
-        loop {
+            // Descend to a leaf, deferring the far side of every split.
+            loop {
 
-            //dbg!(&nodes_to_check);
-            let popped_val = nodes_to_check.pop_front();
-            //dbg!(&popped_val);
+                match current {
 
-            let curr_tup = match popped_val {
-                None => {break;},
-                Some(x) => {x},
-            };
+                    PagePointer::Leaf(leaf_index) => {
 
-            let (curr_pointer, action, direction) = curr_tup;
+                        hits.record_pages_visited += 1;
 
-            match action {
+                        let page = self.record_handler.page_ref(&leaf_index).unwrap();
 
-                NodeAction::Descend => {
+                        for offset in 0..page.len() {
 
-                    match curr_pointer {
-                        PagePointer::Leaf(index) => {
+                            let squared = page.squared_distance_at(offset, query_descriptor);
 
-                            num_record_pages_visited += 1;
-
-                            // Borrowed straight from the memory map, then
-                            // scanned in place: a record is only materialized
-                            // if it beats the current k-th best.
-                            let page = self.record_handler.page_ref(&index).unwrap();
-
-                            for offset in 0..page.len() {
-
-                                let squared = page.squared_distance_at(offset, query_descriptor);
-
-                                if squared >= hits.get_highest_squared_dist() {
-                                    continue;
-                                }
-
-                                let record = page.get_record_at(offset).unwrap();
-
-                                hits.try_add(squared, &record, &curr_pointer).unwrap();
+                            if squared >= hits.get_highest_squared_dist() {
+                                continue;
                             }
 
+                            let record = page.get_record_at(offset).unwrap();
 
-                        },
-                        PagePointer::Node(index) => {
-
-                            num_nodes_visited += 1;
-
-                            let node = self.node_handler.get_node(&index).unwrap().clone();
-
-                            let axis = node.split_axis;
-                            let this_value = &query_descriptor.data[axis];
-                            let split_value = node.split_value;
-
-                            match this_value <= &split_value {
-
-                                true => {
-
-                                    let descend_pointer = node.left_child_pointer;
-
-                                    //push the current node and the direction we're going
-                                    nodes_to_check.push_front((descend_pointer.clone(), NodeAction::Descend, None));
-
-                                    //push the current node and the direction we ignored
-                                    nodes_to_check.push_back((curr_pointer.clone(), NodeAction::CheckIgnoredBranch, Some(Direction::Right)));
-                                },
-                                false => {
-
-                                    let descend_pointer = node.right_child_pointer;
-
-                                    //push the current node and the direction we're going
-                                    nodes_to_check.push_front((descend_pointer.clone(), NodeAction::Descend, None));
-
-                                    //push the current node and the direction we ignored
-                                    nodes_to_check.push_back((curr_pointer.clone(), NodeAction::CheckIgnoredBranch, Some(Direction::Left)));
-                                },
-                            }
-                        },
-                    }
-                },
-
-                NodeAction::CheckIgnoredBranch => {
-
-                    match curr_pointer {
-                        PagePointer::Leaf(_) => {panic!();},
-                        PagePointer::Node(index) => {
-
-                            let node = self.node_handler.get_node(&index).unwrap().clone();
-
-                            let split_axis = node.split_axis;
-                            let split_value = node.split_value;
-
-                            //calc_distance to this axis and check it
-                            let dist = self.dist_to_axis(split_axis, split_value, query_descriptor);
-
-                            // TopHits keeps squared distances, so square the
-                            // axis distance rather than rooting the threshold.
-                            let squared = dist * dist;
-                            let threshold = hits.get_highest_squared_dist();
-
-                            if squared < threshold { //we have to visit the supplied direction
-                                let descend_pointer = match direction.unwrap() {
-                                    Direction::Left => node.left_child_pointer,
-                                    Direction::Right => node.right_child_pointer,
-                                };
-                                nodes_to_check.push_front((descend_pointer, NodeAction::Descend, None));
-                            }
+                            hits.try_add(squared, &record, &current).unwrap();
                         }
-                    }
 
-                },
+                        break;
+                    },
+
+                    PagePointer::Node(node_index) => {
+
+                        hits.nodes_visited += 1;
+
+                        let node = self.node_handler.get_node(&node_index).unwrap().clone();
+
+                        let delta = query_descriptor.data[node.split_axis] - node.split_value;
+
+                        let (near, far) = match delta <= 0.0 {
+                            true => (node.left_child_pointer, node.right_child_pointer),
+                            false => (node.right_child_pointer, node.left_child_pointer),
+                        };
+
+                        // Nothing on the far side can be closer than the
+                        // distance to the split plane.
+                        let far_bound = delta * delta;
+
+                        if far_bound < hits.get_highest_squared_dist() {
+                            let (far_kind, far_index) = encode_pointer(&far);
+                            frontier.push(Reverse((far_bound.to_bits(), far_kind, far_index)));
+                        }
+
+                        current = near;
+                    },
+                }
             }
         }
-
 
         return hits;
 
@@ -487,6 +466,8 @@ pub struct Tree {
 pub struct NearestNeighbors {
     pub distances: Vec<f32>,
     pub records: Vec<Option<CompoundRecord>>,
+    pub record_pages_visited: usize,
+    pub nodes_visited: usize,
 }
 
 impl NearestNeighbors {
@@ -517,6 +498,8 @@ impl NearestNeighbors {
         return Self {
             distances,
             records,
+            record_pages_visited: top_hits.record_pages_visited,
+            nodes_visited: top_hits.nodes_visited,
         }
     }
 
@@ -577,6 +560,8 @@ impl NearestNeighbors {
 #[derive(Debug)]
 pub struct TopHits {
     pub max_length: usize,
+    pub nodes_visited: usize,
+    pub record_pages_visited: usize,
     pub squared_distances: Vec<f32>,
     pub records: Vec<Option<TreeRecord>>,
     pub pointers: Vec<Option<PagePointer>>,
@@ -597,6 +582,8 @@ impl TopHits {
         }
         return Self {
             max_length,
+            nodes_visited: 0,
+            record_pages_visited: 0,
             squared_distances,
             records,
             pointers,

@@ -10,10 +10,13 @@ use serde::Serialize;
 
 pub type CompoundIndex = u64;
 
-pub const IDENTIFIER_SIZE: usize = 50;
+/// Longest identifier accepted. Since the database stores entries at variable
+/// length this costs nothing on disk; it only bounds a scratch array here.
+///
+/// Enamine REAL identifiers look like `s_4____461206____12103258`
+pub const IDENTIFIER_SIZE: usize = 128;
 
 pub const MAX_SMILES_LENGTH: usize = 200;
-//pub const MAX_IDENTIFIER_LENGTH: usize = 30;
 pub const MAX_IDENTIFIER_LENGTH: usize = IDENTIFIER_SIZE;
 
 #[derive(Debug, PartialEq, Clone, Serialize)]

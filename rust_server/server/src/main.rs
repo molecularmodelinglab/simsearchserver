@@ -72,6 +72,8 @@ struct Hit {
 #[derive(Serialize)]
 struct QueryResponse {
     num_hits: usize,
+    pages_visited: usize,
+    nodes_visited: usize,
     hits: Vec<Hit>,
 }
 
@@ -299,7 +301,12 @@ fn to_response(neighbors: NearestNeighbors) -> QueryResponse {
         });
     }
 
-    return QueryResponse { num_hits: hits.len(), hits };
+    return QueryResponse {
+        num_hits: hits.len(),
+        pages_visited: neighbors.record_pages_visited,
+        nodes_visited: neighbors.nodes_visited,
+        hits,
+    };
 }
 
 #[tokio::main]
