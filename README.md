@@ -134,7 +134,7 @@ over workers there.
 | `SALSA_MODEL` | `salsa16` | `salsa_server` — a registry name (`salsa8`/`salsa16`/`salsa24`/`salsa32`) or a path |
 | `SALSA_URL` | `http://127.0.0.1:5000` | `python_web_server` |
 | `KDTREE_URL` | `http://127.0.0.1:3000` | `python_web_server` |
-| `NUM_NEIGHBORS` | `100` | `python_web_server` |
+| `NUM_NEIGHBORS` | `8` | `python_web_server` — a power of two, so a full stereoisomer tie group comes back together |
 | `REQUEST_TIMEOUT` | `30` | `python_web_server` |
 | `HF_HOME` | — | model download cache |
 

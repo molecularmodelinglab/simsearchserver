@@ -3,7 +3,11 @@ import os
 import requests
 
 KDTREE_URL = os.environ.get("KDTREE_URL", "http://127.0.0.1:3000")
-NUM_NEIGHBORS = int(os.environ.get("NUM_NEIGHBORS", "100"))
+# A power of two, because SALSA is not chirality-aware: the 2^n stereoisomers
+# of a molecule with n chiral centers are ties in the embedding space, split
+# only by the tie-breaking noise. k=8 returns a full tie group for up to three
+# chiral centers.
+NUM_NEIGHBORS = int(os.environ.get("NUM_NEIGHBORS", "8"))
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "30"))
 
 
