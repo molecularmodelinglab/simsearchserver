@@ -120,18 +120,14 @@ impl Descriptor {
         return s;
     }
 
+    /// Perturbs each component by up to 1e-4 to break exact ties.
     pub fn add_small_noise(&mut self) {
 
         let mut rng = rand::thread_rng();
-        let noise: Vec<f32> = (0..self.length).map(|_| rng.gen_range(0.0..0.0001)).collect();
 
-        let mut result: Vec<f32> = vec![0.0; self.length];
-
-        for i in 0..self.length {
-            result[i] = self.data[i] + noise[i];
+        for value in self.data.iter_mut() {
+            *value += rng.gen_range(0.0..0.0001);
         }
-
-        self.data = result;
     }
 }
 

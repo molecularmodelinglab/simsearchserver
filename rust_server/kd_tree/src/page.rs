@@ -75,7 +75,7 @@ impl<'a> RecordPageRef<'a> {
         return squared_distance(record_slice(self.data, offset, self.desc_length), query);
     }
 
-    /// Materialises a record. Called only for the few that make the top-k.
+    /// Materializes a record. Called only for the few that make the top-k.
     pub fn get_record_at(&self, offset: usize) -> Result<TreeRecord, String> {
 
         if offset >= self.tail {
@@ -170,9 +170,9 @@ impl RecordPage {
         let start = layout::PAGE_DATA_START + (self.tail.unwrap() * record.get_record_size());
         let size = record.get_record_size();
 
-        let slice = &mut self.data[start..start + size];
+        // Written straight into the page
+        record.write_to(&mut self.data[start..start + size]);
 
-        slice.copy_from_slice(&record.to_vec());
         self.tail = match self.tail {
             Some(x) => Some(x + 1),
             None => Some(0),
@@ -196,10 +196,44 @@ impl RecordPage {
         return TreeRecord::from_slice(record_slice(&self.data, offset, self.desc_length), self.desc_length);
     }
 
-    /// Squared distance to the record at `offset`, without materialising it.
+    /// Squared distance to the record at `offset`, without materializing it.
     #[inline]
     pub fn squared_distance_at(&self, offset: usize, query: &Descriptor) -> f32 {
         return squared_distance(record_slice(&self.data, offset, self.desc_length), query);
+    }
+
+    /// One descriptor component of the record at `offset`
+    #[inline]
+    pub fn descriptor_component_at(&self, offset: usize, axis: usize) -> f32 {
+        let record = record_slice(&self.data, offset, self.desc_length);
+        let at = layout::DESCRIPTOR_START + axis * 4;
+        let bytes = record[at..at + 4].try_into().expect("component is 4 bytes");
+
+        return f32::from_be_bytes(bytes);
+    }
+
+    /// Appends the record at `offset` in `source`, copying its bytes directly
+    pub fn copy_record_from(&mut self, source: &RecordPage, offset: usize) -> Result<(), String> {
+
+        if self.is_full() {
+            return Err("Record page is full".to_string());
+        }
+
+        assert!(source.desc_length == self.desc_length);
+
+        let size = TreeRecord::compute_record_size(self.desc_length);
+        let start = layout::PAGE_DATA_START + (self.tail.unwrap() * size);
+
+        let bytes = record_slice(&source.data, offset, source.desc_length);
+        self.data[start..start + size].copy_from_slice(bytes);
+
+        self.tail = Some(self.tail.unwrap() + 1);
+
+        let coerced_tail: u32 = self.tail.unwrap().try_into().unwrap();
+        self.data[layout::TAIL_OFFSET..layout::TAIL_OFFSET + layout::TAIL_SIZE]
+            .copy_from_slice(&coerced_tail.to_be_bytes());
+
+        return Ok(());
     }
 
     pub fn is_full(&self) -> bool {

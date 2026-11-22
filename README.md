@@ -1,6 +1,6 @@
 # simsearchserver
 
-Fast chemical nearest-neighbour search over low-dimensional molecular
+Fast chemical nearest-neighbor search over low-dimensional molecular
 embeddings, backed by a disk-resident kd-tree. Implements the approach in
 [arXiv:2402.07970](https://arxiv.org/abs/2402.07970).
 
@@ -12,7 +12,7 @@ vectors. All chemistry (tokenization, canonicalization, embedding) lives in
 
 ```
 browser ──► python_web_server ──► salsa_server    (SMILES  -> embedding)
-             (Flask UI)       └─► rust_server     (vector  -> neighbours)
+             (Flask UI)       └─► rust_server     (vector  -> neighbors)
 ```
 
 | Component | What it does |

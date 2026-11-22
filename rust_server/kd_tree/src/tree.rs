@@ -213,7 +213,7 @@ impl ImmutTree {
                             num_record_pages_visited += 1;
 
                             // Borrowed straight from the memory map, then
-                            // scanned in place: a record is only materialised
+                            // scanned in place: a record is only materialized
                             // if it beats the current k-th best.
                             let page = self.record_handler.page_ref(&index).unwrap();
 
@@ -373,23 +373,26 @@ impl TreeRecord {
     }
 
 
-    pub fn to_vec(&self) -> Vec<u8> {
+    /// Serializes the record into `buf`, which must be exactly record-sized.
+    pub fn write_to(&self, buf: &mut [u8]) {
 
-        let mut vec: Vec<u8> = Vec::with_capacity(self.get_record_size());
+        assert!(buf.len() == self.get_record_size());
 
-        let index_rep = self.index.to_be_bytes();
-        vec.extend_from_slice(&index_rep);
+        buf[layout::INDEX_START..layout::INDEX_START + layout::INDEX_SIZE]
+            .copy_from_slice(&self.index.to_be_bytes());
 
         for i in 0..self.length {
-
-            let mut slice = [0u8; 4];
-            BigEndian::write_f32(&mut slice, self.descriptor.data[i]);
-            vec.extend_from_slice(&slice);
-
+            let at = layout::DESCRIPTOR_START + i * 4;
+            BigEndian::write_f32(&mut buf[at..at + 4], self.descriptor.data[i]);
         }
+    }
 
-        assert!(vec.len() == self.get_record_size());
-        
+    pub fn to_vec(&self) -> Vec<u8> {
+
+        let mut vec: Vec<u8> = vec![0u8; self.get_record_size()];
+
+        self.write_to(&mut vec);
+
         return vec;
     }
 }
@@ -778,6 +781,9 @@ impl Tree {
         let node_filename = self.config.get_node_filename();
         self.node_handler.to_file(&node_filename).unwrap();
         self.record_handler.flush();
+
+        // The database buffers writes and stamps its entry count here
+        self.database.flush();
 
     }
 
@@ -1180,9 +1186,11 @@ impl Tree {
         //dbg!(records);
 
         //determine split value
-        let records = page.get_records();
+        let n_records = page.len();
 
-        let mut values: Vec<_> = records.iter().map(|x| x.descriptor.data[split_axis]).collect();
+        let mut values: Vec<f32> = (0..n_records)
+            .map(|offset| page.descriptor_component_at(offset, split_axis))
+            .collect();
 
         //because f32 doesn't like being compared
         values.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -1200,28 +1208,18 @@ impl Tree {
             },
         };
 
-
-        let left_record_idxs: Vec<_> = (0..records.len()).filter(|x| records[*x].descriptor.data[split_axis] <= median).collect();
-        let right_record_idxs: Vec<_> = (0..records.len()).filter(|x| records[*x].descriptor.data[split_axis] > median).collect();
-
-        assert_eq!(left_record_idxs.len() + right_record_idxs.len(), records.len());
-
-        let mut left_records: Vec<TreeRecord> = Vec::with_capacity((records.len() / 2) + 1);
-        let mut right_records: Vec<TreeRecord> = Vec::with_capacity((records.len() / 2) + 1);
-
-        //consume records and allocate into left and right pages
-        for x in records.into_iter() {
-            let is_left = x.descriptor.data[split_axis] <= median; 
-            match is_left {
-                true => {left_records.push(x)},
-                false => {right_records.push(x)},
-            }
-        }
-
         //make new left record page at current offset
         let mut left_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
-        for record in left_records.iter() {
-            left_record_page.add_record(record)?;
+        let mut right_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
+
+        for offset in 0..n_records {
+
+            let target = match page.descriptor_component_at(offset, split_axis) <= median {
+                true => &mut left_record_page,
+                false => &mut right_record_page,
+            };
+
+            target.copy_record_from(&page, offset)?;
         }
 
         let this_index = match this_pointer {
@@ -1231,12 +1229,7 @@ impl Tree {
         //self.record_handler.write_page_at_offset(&left_record_page, this_index).unwrap();
         self.record_handler.update_page(&left_record_page, this_index).unwrap();
         
-        //make new right record page at next offset
-        let mut right_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);
-        for record in right_records.iter() {
-            right_record_page.add_record(record)?;
-        }
-
+        //right page was filled alongside the left one above
         //let right_child_pointer = self.record_handler.write_page(&right_record_page).unwrap();
         let right_child_pointer = self.record_handler.add_page(&right_record_page).unwrap();
 

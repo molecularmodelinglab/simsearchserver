@@ -1,10 +1,10 @@
-//! Vector nearest-neighbour search service over a kd-tree built by `builder`.
+//! Vector nearest-neighbor search service over a kd-tree built by `builder`.
 //!
 //! Knows nothing about SMILES or embedding models: callers embed their query
 //! and send the resulting vector.
 //!
 //! - `GET  /health`            - liveness, plus the descriptor length this index expects
-//! - `GET  /nn/{k}/{v0,v1,..}` - k nearest neighbours of a comma-separated vector
+//! - `GET  /nn/{k}/{v0,v1,..}` - k nearest neighbors of a comma-separated vector
 //! - `POST /nn/{k}`            - same, with body `[v0, v1, ...]` or `{"descriptor": [...]}`
 //!
 //! Prefer `POST` from client code; a high-dimensional descriptor in a URL runs
@@ -173,7 +173,7 @@ fn handle_nn_get(segments: &[&str], tree: &ImmutTree) -> Result<Response<Body>, 
     let k = match segments.get(1) {
         Some(s) => parse_k(s)?,
         None => return Err(ApiError::bad_request(
-            "missing neighbour count; expected /nn/{k}/{comma-separated vector}",
+            "missing neighbor count; expected /nn/{k}/{comma-separated vector}",
         )),
     };
 
@@ -196,7 +196,7 @@ async fn handle_nn_post(
 ) -> Result<Response<Body>, ApiError> {
     let k = match segments.get(1) {
         Some(s) => parse_k(s)?,
-        None => return Err(ApiError::bad_request("missing neighbour count; expected POST /nn/{k}")),
+        None => return Err(ApiError::bad_request("missing neighbor count; expected POST /nn/{k}")),
     };
 
     let body = hyper::body::to_bytes(req.into_body())
@@ -223,15 +223,15 @@ async fn handle_nn_post(
 fn parse_k(s: &str) -> Result<usize, ApiError> {
     let k = s
         .parse::<usize>()
-        .map_err(|_| ApiError::bad_request(format!("neighbour count {:?} is not a positive integer", s)))?;
+        .map_err(|_| ApiError::bad_request(format!("neighbor count {:?} is not a positive integer", s)))?;
 
     if k == 0 {
-        return Err(ApiError::bad_request("neighbour count must be at least 1"));
+        return Err(ApiError::bad_request("neighbor count must be at least 1"));
     }
 
     if k > MAX_NEIGHBORS {
         return Err(ApiError::bad_request(format!(
-            "neighbour count {} exceeds the maximum of {}",
+            "neighbor count {} exceeds the maximum of {}",
             k, MAX_NEIGHBORS
         )));
     }
