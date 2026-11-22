@@ -1,4 +1,4 @@
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{ByteOrder, LittleEndian};
 use std::fmt;
 use ascii::AsciiString;
 use rand::{distributions::Alphanumeric, Rng};
@@ -264,7 +264,7 @@ impl Parser{
      pub fn get_f32_from_array(data: &[u8], offset: usize) -> Result<f32, Error> {
             let bytes = &data[offset..offset + 4];
             let known_size_array = coerce_f32(bytes);
-            let attempted_f32 = BigEndian::read_f32(&known_size_array);
+            let attempted_f32 = LittleEndian::read_f32(&known_size_array);
             Ok(attempted_f32)
         }
 
@@ -277,7 +277,7 @@ impl Parser{
             for _ in 0..length {
                 let bytes = &data[curr_offset..curr_offset + 4];
                 let known_size_array = coerce_f32(bytes);
-                let attempted_f32 = BigEndian::read_f32(&known_size_array);
+                let attempted_f32 = LittleEndian::read_f32(&known_size_array);
                 vec.push(attempted_f32);
                 curr_offset += 4;
             }

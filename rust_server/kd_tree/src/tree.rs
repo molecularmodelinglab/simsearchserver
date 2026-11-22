@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use std::time::Instant;
 use rand::{distributions::Alphanumeric, Rng};
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{ByteOrder, BigEndian, LittleEndian};
 
 
 use std::fs::File;
@@ -56,6 +56,8 @@ impl ImmutTree {
 
         let config_filename = directory_name.clone() + "/config.yaml";
         let config = TreeConfig::from_file(config_filename);
+
+        config.check_format(&directory_name);
 
         let node_filename = config.get_node_filename();
         let record_filename = config.get_record_filename();
@@ -362,7 +364,7 @@ impl TreeRecord {
 
         for i in 0..self.length {
             let at = layout::DESCRIPTOR_START + i * 4;
-            BigEndian::write_f32(&mut buf[at..at + 4], self.descriptor.data[i]);
+            LittleEndian::write_f32(&mut buf[at..at + 4], self.descriptor.data[i]);
         }
     }
 
@@ -390,6 +392,7 @@ pub struct TreeConfig {
     pub node_page_length: usize,
     pub num_records: Option<usize>,
     pub cache_limit: Option<f32>,
+    pub format_version: Option<u32>,
 }
 
 
@@ -404,6 +407,22 @@ impl TreeConfig {
             node_page_length: 4096,
             num_records: None,
             cache_limit: None,
+            format_version: Some(layout::FORMAT_VERSION),
+        }
+    }
+
+    /// Refuses an index written in a different on-disk format.
+    pub fn check_format(&self, directory: &str) {
+
+        let found = self.format_version.unwrap_or(1);
+
+        if found != layout::FORMAT_VERSION {
+            panic!(
+                "index at {} is on-disk format version {}, but this build reads version {}. \n\
+                 Version 1 stored descriptors big-endian behind a 6-byte page header; version 2 \n\
+                 stores them little-endian behind an 8-byte header. Rebuild the index.",
+                directory, found, layout::FORMAT_VERSION,
+            );
         }
     }
 
@@ -693,6 +712,8 @@ impl Tree {
 
         let config_filename = directory_name.clone() + "/config.yaml";
         let config = TreeConfig::from_file(config_filename);
+
+        config.check_format(&directory_name);
         dbg!(&config);
 
         let node_filename = config.get_node_filename();
@@ -775,6 +796,8 @@ impl Tree {
     }
 
     fn new(config: TreeConfig) -> Self {
+        let mut config = config;
+        config.format_version = Some(layout::FORMAT_VERSION);
 
         let record_filename = config.get_record_filename();
         let config_filename = config.get_config_filename();

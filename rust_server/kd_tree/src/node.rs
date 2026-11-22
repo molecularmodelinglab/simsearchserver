@@ -10,7 +10,7 @@ use crate::data::{Parser};
 use crate::page::PageType;
 use crate::layout;
 
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{ByteOrder, BigEndian, LittleEndian};
 use std::fmt;
 
 use std::convert::TryInto;
@@ -142,7 +142,7 @@ impl InternalNode {
         arr[layout::SPLIT_AXIS_OFFSET] = self.split_axis as u8;
 
         let slice = &mut arr[layout::SPLIT_VALUE_OFFSET..layout::SPLIT_VALUE_OFFSET + layout::SPLIT_VALUE_SIZE];
-        BigEndian::write_f32(slice, self.split_value.try_into().unwrap());
+        LittleEndian::write_f32(slice, self.split_value.try_into().unwrap());
 
         return arr
     }

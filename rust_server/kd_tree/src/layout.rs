@@ -71,7 +71,17 @@ pub const TAIL_SIZE: usize = 4; //2 bytes supports up to 65535 records, but 4 is
 pub const IS_EMPTY_OFFSET: usize = TAIL_OFFSET + TAIL_SIZE;
 pub const IS_EMPTY_SIZE: usize = 1;
 
-pub const PAGE_DATA_START: usize = IS_EMPTY_OFFSET + IS_EMPTY_SIZE;
+/// Pads the page header from 6 to 8 bytes so records start on an 8-byte
+/// boundary.
+pub const PAGE_HEADER_PADDING: usize = 2;
+
+pub const PAGE_DATA_START: usize = IS_EMPTY_OFFSET + IS_EMPTY_SIZE + PAGE_HEADER_PADDING;
+
+/// On-disk format revision for the `record` and `node` files.
+///
+/// 1: 6-byte page header, big-endian floats
+/// 2: 8-byte page header, little-endian floats
+pub const FORMAT_VERSION: u32 = 2;
 
 //for whole file
 pub const HEADER_CURSOR_START: usize = 0;

@@ -40,13 +40,43 @@ pub fn record_slice(data: &[u8], offset: usize, desc_length: usize) -> &[u8] {
 /// `record`, read straight from the page bytes
 #[inline]
 pub fn squared_distance(record: &[u8], query: &Descriptor) -> f32 {
-    let mut sum = 0.0f32;
 
-    for i in 0..query.length {
-        let at = layout::DESCRIPTOR_START + i * 4;
-        let bytes = record[at..at + 4].try_into().expect("descriptor component is 4 bytes");
-        let value = f32::from_be_bytes(bytes);
-        let delta = query.data[i] - value;
+    // Sliced once, then walked in fixed 4-byte chunks zipped against the query.
+    // Indexing per component instead (`record[at..at + 4]`, `query.data[i]`)
+    // emits a bounds check per component per record
+    let start = layout::DESCRIPTOR_START;
+    let bytes = &record[start..start + query.length * 4];
+
+    // Four independent accumulators, four components at a time.
+    let mut acc = [0.0f32; 4];
+
+    let mut values = bytes.chunks_exact(16);
+    let mut queries = query.data.chunks_exact(4);
+
+    for (v, q) in values.by_ref().zip(queries.by_ref()) {
+
+        let a = f32::from_le_bytes([v[0], v[1], v[2], v[3]]);
+        let b = f32::from_le_bytes([v[4], v[5], v[6], v[7]]);
+        let c = f32::from_le_bytes([v[8], v[9], v[10], v[11]]);
+        let d = f32::from_le_bytes([v[12], v[13], v[14], v[15]]);
+
+        let da = q[0] - a;
+        let db = q[1] - b;
+        let dc = q[2] - c;
+        let dd = q[3] - d;
+
+        acc[0] += da * da;
+        acc[1] += db * db;
+        acc[2] += dc * dc;
+        acc[3] += dd * dd;
+    }
+
+    let mut sum = acc[0] + acc[1] + acc[2] + acc[3];
+
+    // Descriptor lengths that are not a multiple of four finish here.
+    for (v, q) in values.remainder().chunks_exact(4).zip(queries.remainder().iter()) {
+        let value = f32::from_le_bytes(v.try_into().expect("chunks_exact(4) yields 4 bytes"));
+        let delta = q - value;
         sum += delta * delta;
     }
 
@@ -209,7 +239,7 @@ impl RecordPage {
         let at = layout::DESCRIPTOR_START + axis * 4;
         let bytes = record[at..at + 4].try_into().expect("component is 4 bytes");
 
-        return f32::from_be_bytes(bytes);
+        return f32::from_le_bytes(bytes);
     }
 
     /// Appends the record at `offset` in `source`, copying its bytes directly
