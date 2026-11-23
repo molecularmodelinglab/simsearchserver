@@ -123,15 +123,6 @@ impl Descriptor {
         return s;
     }
 
-    /// Perturbs each component by up to 1e-4 to break exact ties.
-    pub fn add_small_noise(&mut self) {
-
-        let mut rng = rand::thread_rng();
-
-        for value in self.data.iter_mut() {
-            *value += rng.gen_range(0.0..0.0001);
-        }
-    }
 }
 
 #[derive(PartialEq, Clone, Serialize)]
