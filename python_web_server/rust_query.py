@@ -3,17 +3,17 @@ import os
 import requests
 
 KDTREE_URL = os.environ.get("KDTREE_URL", "http://127.0.0.1:3000")
-# A power of two, because SALSA is not chirality-aware: the 2^n stereoisomers
-# of a molecule with n chiral centers are ties in the embedding space, split
-# only by the tie-breaking noise. k=8 returns a full tie group for up to three
-# chiral centers.
+
+# how many candidates the kd-tree returns
+MAX_NEIGHBORS = int(os.environ.get("MAX_NEIGHBORS", "1024"))
+# how many of those survive re-ranking and reach the user
 NUM_NEIGHBORS = int(os.environ.get("NUM_NEIGHBORS", "8"))
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "30"))
 
 
-def query_descriptor(embedding, num_neighbors=None):
+def query_descriptor(embedding, max_neighbors=None):
 
-    k = num_neighbors or NUM_NEIGHBORS
+    k = max_neighbors or MAX_NEIGHBORS
 
     response = requests.post(
         f"{KDTREE_URL}/nn/{k}",

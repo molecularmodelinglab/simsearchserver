@@ -5,7 +5,7 @@ import mols2grid
 import pandas as pd
 import requests
 
-from python_web_server import rust_query
+from python_web_server import rerank, rust_query
 
 SALSA_URL = os.environ.get("SALSA_URL", "http://127.0.0.1:5000")
 REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "30"))
@@ -39,19 +39,22 @@ def query_smiles(method, smiles, drawn=None, options=None):
 
     result = rust_query.query_descriptor(embedding)
 
-    hits = result["hits"]
+    # Retrieve wide, rank well, show few.
+    hits = rerank.rerank(mol, result["hits"], rust_query.NUM_NEIGHBORS)
 
     frame = pd.DataFrame(
         {
             "SMILES": [hit["smiles"] for hit in hits],
-            "Distance": [hit["distance"] for hit in hits],
+            "ID": [hit["identifier"] for hit in hits],
+            "Similarity": [round(hit.get("similarity", float("nan")), 3) for hit in hits],
+            "Distance": [round(hit["distance"], 3) for hit in hits],
         }
     )
 
     grid_html = mols2grid.display(
         frame,
-        subset=["mols2grid-id", "img", "Distance"],
-        tooltip=["SMILES", "Distance"],
+        subset=["mols2grid-id", "img", "Similarity"],
+        tooltip=["SMILES", "ID", "Similarity", "Distance"],
     )._repr_html_()
 
     return {
