@@ -31,9 +31,53 @@ pub fn page_tail(data: &[u8]) -> usize {
 #[inline]
 pub fn record_slice(data: &[u8], offset: usize, desc_length: usize) -> &[u8] {
     let size = TreeRecord::compute_record_size(desc_length);
-    let start = layout::PAGE_DATA_START + (offset * size);
+    let start = layout::page_data_start(desc_length) + (offset * size);
 
     return &data[start..start + size];
+}
+
+#[inline]
+fn bounds_at(data: &[u8], axis: usize) -> (f32, f32) {
+    let at = layout::BOUNDS_OFFSET + axis * 8;
+    let min = f32::from_le_bytes(data[at..at + 4].try_into().expect("bound is 4 bytes"));
+    let max = f32::from_le_bytes(data[at + 4..at + 8].try_into().expect("bound is 4 bytes"));
+
+    return (min, max);
+}
+
+/// Squared distance from `query` to the nearest point of the page's bounding
+/// box: zero inside it, and a lower bound on the distance to every record on
+/// the page. An empty page has an inverted box and so reports infinity.
+#[inline]
+pub fn squared_distance_to_bounds(data: &[u8], query: &Descriptor) -> f32 {
+
+    let mut sum = 0.0f32;
+
+    for axis in 0..query.length {
+        let (min, max) = bounds_at(data, axis);
+        let q = query.data[axis];
+
+        let delta = if q < min { min - q } else if q > max { q - max } else { 0.0 };
+
+        sum += delta * delta;
+    }
+
+    return sum;
+}
+
+fn write_bounds(data: &mut [u8], axis: usize, min: f32, max: f32) {
+    let at = layout::BOUNDS_OFFSET + axis * 8;
+    data[at..at + 4].copy_from_slice(&min.to_le_bytes());
+    data[at + 4..at + 8].copy_from_slice(&max.to_le_bytes());
+}
+
+/// Widens the page's box to contain `descriptor`.
+fn extend_bounds(data: &mut [u8], descriptor: &[f32]) {
+
+    for (axis, value) in descriptor.iter().enumerate() {
+        let (min, max) = bounds_at(data, axis);
+        write_bounds(data, axis, min.min(*value), max.max(*value));
+    }
 }
 
 /// Squared Euclidean distance between `query` and the descriptor stored in
@@ -105,6 +149,11 @@ impl<'a> RecordPageRef<'a> {
         return squared_distance(record_slice(self.data, offset, self.desc_length), query);
     }
 
+    #[inline]
+    pub fn squared_distance_to_bounds(&self, query: &Descriptor) -> f32 {
+        return squared_distance_to_bounds(self.data, query);
+    }
+
     /// Materializes a record. Called only for the few that make the top-k.
     pub fn get_record_at(&self, offset: usize) -> Result<TreeRecord, String> {
 
@@ -137,6 +186,11 @@ impl RecordPage {
         };
 
         s.data[layout::PAGE_TYPE_OFFSET] = PageType::Leaf as u8;
+
+        // Inverted, so the first record written sets both ends.
+        for axis in 0..desc_length {
+            write_bounds(&mut s.data, axis, f32::INFINITY, f32::NEG_INFINITY);
+        }
 
         return s;
     }
@@ -197,11 +251,13 @@ impl RecordPage {
             false => {},
         }
 
-        let start = layout::PAGE_DATA_START + (self.tail.unwrap() * record.get_record_size());
+        let start = layout::page_data_start(self.desc_length) + (self.tail.unwrap() * record.get_record_size());
         let size = record.get_record_size();
 
         // Written straight into the page
         record.write_to(&mut self.data[start..start + size]);
+
+        extend_bounds(&mut self.data, &record.descriptor.data);
 
         self.tail = match self.tail {
             Some(x) => Some(x + 1),
@@ -232,6 +288,11 @@ impl RecordPage {
         return squared_distance(record_slice(&self.data, offset, self.desc_length), query);
     }
 
+    #[inline]
+    pub fn squared_distance_to_bounds(&self, query: &Descriptor) -> f32 {
+        return squared_distance_to_bounds(&self.data, query);
+    }
+
     /// One descriptor component of the record at `offset`
     #[inline]
     pub fn descriptor_component_at(&self, offset: usize, axis: usize) -> f32 {
@@ -252,10 +313,16 @@ impl RecordPage {
         assert!(source.desc_length == self.desc_length);
 
         let size = TreeRecord::compute_record_size(self.desc_length);
-        let start = layout::PAGE_DATA_START + (self.tail.unwrap() * size);
+        let start = layout::page_data_start(self.desc_length) + (self.tail.unwrap() * size);
 
         let bytes = record_slice(&source.data, offset, source.desc_length);
         self.data[start..start + size].copy_from_slice(bytes);
+
+        let descriptor: Vec<f32> = (0..self.desc_length)
+            .map(|axis| source.descriptor_component_at(offset, axis))
+            .collect();
+
+        extend_bounds(&mut self.data, &descriptor);
 
         self.tail = Some(self.tail.unwrap() + 1);
 
@@ -275,7 +342,7 @@ impl RecordPage {
 
     pub fn get_capacity(&self) -> usize {
 
-        return (self.page_length - layout::PAGE_DATA_START) / TreeRecord::compute_record_size(self.desc_length);
+        return (self.page_length - layout::page_data_start(self.desc_length)) / TreeRecord::compute_record_size(self.desc_length);
 
     }
 

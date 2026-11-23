@@ -75,13 +75,24 @@ pub const IS_EMPTY_SIZE: usize = 1;
 /// boundary.
 pub const PAGE_HEADER_PADDING: usize = 2;
 
-pub const PAGE_DATA_START: usize = IS_EMPTY_OFFSET + IS_EMPTY_SIZE + PAGE_HEADER_PADDING;
+/// Per-axis `[min, max]` of the descriptors on a leaf page, as interleaved
+/// f32 pairs, so a page can be skipped without scanning its records.
+pub const BOUNDS_OFFSET: usize = IS_EMPTY_OFFSET + IS_EMPTY_SIZE + PAGE_HEADER_PADDING;
+
+pub const fn bounds_size(desc_length: usize) -> usize {
+    return desc_length * 8;
+}
+
+pub const fn page_data_start(desc_length: usize) -> usize {
+    return BOUNDS_OFFSET + bounds_size(desc_length);
+}
 
 /// On-disk format revision for the `record` and `node` files.
 ///
 /// 1: 6-byte page header, big-endian floats
 /// 2: 8-byte page header, little-endian floats
-pub const FORMAT_VERSION: u32 = 2;
+/// 3: per-axis bounding box in the leaf page header
+pub const FORMAT_VERSION: u32 = 3;
 
 //for whole file
 pub const HEADER_CURSOR_START: usize = 0;

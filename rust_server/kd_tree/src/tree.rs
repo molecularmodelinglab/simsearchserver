@@ -240,6 +240,13 @@ impl ImmutTree {
 
                         let page = self.record_handler.page_ref(&leaf_index).unwrap();
 
+                        // The page's own box bounds every axis at once.
+                        if page.squared_distance_to_bounds(query_descriptor)
+                            >= hits.get_highest_squared_dist() {
+                            hits.record_pages_pruned += 1;
+                            break;
+                        }
+
                         for offset in 0..page.len() {
 
                             let squared = page.squared_distance_at(offset, query_descriptor);
@@ -486,6 +493,7 @@ pub struct NearestNeighbors {
     pub distances: Vec<f32>,
     pub records: Vec<Option<CompoundRecord>>,
     pub record_pages_visited: usize,
+    pub record_pages_pruned: usize,
     pub nodes_visited: usize,
 }
 
@@ -518,6 +526,7 @@ impl NearestNeighbors {
             distances,
             records,
             record_pages_visited: top_hits.record_pages_visited,
+            record_pages_pruned: top_hits.record_pages_pruned,
             nodes_visited: top_hits.nodes_visited,
         }
     }
@@ -581,6 +590,7 @@ pub struct TopHits {
     pub max_length: usize,
     pub nodes_visited: usize,
     pub record_pages_visited: usize,
+    pub record_pages_pruned: usize,
     pub squared_distances: Vec<f32>,
     pub records: Vec<Option<TreeRecord>>,
     pub pointers: Vec<Option<PagePointer>>,
@@ -603,6 +613,7 @@ impl TopHits {
             max_length,
             nodes_visited: 0,
             record_pages_visited: 0,
+            record_pages_pruned: 0,
             squared_distances,
             records,
             pointers,
@@ -944,7 +955,7 @@ impl Tree {
 
     pub fn get_records_per_page(&mut self) -> usize {
 
-        return (self.config.record_page_length - layout::PAGE_DATA_START) / TreeRecord::compute_record_size(self.config.desc_length);
+        return (self.config.record_page_length - layout::page_data_start(self.config.desc_length)) / TreeRecord::compute_record_size(self.config.desc_length);
 
     }
 
@@ -1384,6 +1395,96 @@ mod tests {
 
             let cr = CompoundRecord::random(n);
             tree.add_record(&cr).unwrap();
+        }
+    }
+
+    #[test]
+    fn page_bounds_do_not_change_the_answer() {
+
+        // Skipping a page on its bounding box is only sound if the box bounds
+        // every record on it
+        for n in [8, 16] {
+
+            let mut config = TreeConfig::default();
+            config.desc_length = n;
+            config.directory = format!("/tmp/kdtree_bbox_{}", n);
+
+            let directory = config.directory.clone();
+            let mut tree = Tree::force_create_with_config(config);
+
+            let mut records: Vec<CompoundRecord> = Vec::new();
+            for _ in 0..4000 {
+                let cr = CompoundRecord::random(n);
+                tree.add_record(&cr).unwrap();
+                records.push(cr);
+            }
+            tree.flush();
+
+            let immut = ImmutTree::read_from_directory(directory);
+
+            let mut pruned_any = false;
+
+            for _ in 0..20 {
+
+                let query = Descriptor::random(n);
+                let k = 10;
+
+                let hits = immut.get_nearest_neighbors(&query, k);
+                pruned_any |= hits.record_pages_pruned > 0;
+
+                let mut brute: Vec<f32> = records.iter()
+                    .map(|r| {
+                        r.descriptor.data.iter().zip(query.data.iter())
+                            .map(|(a, b)| (a - b) * (a - b))
+                            .sum::<f32>()
+                            .sqrt()
+                    })
+                    .collect();
+
+                brute.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+                for i in 0..k {
+                    assert!((hits.distances[i] - brute[i]).abs() < 1e-5,
+                            "dim {} rank {}: tree {} vs brute force {}",
+                            n, i, hits.distances[i], brute[i]);
+                }
+            }
+
+            assert!(pruned_any, "dim {}: no page was pruned, so the test proves nothing", n);
+        }
+    }
+
+    #[test]
+    fn page_bounds_contain_every_record() {
+
+        let n = 8;
+        let mut page = RecordPage::new(4096, n);
+
+        assert_eq!(page.squared_distance_to_bounds(&Descriptor::random(n)), f32::INFINITY,
+                   "an empty page must bound nothing");
+
+        let mut records: Vec<TreeRecord> = Vec::new();
+        for _ in 0..20 {
+            let record = TreeRecord { index: 0, descriptor: Descriptor::random(n), length: n };
+            page.add_record(&record).unwrap();
+            records.push(record);
+        }
+
+        for record in &records {
+            assert_eq!(page.squared_distance_to_bounds(&record.descriptor), 0.0,
+                       "a stored descriptor must lie inside the box");
+        }
+
+        for _ in 0..50 {
+            let query = Descriptor::random(n);
+            let bound = page.squared_distance_to_bounds(&query);
+
+            let nearest = (0..page.len())
+                .map(|offset| page.squared_distance_at(offset, &query))
+                .fold(f32::INFINITY, f32::min);
+
+            assert!(bound <= nearest + 1e-6,
+                    "bound {} exceeded the nearest record at {}", bound, nearest);
         }
     }
 

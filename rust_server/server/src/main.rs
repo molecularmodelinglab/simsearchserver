@@ -43,6 +43,10 @@ struct Args {
     /// off-host connections.
     #[arg(long, default_value = "127.0.0.1")]
     host: IpAddr,
+
+    /// Skip faulting the record file into the page cache before serving
+    #[arg(long)]
+    no_warm: bool,
 }
 
 #[derive(Deserialize)]
@@ -72,6 +76,7 @@ struct Hit {
 struct QueryResponse {
     num_hits: usize,
     pages_visited: usize,
+    pages_pruned: usize,
     nodes_visited: usize,
     hits: Vec<Hit>,
 }
@@ -302,6 +307,7 @@ fn to_response(neighbors: NearestNeighbors) -> QueryResponse {
     return QueryResponse {
         num_hits: hits.len(),
         pages_visited: neighbors.record_pages_visited,
+        pages_pruned: neighbors.record_pages_pruned,
         nodes_visited: neighbors.nodes_visited,
         hits,
     };
@@ -319,6 +325,20 @@ pub async fn main() {
         tree.node_handler.len(),
         tree.config.desc_length,
     );
+
+    if !args.no_warm {
+        let started = std::time::Instant::now();
+
+        match tree.record_handler.warm() {
+            Ok(bytes) => {
+                let gb = bytes as f64 / (1 << 30) as f64;
+                let seconds = started.elapsed().as_secs_f64();
+                println!("Warmed {:.1} GB in {:.1}s ({:.0} MB/s)",
+                         gb, seconds, gb * 1024.0 / seconds);
+            },
+            Err(e) => println!("Could not warm the record file: {:?}", e),
+        }
+    }
 
     let make_svc = make_service_fn(move |_conn| {
         let tree = Arc::clone(&tree);

@@ -1,4 +1,6 @@
-[workspace] 
+[workspace]
+
+resolver = "2"
 
 members = [
 	"kd_tree",

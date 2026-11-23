@@ -8,6 +8,7 @@ kd_tree/test_data
 *.old
 *.log
 *.lock
+!rust_server/Cargo.lock
 *cache*
 *.venv*
 __pycache__

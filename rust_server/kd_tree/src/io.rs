@@ -395,6 +395,22 @@ impl RecordPager {
         return Ok(RecordPage::from_vec(page, self.page_length, self.desc_length));
     }
 
+    /// Faults the whole record file into the page cache.
+    pub fn warm(&self) -> Result<usize, Error> {
+
+        let mmap = match &self.mmap {
+            Some(m) => m,
+            None => return Ok(0),
+        };
+
+        mmap.advise(Advice::Sequential)?;
+        mmap.advise(Advice::WillNeed)?;
+        mmap.advise(Advice::PopulateRead)?;
+        mmap.advise(Advice::Random)?;
+
+        return Ok(mmap.len());
+    }
+
     /// Borrowed view of a leaf page, served from the memory map.
     pub fn page_ref(&self, address: &usize) -> Result<RecordPageRef<'_>, Error> {
 
