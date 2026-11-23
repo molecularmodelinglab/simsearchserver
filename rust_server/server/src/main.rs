@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 
 use clap::Parser;
 
-const MAX_NEIGHBORS: usize = 1000;
+const MAX_NEIGHBORS: usize = 1024;
 const MAX_BODY_BYTES: usize = 1024 * 1024;
 
 #[derive(Parser, Debug)]
@@ -66,7 +66,6 @@ struct Hit {
     identifier: String,
     smiles: String,
     distance: f32,
-    embedding: Vec<f32>,
 }
 
 #[derive(Serialize)]
@@ -297,7 +296,6 @@ fn to_response(neighbors: NearestNeighbors) -> QueryResponse {
             identifier: record.compound_identifier.to_string(),
             smiles: record.smiles.clone(),
             distance: *distance,
-            embedding: record.descriptor.data.clone(),
         });
     }
 
