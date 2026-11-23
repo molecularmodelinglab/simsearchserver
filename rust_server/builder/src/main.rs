@@ -129,9 +129,7 @@ fn add_record(
         },
     }
 
-    let mut descriptor = Descriptor{ data: descriptor_values, length: desc_length };
-
-    descriptor.add_small_noise();
+    let descriptor = Descriptor{ data: descriptor_values, length: desc_length };
 
     let record = CompoundRecord{
         compound_identifier: CompoundIdentifier::from_string(id_string.clone()),
