@@ -388,6 +388,66 @@ mod tests {
     }
 
     #[test]
+    fn bounds_contain_every_record_on_the_page() {
+
+        let n = 8;
+        let mut page = RecordPage::new(4096, n);
+
+        assert_eq!(page.squared_distance_to_bounds(&Descriptor::random(n)), f32::INFINITY,
+                   "an empty page must bound nothing");
+
+        let mut records: Vec<TreeRecord> = Vec::new();
+        for _ in 0..20 {
+            let record = TreeRecord { index: 0, descriptor: Descriptor::random(n), length: n };
+            page.add_record(&record).unwrap();
+            records.push(record);
+        }
+
+        for record in &records {
+            assert_eq!(page.squared_distance_to_bounds(&record.descriptor), 0.0,
+                       "a stored descriptor must lie inside the box");
+        }
+
+        for _ in 0..50 {
+            let query = Descriptor::random(n);
+            let bound = page.squared_distance_to_bounds(&query);
+
+            let nearest = (0..page.len())
+                .map(|offset| page.squared_distance_at(offset, &query))
+                .fold(f32::INFINITY, f32::min);
+
+            assert!(bound <= nearest + 1e-6,
+                    "bound {} exceeded the nearest record at {}", bound, nearest);
+        }
+    }
+
+    #[test]
+    fn copied_records_extend_the_bounds() {
+
+        let n = 8;
+        let mut source = RecordPage::new(4096, n);
+
+        for _ in 0..10 {
+            source.add_record(&TreeRecord {
+                index: 0, descriptor: Descriptor::random(n), length: n,
+            }).unwrap();
+        }
+
+        let mut target = RecordPage::new(4096, n);
+        for offset in 0..source.len() {
+            target.copy_record_from(&source, offset).unwrap();
+        }
+
+        for offset in 0..target.len() {
+            let descriptor = Descriptor {
+                data: (0..n).map(|axis| target.descriptor_component_at(offset, axis)).collect(),
+                length: n,
+            };
+            assert_eq!(target.squared_distance_to_bounds(&descriptor), 0.0);
+        }
+    }
+
+    #[test]
     fn quick_test_get_capacity() {
 
         let n = 8;

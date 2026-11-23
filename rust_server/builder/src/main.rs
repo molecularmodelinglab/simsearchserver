@@ -374,27 +374,12 @@ fn ingest_csv(
             if stats.success >= limit { return; }
         }
 
-        let mut good_line = match line {
+        let good_line = match line {
             Ok(l) => l,
             Err(e) => { log_error(log_file, stats, &format!("could not read line: {}", e)); continue; },
         };
 
         if good_line.trim().is_empty() { continue; }
-
-        //strip out smiles extension stuff
-        if good_line.contains("|") {
-
-            let mut keep_string: Vec<char> = Vec::new();
-            let mut keep = true;
-            for char in good_line.chars() {
-                if char == '|' { keep = !keep; continue }
-                if keep {
-                    keep_string.push(char.clone());
-                }
-            }
-
-            good_line = keep_string.into_iter().collect();
-        }
 
         let fields: Vec<&str> = good_line.split(",").collect();
 

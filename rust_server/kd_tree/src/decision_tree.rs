@@ -73,7 +73,7 @@ impl RangeQuery {
 
         let query = RangeQuery {
             map: hm,
-            num_axes: 16,
+            num_axes,
             lower_bound,
             upper_bound,
         };
@@ -94,7 +94,7 @@ impl RangeQuery {
 
         let query = RangeQuery {
             map: hm,
-            num_axes: 16,
+            num_axes,
             lower_bound,
             upper_bound,
         };
@@ -123,7 +123,6 @@ impl RangeQuery {
         let mut map: HashMap<usize, RangeNode> = HashMap::new();
         let bounds = s.split("|").collect::<Vec<&str>>();
         for bound in bounds {
-            dbg!(&bound);
 
             if bound.len() == 0 {
                 break;
@@ -178,8 +177,6 @@ impl RangeQuery {
 
         let space_area = (self.upper_bound - self.lower_bound).powi(self.num_axes as i32);
 
-        dbg!(&area);
-        dbg!(&space_area);
 
         return area / space_area;
     }
@@ -195,7 +192,6 @@ impl QuerySet {
 
     pub fn to_file(&self, filename: &str) {
 
-        dbg!(&filename);
         let mut file = std::fs::File::create(filename).unwrap();
         let s = serde_json::to_string(&self).unwrap();
         file.write_all(s.as_bytes()).unwrap();
@@ -208,7 +204,6 @@ impl QuerySet {
     pub fn from_string(s: &str) -> Self {
         
         let chunks = s.split("\n").collect::<Vec<&str>>();
-        dbg!(&chunks);
 
 
         let mut v: Vec<(RangeQuery, f32)> = Vec::new();
@@ -264,7 +259,6 @@ pub fn check_record(query: &RangeQuery, record: &TreeRecord) -> bool {
 
 pub fn run_range_query(tree: &mut Tree , query: &RangeQuery) -> Vec<CompoundRecord> {
 
-        dbg!(&query);
 
         let mut hits: Vec<CompoundRecord>= Vec::new();
 
