@@ -1,3 +1,5 @@
+"""Web UI for similarity search."""
+
 from flask import Flask, render_template, request, abort, jsonify
 from python_web_server.smiles import query_smiles
 

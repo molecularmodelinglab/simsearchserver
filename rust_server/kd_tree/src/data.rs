@@ -30,7 +30,7 @@ pub struct CompoundRecord {
 impl CompoundRecord {
 
 
-    pub fn new(dataset_identifier: u8, smiles: String, compound_identifier: CompoundIdentifier, descriptor: Descriptor, length: usize) -> Self {
+    pub fn new(_dataset_identifier: u8, smiles: String, compound_identifier: CompoundIdentifier, descriptor: Descriptor, length: usize) -> Self {
 
         return Self {
             smiles,

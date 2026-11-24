@@ -1,1 +1,1 @@
-FLASK_APP=main.py flask --debug run
+FLASK_APP=python_web_server.main flask --debug run --port 8000

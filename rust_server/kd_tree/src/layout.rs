@@ -5,7 +5,6 @@ use std::mem::size_of;
 use crate::error::Error;
 use std::convert::TryFrom;
 
-use crate::data::{IDENTIFIER_SIZE};
 
 
 pub const PTR_SIZE: usize = size_of::<usize>(); 

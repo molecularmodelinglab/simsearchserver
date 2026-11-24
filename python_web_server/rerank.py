@@ -1,13 +1,7 @@
-"""Structural re-ranking of the candidates the kd-tree returned.
+"""Structural re-ranking of the candidates returned by the kd-tree.
 
-The embedding is good at retrieval and poor at ranking: measured on 161M
-Enamine REAL compounds, the depth-1 GED relative of a query is in the top 5 by
-embedding distance 21% of the time, but is somewhere in the retrieved 1024 72%
-of the time. Re-ranking those candidates by structural similarity recovers
-almost all of that, 71%.
-
-Atom pairs at 512 bits with Tanimoto came out of a sweep of 13 fingerprints and
-5 similarity metrics.
+The embedding retrieves well and ranks poorly, so the index is asked for many
+candidates and this module decides the order they are shown in.
 """
 
 import os
@@ -64,15 +58,15 @@ def parse_smiles(smiles_list):
 
 
 def fingerprint(mol):
+    """Atom-pair fingerprint used for ranking."""
     return _FPGEN.GetFingerprint(mol)
 
 
 def rerank(query_mol, hits, num_neighbors):
     """The `num_neighbors` hits most similar to `query_mol`, best first.
 
-    Each returned hit gains a `similarity` field. Hits whose SMILES RDKit
-    cannot parse are dropped rather than ranked arbitrarily; if none parse,
-    the kd-tree's own ordering is returned untouched so a query still answers.
+    Each returned hit gains a `similarity` field. Unparseable hits are dropped;
+    if none parse, the kd-tree ordering is returned so a query still answers.
     """
 
     if not hits:

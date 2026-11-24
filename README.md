@@ -26,6 +26,11 @@ browser ──► python_web_server ──► salsa_server    (SMILES  -> embedd
 The web UI embeds its query first, then sends the **vector** to the kd-tree
 server. The kd-tree server never calls out to the embedding service.
 
+Retrieval and ranking are separate: the index returns `MAX_NEIGHBORS`
+candidates, and `python_web_server` re-ranks them by atom-pair Tanimoto
+similarity before showing `NUM_NEIGHBORS`. The embedding retrieves well and
+ranks poorly, so this is worth roughly 3x in retrieval accuracy.
+
 ## Install
 
 Rust (stable; the build no longer needs nightly):
@@ -39,7 +44,7 @@ Python:
 
 ```bash
 python -m venv .venv
-./.venv/bin/python -m pip install -r requirements.txt
+./.venv/bin/python -m pip install -e .
 ```
 
 Model weights download and cache automatically on first use.
@@ -61,7 +66,6 @@ cat > config.yaml <<EOF
 directory: "/path/to/index"
 desc_length: 16
 record_page_length: 16384
-node_page_length: 8192
 EOF
 
 ./rust_server/target/release/builder build-from-files \
@@ -95,34 +99,42 @@ sbatch submit_build_index.sh /path/to/index 16 'data/embeddings/*.parquet'
 |---|---|
 | `config.yaml` | dimension and page sizes |
 | `node` | internal nodes: split axis, split value, child pointers. No points. Loaded wholly into memory when serving. |
-| `record` | leaf pages of `(u64 index, desc_length x f32)` records |
-| `db.db` | fixed-width rows of 8 unused + 200 SMILES + 50 identifier bytes, addressed by the record index |
+| `record` | leaf pages: a per-axis bounding box, then `(u64 index, desc_length x f32)` records |
+| `db.db` | variable-length identifier and SMILES, addressed by the record index |
+| `db.db.idx` | one `u64` offset per record into `db.db` |
 
-`node_page_length` is accepted in the config but never read; only
-`record_page_length` affects the index.
+`record_page_length` is the only page size that matters; 16384 measured best
+at 161M records and the curve is shallow either side of it.
 
 ## Running
 
 Development:
 
+All three run from the repository root.
+
 ```bash
 # embedding service
-cd salsa_server && FLASK_APP=main.py ../.venv/bin/python -m flask run --port 5000
+FLASK_APP=salsa_server.main flask run --port 5000
 
 # kd-tree service
 ./rust_server/target/release/server --dirname /path/to/index --port 3000
 
 # web UI
-FLASK_APP=python_web_server/main.py ./.venv/bin/python -m flask run --port 8000
+FLASK_APP=python_web_server.main flask run --port 8000
 ```
 
 Production:
 
 ```bash
-cd salsa_server && gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5000 wsgi:app
+gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5000 salsa_server.wsgi:app
 gunicorn --workers 4 --bind 127.0.0.1:8000 python_web_server.wsgi:app
 ./rust_server/target/release/server --dirname /path/to/index --port 3000
 ```
+
+The kd-tree server faults the record file into the page cache before it
+accepts traffic, which takes about a minute per 10 GB. Skip it with
+`--no-warm` only for an index larger than memory: cold, queries are orders of
+magnitude slower.
 
 Each `salsa_server` worker loads its own copy of the model, so prefer threads
 over workers there.
@@ -134,7 +146,10 @@ over workers there.
 | `SALSA_MODEL` | `salsa16` | `salsa_server` — a registry name (`salsa8`/`salsa16`/`salsa24`/`salsa32`) or a path |
 | `SALSA_URL` | `http://127.0.0.1:5000` | `python_web_server` |
 | `KDTREE_URL` | `http://127.0.0.1:3000` | `python_web_server` |
-| `NUM_NEIGHBORS` | `8` | `python_web_server` — a power of two, so a full stereoisomer tie group comes back together |
+| `MAX_NEIGHBORS` | `1024` | `python_web_server` — candidates retrieved from the index, before re-ranking |
+| `NUM_NEIGHBORS` | `8` | `python_web_server` — results returned after re-ranking. A power of two, so a full stereoisomer tie group comes back together |
+| `RERANK_FP_BITS` | `512` | `python_web_server` — atom-pair fingerprint width |
+| `RERANK_PARSE_THREADS` | all cores | `python_web_server` — lower it when serving concurrent queries |
 | `REQUEST_TIMEOUT` | `30` | `python_web_server` |
 | `HF_HOME` | — | model download cache |
 
@@ -170,7 +185,12 @@ python3 scripts/generate_test_fixtures.py   # regenerate gitignored test data
 cargo test --release
 ```
 
-The accuracy tests check `get_nearest_neighbors` against an exhaustive scan.
+```bash
+python3 tests/test_rerank.py                # or: pytest
+```
+
+See `tests/README.md` for the layout. The accuracy tests check
+`get_nearest_neighbors` against an exhaustive scan.
 
 ```bash
 # recall and latency for a built index

@@ -1,7 +1,4 @@
-//! A page is a byte array that is either a collection of internal nodes or a single leaf node
-//! that is a collection of compound records.
-//!
-//!
+//! A page is a byte array holding either internal nodes or compound records.
 
 use crate::tree::{TreeRecord};
 use crate::data::{Descriptor};
@@ -13,9 +10,8 @@ pub enum PageType {
     Leaf = 2,
 }
 
-// Byte-level accessors, shared by the owned `RecordPage` and the borrowed
-// `RecordPageRef`. Everything here works directly on page bytes so the query
-// path can scan a page without allocating.
+// Byte-level accessors shared by `RecordPage` and `RecordPageRef`, working on
+// page bytes directly so the query path never allocates.
 
 /// Number of records written to this page
 #[inline]
@@ -85,13 +81,13 @@ fn extend_bounds(data: &mut [u8], descriptor: &[f32]) {
 #[inline]
 pub fn squared_distance(record: &[u8], query: &Descriptor) -> f32 {
 
-    // Sliced once, then walked in fixed 4-byte chunks zipped against the query.
-    // Indexing per component instead (`record[at..at + 4]`, `query.data[i]`)
-    // emits a bounds check per component per record
+    // Sliced once rather than indexed per component, which would emit a bounds
+    // check per component per record.
     let start = layout::DESCRIPTOR_START;
     let bytes = &record[start..start + query.length * 4];
 
-    // Four independent accumulators, four components at a time.
+    // Float addition is not associative, so a single running sum would serialize
+    // the loop; four lanes let it vectorize.
     let mut acc = [0.0f32; 4];
 
     let mut values = bytes.chunks_exact(16);
@@ -245,7 +241,6 @@ impl RecordPage {
 
     pub fn add_record(&mut self, record: &TreeRecord) -> Result<(), String> {
 
-        //dbg!("ADD CHECK");
         match self.is_full() {
             true => {return Err("Record page is full".to_string())},
             false => {},
@@ -334,7 +329,6 @@ impl RecordPage {
     }
 
     pub fn is_full(&self) -> bool {
-        //println!("tail: {}, capacity: {}", self.tail.unwrap(), self.get_capacity());
 
         return self.tail.unwrap() as usize >= self.get_capacity();
 
@@ -458,7 +452,6 @@ mod tests {
         for i in 0..100 {
             let cr = TreeRecord::default(n);
             let result = lp.add_record(&cr);
-            //dbg!(lp.len(), &result);
 
             match result {
                 Ok(_) => {},

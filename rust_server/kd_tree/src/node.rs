@@ -3,9 +3,7 @@
 //! Structs can be sent to and from fixed-length byte arrays to be swapped back and forth from disk
 //!
 
-use rand::prelude::*;
 
-use crate::error::Error;
 use crate::data::{Parser};
 use crate::page::PageType;
 use crate::layout;

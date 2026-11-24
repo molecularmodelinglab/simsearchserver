@@ -9,7 +9,7 @@
 //! gives random access by index; the lengths keep each entry self-describing.
 
 use std::fs::{File, OpenOptions};
-use std::io::{BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::os::unix::fs::FileExt;
 use std::path::Path;
 
@@ -103,6 +103,7 @@ impl DatabaseRecord {
         });
     }
 
+    #[cfg(test)]
     fn random() -> Self {
 
         use rand::{distributions::Alphanumeric, Rng};
@@ -113,14 +114,13 @@ impl DatabaseRecord {
             .map(char::from)
             .collect();
 
-        let identifier = CompoundIdentifier::random();
-
-        DatabaseRecord {
-            smiles: smiles,
-            identifier: identifier,
-        }
+        return DatabaseRecord {
+            smiles,
+            identifier: CompoundIdentifier::random(),
+        };
     }
 }
+
 
 fn read_header(fd: &File, expected_magic: &[u8; 8], filename: &str) -> u64 {
 
@@ -216,14 +216,15 @@ impl ImmutDatabase {
         let end = self.offset_at(*id + 1);
 
         if end > self.entries.len() || start > end {
-            dbg!(&self.filename, id, start, end);
+            eprintln!("{}: entry {} has offsets {}..{}, outside the file",
+                      self.filename, id, start, end);
             return None;
         }
 
         match DatabaseRecord::decode(&self.entries[start..end]) {
             Ok(record) => Some(record),
             Err(e) => {
-                dbg!(&self.filename, id, e);
+                eprintln!("{}: could not decode entry {}: {}", self.filename, id, e);
                 None
             },
         }
@@ -233,7 +234,6 @@ impl ImmutDatabase {
 /// Append-only database used while building a tree.
 #[derive(Debug)]
 pub struct Database {
-    filename: String,
     entries: BufWriter<File>,
     offsets: BufWriter<File>,
     /// Byte offset in `db.db` where the next entry starts.
@@ -270,7 +270,6 @@ impl Database {
         offsets.write_all(&(HEADER_SIZE as u64).to_le_bytes()).unwrap();
 
         return Database {
-            filename: filename.to_string(),
             entries,
             offsets,
             cursor: HEADER_SIZE as u64,
@@ -319,7 +318,6 @@ impl Database {
         offsets_fd.seek(SeekFrom::Start(at + 8)).unwrap();
 
         return Database {
-            filename: filename.to_string(),
             entries: BufWriter::with_capacity(1 << 20, entries_fd),
             offsets: BufWriter::with_capacity(1 << 20, offsets_fd),
             cursor,

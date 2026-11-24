@@ -1,9 +1,6 @@
-//! Handles read and write for whole pages on disk
-//!
-//!
+//! Reads and writes whole pages on disk.
 
 use crate::error::Error;
-use crate::data::{CompoundIdentifier};
 use crate::node::{InternalNode, PagePointer};
 use crate::page::{RecordPage, RecordPageRef};
 use byteorder::{ByteOrder, BigEndian};
@@ -106,7 +103,6 @@ impl ImmutNodePager {
         fd.seek(SeekFrom::Start(layout::HEADER_CURSOR_START as u64))?;
         fd.read_exact(&mut next_free_index_arr)?;
 
-        //let mut pager = Self::new();
         let mut store: Vec<InternalNode> = Vec::new();
 
         let attempted_usize = layout::Value::try_from(next_free_index_arr);
@@ -154,7 +150,6 @@ impl GetNode for FastNodePager {
 
     fn get_node(&self, index: &usize) -> Result<&InternalNode, String> {
 
-        //let node = self.map.get(&pointer.to_tuple()).unwrap();
         let ret = match self.store.get(index.clone()) {
             Some(node) => Ok(node),
             None => Err(format!("Node not found at address: {:?}", index)),
@@ -203,8 +198,6 @@ impl FastNodePager {
 
             fd.seek(SeekFrom::Start(start as u64))?;
             fd.write(&slice).unwrap();
-            //println!("W {:?} {:?}", i, start);
-            //println!("\t{:?}", node);
         }
 
         let next_free_index = self.store.len() - 1;
@@ -243,7 +236,6 @@ impl FastNodePager {
         for i in 0..(value + 1) {
             let mut node_arr: [u8; layout::NODE_SIZE] = [0x00; layout::NODE_SIZE];
             let start = Self::calc_offset(i);
-            //println!("R {:?} {:?}", i, start);
             fd.seek(SeekFrom::Start(start as u64))?;
             fd.read_exact(&mut node_arr)?;
             let node = InternalNode::from_slice(&node_arr).unwrap();
@@ -263,7 +255,6 @@ impl FastNodePager {
 
     pub fn add_node(&mut self, node: &InternalNode) -> Result<PagePointer, Error> {
 
-        //self.map.insert(self.next_pointer.to_tuple(), node.clone());
         self.store.push(node.clone());
 
         let added_index = self.store.len() - 1;
@@ -273,9 +264,7 @@ impl FastNodePager {
 
     pub fn update_node(&mut self, index: &usize, new_node: &InternalNode) -> Result<(), Error> {
 
-        //self.map.insert(pointer.to_tuple(), new_node.clone());
         self.store[index.clone()] = new_node.clone();
-        //println!("UPDATED NODE ADDRESS: {:?}", pointer.to_tuple());
 
         return Ok(())
     }
@@ -318,9 +307,6 @@ impl RecordPager {
                     .read(true)
                     .open(path.clone())?;
 
-                    //fn coerce_pointer(value: &[u8]) -> [u8; layout::PTR_SIZE] {
-                    //    value.try_into().expect("slice with incorrect length")
-                    //}
                     let mut next_free_index_from_disk: [u8; layout::HEADER_CURSOR_SIZE] = [0x00; layout::HEADER_CURSOR_SIZE];
                     fd.seek(SeekFrom::Start(layout::HEADER_CURSOR_START as u64))?;
                     fd.read_exact(&mut next_free_index_from_disk)?;
@@ -351,26 +337,21 @@ impl RecordPager {
 
     pub fn calc_offset(&self, address: &usize) -> u64 {
 
-        //let offset = (address.0 as usize * layout::RECORD_PAGE_SIZE) as u64;
         let offset = (address * self.page_length) as u64;
         return layout::FILE_DATA_START as u64 + offset;
 
     }
 
-    //pub fn get_record_page(&mut self, address: &usize) -> Result<RecordPage, Error> {
     pub fn get_record_page(&self, address: &usize) -> Result<RecordPage, Error> {
 
         let retval = match self.cache.get(address) {
             Some(x) => {
-                //dbg!("CACHE HIT");
                 Ok(x.clone())
             }
             None => {
-                //dbg!("CACHE MISS");
 
                 
                 let page = self._read_record_page(address)?;
-                //self.cache.insert(address.clone(), page.clone());
                 Ok(page)
             }
         };
@@ -474,7 +455,8 @@ impl RecordPager {
 
         for (key, value) in self.cache.clone().iter() {
 
-            self._write_page_at_offset(value, &key);
+            self._write_page_at_offset(value, &key)
+                .expect("could not write a cached page during flush");
 
         }
 
@@ -534,10 +516,8 @@ impl RecordPager {
             None => {},
             Some(limit) => {
                 let current_cache_size_gb = self.get_cache_size_gb();
-                //println!("{:?}", current_cache_size_gb);
 
                 if current_cache_size_gb > limit as f32 {
-                    //println!("CACHE SIZE {:?} EXCEEDED: {:?} GB", current_cache_size_gb, limit);
                     self._evict();
                 }
             }
@@ -558,7 +538,6 @@ impl RecordPager {
 
         self.flush_keys(keys_to_flush);
 
-        //println!("CACHE SIZE AFTER EVICT: {:?}", self.get_cache_size_gb());
 
     }
 
@@ -575,8 +554,6 @@ impl RecordPager {
         let data = page.get_data();
 
         file.write(data)?;
-        //file.sync_all()?;
-        //let res = self.next_free_index.clone();
 
         Ok(())
     }

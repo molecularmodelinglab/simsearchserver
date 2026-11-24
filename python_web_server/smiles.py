@@ -1,3 +1,5 @@
+"""Search by SMILES: embed, retrieve, re-rank, render."""
+
 import os
 
 from rdkit.Chem import MolFromSmiles, Draw
@@ -12,6 +14,7 @@ REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "30"))
 
 
 def embed_smiles(smiles, method="salsa16"):
+    """Embedding of `smiles` from the SALSA service."""
 
     response = requests.post(
         f"{SALSA_URL}/smiles/{method}",
@@ -24,6 +27,7 @@ def embed_smiles(smiles, method="salsa16"):
 
 
 def query_smiles(method, smiles, drawn=None, options=None):
+    """Rendered neighbors of `smiles`, or None if it is empty or unparseable."""
 
     smiles = (smiles or "").strip()
 

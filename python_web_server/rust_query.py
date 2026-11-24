@@ -1,3 +1,5 @@
+"""Client for the kd-tree nearest-neighbor service."""
+
 import os
 
 import requests
@@ -12,6 +14,7 @@ REQUEST_TIMEOUT = float(os.environ.get("REQUEST_TIMEOUT", "30"))
 
 
 def query_descriptor(embedding, max_neighbors=None):
+    """Nearest neighbors of `embedding`, in index order, before re-ranking."""
 
     k = max_neighbors or MAX_NEIGHBORS
 
@@ -26,6 +29,7 @@ def query_descriptor(embedding, max_neighbors=None):
 
 
 def index_info():
+    """Record count and descriptor length of the index being served."""
 
     response = requests.get(f"{KDTREE_URL}/health", timeout=REQUEST_TIMEOUT)
     response.raise_for_status()

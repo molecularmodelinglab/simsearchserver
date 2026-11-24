@@ -1,11 +1,11 @@
-import sys
-sys.path.append(".")
-from flask import Flask, render_template, request, abort, Response, jsonify
-import threading
+"""HTTP service that turns SMILES into SALSA embeddings."""
 
+import threading
 from json import dumps
 
-from modeling.model import SalsaModel
+from flask import Flask, Response, abort, jsonify, request
+
+from salsa_server.modeling.model import SalsaModel
 
 app = Flask(__name__)
 
@@ -13,11 +13,6 @@ salsa_model = SalsaModel()
 model_lock = threading.Lock()
 
 print(f"Loaded salsa model {salsa_model.model_name}, embedding dimension {salsa_model.dim}")
-
-
-@app.route('/')
-def home():
-    print("main")
 
 
 @app.route('/health', methods=['GET'])

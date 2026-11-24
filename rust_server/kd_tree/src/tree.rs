@@ -1,5 +1,5 @@
 //! Implementation of kd-tree creation and querying
-use crate::data::{CompoundIdentifier, Descriptor, CompoundRecord, CompoundIndex};
+use crate::data::{Descriptor, CompoundRecord, CompoundIndex};
 use crate::database::{Database, ImmutDatabase};
 use crate::node::{InternalNode, PagePointer};
 use crate::page::RecordPage;
@@ -9,8 +9,8 @@ use crate::data::{Parser};
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use std::time::Instant;
-use rand::{distributions::Alphanumeric, Rng};
-use byteorder::{ByteOrder, BigEndian, LittleEndian};
+use rand::Rng;
+use byteorder::{ByteOrder, LittleEndian};
 
 
 use std::fs::File;
@@ -124,7 +124,6 @@ impl ImmutTree {
 
                     let node = self.node_handler.get_node(&index).unwrap().clone();
 
-                    //dbg!(&node);
                     println!("{}", curr_pointer);
                         println!("\tLEFT:  {}", node.left_child_pointer);
                         println!("\tRIGHT: {}", node.right_child_pointer);
@@ -166,12 +165,6 @@ impl ImmutTree {
         }
     }
 
-    fn dist_to_axis(&self, split_axis: usize, split_value: f32, descriptor: &Descriptor) -> f32 {
-
-        return (descriptor.data[split_axis] - split_value).abs()
-
-    }
-
     pub fn print_record_lengths(&self) {
 
         for i in 0..self.record_handler.len() {
@@ -190,7 +183,6 @@ impl ImmutTree {
     }
     */
 
-    //pub fn get_nearest_neighbors(&mut self, query_descriptor: &Descriptor, n: usize) -> NearestNeighbors {
     pub fn get_nearest_neighbors(&self, query_descriptor: &Descriptor, n: usize) -> NearestNeighbors {
 
         let top_hits = self.get_top_hits(query_descriptor, n);
@@ -208,18 +200,8 @@ impl ImmutTree {
 
         let mut hits = TopHits::new(n);
 
-        // Best-first traversal. Deferred subtrees wait in a min-heap keyed by a
-        // lower bound on the distance to anything inside them, so the most
-        // promising branch is always taken next. That tightens the k-th
-        // distance sooner, which prunes more of the tree.
-        //
-        // The previous version kept deferred branches in a FIFO, visiting them
-        // in order of depth from the root regardless of how promising they
-        // were. Same bound, same results: only the order changes.
-        //
-        // Bounds are non-negative, and IEEE-754 bit patterns of non-negative
-        // floats compare in the same order as the floats, so the raw bits work
-        // as a heap key without needing a total order on f32.
+        // Bit patterns of non-negative floats order like the floats, so raw
+        // bits serve as a heap key without a total order on f32.
         let mut frontier: BinaryHeap<Reverse<(u32, u8, usize)>> = BinaryHeap::new();
 
         let (kind, index) = encode_pointer(&self.root);
@@ -227,15 +209,12 @@ impl ImmutTree {
 
         while let Some(Reverse((bound_bits, kind, index))) = frontier.pop() {
 
-            // The threshold only ever shrinks, so a branch that cannot beat it
-            // now will never beat it later.
             if f32::from_bits(bound_bits) >= hits.get_highest_squared_dist() {
                 continue;
             }
 
             let mut current = decode_pointer(kind, index);
 
-            // Descend to a leaf, deferring the far side of every split.
             loop {
 
                 match current {
@@ -282,8 +261,6 @@ impl ImmutTree {
                             false => (node.right_child_pointer, node.left_child_pointer),
                         };
 
-                        // Nothing on the far side can be closer than the
-                        // distance to the split plane.
                         let far_bound = delta * delta;
 
                         if far_bound < hits.get_highest_squared_dist() {
@@ -628,9 +605,6 @@ impl TopHits {
     ///
     ///Undefined if called without checking if we can via `try_add`
     fn _add(&mut self, distance: f32, record: &TreeRecord, page_pointer: &PagePointer) -> Result<(), String> {
-        //println!("ADDING");
-
-        //find insertion point
         let mut insert_index: Option<usize> = None;
         for (i, item) in self.squared_distances.iter().enumerate() {
             if item > &distance {
@@ -648,7 +622,6 @@ impl TopHits {
         self.records.insert(insert_index, Some(record.clone()));
         self.pointers.insert(insert_index, Some(page_pointer.clone()));
 
-        //trim to correct size
         self.squared_distances.truncate(self.max_length);
         self.records.truncate(self.max_length);
         self.pointers.truncate(self.max_length);
@@ -701,11 +674,6 @@ impl TopHits {
 
     }
 
-}
-
-fn get_smiles(index: &CompoundIdentifier) -> String {
-
-    return "not implemented".to_string();
 }
 
 #[derive(Debug)]
@@ -882,7 +850,6 @@ impl Tree {
 
                     let node = self.node_handler.get_node(&index).unwrap().clone();
 
-                    //dbg!(&node);
                     println!("{}", curr_pointer);
                         println!("\tLEFT:  {}", node.left_child_pointer);
                         println!("\tRIGHT: {}", node.right_child_pointer);
@@ -922,12 +889,6 @@ impl Tree {
                 }
             }
         }
-    }
-
-    fn dist_to_axis(&self, split_axis: usize, split_value: f32, descriptor: &Descriptor) -> f32 {
-
-        return (descriptor.data[split_axis] - split_value).abs()
-
     }
 
     pub fn print_record_lengths(&self) {
@@ -990,14 +951,12 @@ impl Tree {
 
                     let mut page: RecordPage = self.record_handler.get_record_page(&index).unwrap();
 
-                    //dbg!("ADD CHECK", &curr_pointer);
                     let res = page.add_record(&tree_record);
                     match res {
                         Ok(_) => {},
-                        Err(e) => {self.print_record_page(page); panic!();},
+                        Err(_e) => {self.print_record_page(page); panic!();},
                     }
 
-                    //dbg!("POST CHECK", &curr_pointer);
                     match page.is_full() {
                         true => { //println!("NEED TO SPLIT");
                             let _ = &self.split(page, &curr_pointer, &last_pointer, last_was_left);},
@@ -1209,8 +1168,6 @@ impl Tree {
             None => 0,
         };
 
-        //let records: Vec::<(CompoundIdentifier, f32)> = page.get_records().iter().map(|x| (x.compound_identifier.clone(), x.descriptor.data[split_axis])).collect();
-        //dbg!(records);
 
         //determine split value
         let n_records = page.len();
@@ -1253,11 +1210,9 @@ impl Tree {
             PagePointer::Node(_) => panic!(),
             PagePointer::Leaf(x) => x,
         };
-        //self.record_handler.write_page_at_offset(&left_record_page, this_index).unwrap();
         self.record_handler.update_page(&left_record_page, this_index).unwrap();
         
         //right page was filled alongside the left one above
-        //let right_child_pointer = self.record_handler.write_page(&right_record_page).unwrap();
         let right_child_pointer = self.record_handler.add_page(&right_record_page).unwrap();
 
         //make new node
