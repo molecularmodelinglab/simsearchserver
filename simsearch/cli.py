@@ -6,6 +6,7 @@ import os
 import sys
 
 from simsearch import config as cfg
+from simsearch import finalize as finalize_stage
 from simsearch import stages
 
 STAGES = ("embed", "project", "fingerprint")
@@ -58,9 +59,12 @@ def main(argv=None):
         description="Prepare a molecule library for indexing.")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    for name in ("prepare",) + STAGES:
-        stage = sub.add_parser(name, help=f"run the {name} stage"
-                               if name != "prepare" else "run every stage in order")
+    for name in ("prepare",) + STAGES + ("finalize",):
+        helps = {
+            "prepare": "run every stage in order",
+            "finalize": "record what the built index was made from",
+        }
+        stage = sub.add_parser(name, help=helps.get(name, f"run the {name} stage"))
         stage.add_argument("config")
         stage.add_argument("--shard", type=int, default=0,
                            help="this task's index, for a slurm array")
@@ -75,6 +79,14 @@ def main(argv=None):
     except (cfg.ConfigError, FileNotFoundError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+
+    if args.command == "finalize":
+        try:
+            finalize_stage.finalize(config)
+        except (FileNotFoundError, KeyError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        return 0
 
     requested = STAGES if args.command == "prepare" else (args.command,)
 
@@ -91,6 +103,8 @@ def main(argv=None):
         written = _write_index_config(config)
         if written:
             print(f"\nwrote {written}; build the index with:\n\n{_builder_command(config)}")
+            print("\nthen record what it was built from:\n\n"
+                  f"    simsearch finalize {args.config}")
 
     return 0
 

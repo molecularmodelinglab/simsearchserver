@@ -1132,6 +1132,7 @@ dependencies = [
  "kd_tree",
  "serde",
  "serde_json",
+ "serde_yaml",
  "tokio",
 ]
 

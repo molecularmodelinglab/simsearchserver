@@ -43,6 +43,76 @@ struct Args {
 struct State {
     tree: ImmutTree,
     fingerprints: Option<FingerprintStore>,
+    /// Served verbatim at `/transform`; the server does not interpret it.
+    transform: Option<String>,
+}
+
+/// The subset of `config.resolved.yaml` the server can check for itself.
+#[derive(Deserialize)]
+struct Resolved {
+    format_version: Option<u32>,
+    descriptor_length: Option<usize>,
+    record_count: Option<u64>,
+    fingerprint: Option<ResolvedFingerprint>,
+}
+
+#[derive(Deserialize)]
+struct ResolvedFingerprint {
+    bytes_per_record: Option<usize>,
+}
+
+/// Refuses rather than answers, because a mismatch is wrong on every query.
+fn check_resolved(directory: &str, tree: &ImmutTree, store: Option<&FingerprintStore>) {
+    let path = format!("{}/config.resolved.yaml", directory);
+
+    let text = match std::fs::read_to_string(&path) {
+        Err(_) => {
+            println!("No config.resolved.yaml; nothing to validate against");
+            return;
+        },
+        Ok(text) => text,
+    };
+
+    let resolved: Resolved = serde_yaml::from_str(&text)
+        .unwrap_or_else(|e| panic!("could not parse {}: {}", path, e));
+
+    let mut wrong: Vec<String> = Vec::new();
+
+    if let Some(version) = resolved.format_version {
+        if version != kd_tree::layout::FORMAT_VERSION {
+            wrong.push(format!("format_version {} against {}",
+                               version, kd_tree::layout::FORMAT_VERSION));
+        }
+    }
+
+    if let Some(length) = resolved.descriptor_length {
+        if length != tree.config.desc_length {
+            wrong.push(format!("descriptor_length {} against {}",
+                               length, tree.config.desc_length));
+        }
+    }
+
+    if let Some(count) = resolved.record_count {
+        if count != tree.database.num_entries() {
+            wrong.push(format!("record_count {} against {}",
+                               count, tree.database.num_entries()));
+        }
+    }
+
+    let declared = resolved.fingerprint.as_ref().and_then(|f| f.bytes_per_record);
+    match (declared, store.map(|s| s.bytes_per_record())) {
+        (Some(a), Some(b)) if a != b =>
+            wrong.push(format!("fingerprint bytes_per_record {} against {}", a, b)),
+        (Some(a), None) =>
+            wrong.push(format!("fingerprint bytes_per_record {} but no fingerprint file", a)),
+        _ => {},
+    }
+
+    if !wrong.is_empty() {
+        panic!("{} does not describe this index: {}", path, wrong.join("; "));
+    }
+
+    println!("Validated against {}", path);
 }
 
 #[derive(Deserialize)]
@@ -107,6 +177,7 @@ struct HealthResponse {
     num_records: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     fingerprint_bytes: Option<usize>,
+    has_transform: bool,
     num_internal_nodes: usize,
 }
 
@@ -169,14 +240,15 @@ async fn route(req: Request<Body>, state: Arc<State>) -> Result<Response<Body>, 
 
     match (req.method(), head) {
         (&Method::GET, "health") => handle_health(&state),
+        (&Method::GET, "transform") => handle_transform(&state),
         (&Method::GET, "nn") => handle_nn_get(&segments, &state),
         (&Method::POST, "nn") => handle_nn_post(req, &segments, &state).await,
-        (_, "health") | (_, "nn") => Err(ApiError {
+        (_, "health") | (_, "nn") | (_, "transform") => Err(ApiError {
             status: StatusCode::METHOD_NOT_ALLOWED,
             message: format!("method {} not allowed for /{}", req.method(), head),
         }),
         _ => Err(ApiError::not_found(format!(
-            "unknown endpoint {:?}; available: /health, /nn/{{k}}/{{vector}}, POST /nn/{{k}}",
+            "unknown endpoint {:?}; available: /health, /transform, /nn/{{k}}/{{vector}}, POST /nn/{{k}}",
             path
         ))),
     }
@@ -189,12 +261,21 @@ fn handle_health(state: &State) -> Result<Response<Body>, ApiError> {
         num_records: state.tree.database.num_entries(),
         num_internal_nodes: state.tree.node_handler.len(),
         fingerprint_bytes: state.fingerprints.as_ref().map(|s| s.bytes_per_record()),
+        has_transform: state.transform.is_some(),
     };
 
     let body = serde_json::to_string(&body)
         .map_err(|e| ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, message: e.to_string() })?;
 
     return Ok(json_response(StatusCode::OK, body));
+}
+
+fn handle_transform(state: &State) -> Result<Response<Body>, ApiError> {
+    return match state.transform.as_ref() {
+        Some(body) => Ok(json_response(StatusCode::OK, body.clone())),
+        None => Err(ApiError::not_found(
+            "this index ships no transform; it was built without a projection")),
+    };
 }
 
 fn handle_nn_get(segments: &[&str], state: &State) -> Result<Response<Body>, ApiError> {
@@ -437,7 +518,14 @@ pub async fn main() {
         }
     }
 
-    let state = Arc::new(State { tree, fingerprints: store });
+    check_resolved(&args.dirname, &tree, store.as_ref());
+
+    let transform = std::fs::read_to_string(format!("{}/transform.json", args.dirname)).ok();
+    if transform.is_some() {
+        println!("Serving the projection at /transform");
+    }
+
+    let state = Arc::new(State { tree, fingerprints: store, transform });
 
     let make_svc = make_service_fn(move |_conn| {
         let state = Arc::clone(&state);
