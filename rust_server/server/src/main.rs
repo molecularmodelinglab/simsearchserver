@@ -502,14 +502,18 @@ pub async fn main() {
 
     if !args.no_warm {
         let started = std::time::Instant::now();
+        let mut faulted = 0usize;
 
         if let Some(store) = store.as_ref() {
-            let _ = store.warm();
+            faulted += store.warm().unwrap_or(0);
         }
+
+        faulted += tree.database.warm();
 
         match tree.record_handler.warm() {
             Ok(bytes) => {
-                let gb = bytes as f64 / (1 << 30) as f64;
+                faulted += bytes;
+                let gb = faulted as f64 / (1 << 30) as f64;
                 let seconds = started.elapsed().as_secs_f64();
                 println!("Warmed {:.1} GB in {:.1}s ({:.0} MB/s)",
                          gb, seconds, gb * 1024.0 / seconds);

@@ -113,6 +113,19 @@ help: it moves the same bytes.
 - **Splitting on the widest axis** replaced cycling by depth: slightly faster,
   identical recall, and it is what makes duplicate-heavy data buildable.
 
+## Serving
+
+- **Concurrency scales**: at k=1024, 139 qps on one client to 2,975 on 32
+  (21.3x on 32 cores), median 6.8 to 9.4 ms, p99 13.8 to 30.5 ms, no errors.
+  Nothing in the query path serializes. The k=128 plateau at ~5,500 qps is
+  likely the GIL-bound Python client, not the server.
+- **Everything the query path touches must be prefaulted, `db.db` included.**
+  Warming only `record` and `fingerprints` left the first query into a cold
+  region of the SMILES database at **2,396 ms** against 8 ms in-tree: one disk
+  read per hit, 1,024 of them. Warmed, the same queries take 6-21 ms.
+- Re-ranking 1,024 candidates against the stored fingerprints costs 0.5-0.8 ms,
+  against ~30 ms when it parsed SMILES per query.
+
 ## Metrics that did not work
 
 MCS and Tanimoto averaged over the top 5 do not separate models at this scale

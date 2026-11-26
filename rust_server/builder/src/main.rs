@@ -190,8 +190,7 @@ fn add_record(
         },
     }
 
-    // Written here rather than per source row, so a skipped record cannot
-    // shift every fingerprint after it.
+    // Per added record, so a skipped row cannot shift the whole column.
     if let (Some(bytes), Some(writer)) = (fingerprint, writer) {
         writer.append(bytes).expect("could not append a fingerprint");
     }

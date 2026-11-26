@@ -102,8 +102,7 @@ def fit_projection(config):
     columns = _embedding_columns(sources[0])
     settings = config["projection"]
 
-    # A prefix of the corpus can be one narrow band of molecules, so every
-    # shard contributes.
+    # A prefix of the corpus can be one narrow band of molecules.
     per_shard = max(1, settings["fit_rows"] // len(sources))
     rng = np.random.default_rng(settings["seed"])
 
@@ -183,8 +182,7 @@ def fingerprint(config, shard=0, of=1, processes=0):
     directory = cfg.stage_directory(config, "fingerprint")
     os.makedirs(directory, exist_ok=True)
 
-    # Row order is the contract, so this reads what the builder reads rather
-    # than the corpus: embedding drops over-length SMILES.
+    # Reads what the builder reads: embedding drops over-length SMILES.
     sources = sorted(glob.glob(os.path.join(index_source_directory(config), "*.parquet")))
     if not sources:
         raise FileNotFoundError("no shards to fingerprint; run embed and project first")
@@ -207,9 +205,15 @@ def fingerprint(config, shard=0, of=1, processes=0):
         del table
 
         chunks = [smiles[i:i + 20_000] for i in range(0, len(smiles), 20_000)]
-        with mp.Pool(processes, initializer=_init_generator,
-                     initargs=(settings,)) as pool:
-            results = pool.map(_fingerprint_chunk, chunks, chunksize=1)
+
+        if processes == 1:
+            # Forking from a threaded parent is a hazard, and buys nothing here.
+            _init_generator(settings)
+            results = [_fingerprint_chunk(chunk) for chunk in chunks]
+        else:
+            with mp.Pool(processes, initializer=_init_generator,
+                         initargs=(settings,)) as pool:
+                results = pool.map(_fingerprint_chunk, chunks, chunksize=1)
 
         packed = np.concatenate([block for block, _ in results])
         failed = sum(count for _, count in results)

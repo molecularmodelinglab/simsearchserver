@@ -183,6 +183,8 @@ impl ImmutDatabase {
         // Lookups are scattered: one per returned hit, at unrelated indices.
         let _ = entries.advise(Advice::Random);
         let _ = offsets.advise(Advice::Random);
+        let _ = entries.advise(Advice::HugePage);
+        let _ = offsets.advise(Advice::HugePage);
 
         return Self {
             filename: filename.to_string(),
@@ -194,6 +196,18 @@ impl ImmutDatabase {
 
     pub fn num_entries(&self) -> u64 {
         return self.num_entries;
+    }
+
+    /// Without this a cold region costs one disk read per hit, seconds at k=1024.
+    pub fn warm(&self) -> usize {
+        for map in [&self.entries, &self.offsets] {
+            let _ = map.advise(Advice::Sequential);
+            let _ = map.advise(Advice::WillNeed);
+            let _ = map.advise(Advice::PopulateRead);
+            let _ = map.advise(Advice::Random);
+        }
+
+        return self.entries.len() + self.offsets.len();
     }
 
     #[inline]
@@ -335,6 +349,7 @@ impl Database {
     pub fn num_entries(&self) -> u64 {
         return self.num_entries;
     }
+
 
     pub fn add_compound_record(&mut self, entry: &CompoundRecord) -> Result<u64, String> {
 

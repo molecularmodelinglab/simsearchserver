@@ -5,8 +5,7 @@ import os
 
 import yaml
 
-# Each entry is (default, type). A key absent from here is rejected, so a typo
-# fails loudly instead of silently taking the default.
+# (default, type). A key absent here is rejected, so a typo fails loudly.
 SCHEMA = {
     "corpus": {
         "input": (None, str),

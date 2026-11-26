@@ -107,8 +107,7 @@ pub struct FingerprintStore {
 
 impl FingerprintStore {
 
-    /// Panics on a mismatch, which would otherwise re-rank against another
-    /// index's molecules.
+    /// Panics on a mismatch: it would re-rank against another index's molecules.
     pub fn open(path: &str, expected_records: u64) -> Result<Self, Error> {
         let file = File::open(Path::new(path))?;
 
@@ -143,6 +142,7 @@ impl FingerprintStore {
         let map = unsafe { MmapOptions::new().map(&file) }?;
         // Lookups are scattered: one per returned hit, at unrelated indices.
         let _ = map.advise(Advice::Random);
+        let _ = map.advise(Advice::HugePage);
 
         return Ok(Self { map, count, bytes_per_record });
     }

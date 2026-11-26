@@ -302,6 +302,8 @@ impl RecordPager {
 
                     let mmap = unsafe { MmapOptions::new().map(&fd) }?;
                     let _ = mmap.advise(Advice::Random);
+                    // Ignored without file-backed huge pages; a fetch is mostly translation.
+                    let _ = mmap.advise(Advice::HugePage);
 
                     return Ok(Self {
                         read_fd: fd,
