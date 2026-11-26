@@ -417,42 +417,49 @@ fn to_response(
     num_neighbors: Option<usize>,
     state: &State,
 ) -> QueryResponse {
-    let mut hits: Vec<Hit> = Vec::new();
     let started = std::time::Instant::now();
 
-    for i in 0..neighbors.distances.len() {
-        let record = match &neighbors.records[i] {
+    // Ranked first, so the database is only asked for the hits served.
+    let mut order: Vec<usize> = (0..neighbors.indexes.len()).collect();
+    let mut similarities: Vec<Option<f32>> = vec![None; neighbors.indexes.len()];
+
+    if let (Some(query), Some(store)) = (query, state.fingerprints.as_ref()) {
+        for i in &order {
+            similarities[*i] = store.get(neighbors.indexes[*i])
+                .map(|stored| fingerprints::tanimoto(query, stored));
+        }
+
+        // Descending similarity, with embedding distance breaking ties.
+        order.sort_by(|a, b| {
+            similarities[*b].unwrap_or(0.0).total_cmp(&similarities[*a].unwrap_or(0.0))
+                .then(neighbors.distances[*a].total_cmp(&neighbors.distances[*b]))
+        });
+    }
+
+    if let Some(n) = num_neighbors {
+        order.truncate(n);
+    }
+
+    let rerank_micros = started.elapsed().as_nanos() as f64 / 1000.0;
+
+    let chosen: Vec<u64> = order.iter().map(|i| neighbors.indexes[*i]).collect();
+    let records = state.tree.records_at(&chosen);
+
+    let mut hits: Vec<Hit> = Vec::new();
+
+    for (slot, i) in order.iter().enumerate() {
+        let record = match &records[slot] {
             Some(r) => r,
             // Index and SMILES database disagree; skip rather than fail the query.
             None => continue,
         };
 
-        let similarity = match (query, state.fingerprints.as_ref()) {
-            (Some(query), Some(store)) => store.get(neighbors.indexes[i])
-                .map(|stored| fingerprints::tanimoto(query, stored)),
-            _ => None,
-        };
-
         hits.push(Hit {
-            identifier: record.compound_identifier.to_string(),
+            identifier: record.identifier.to_string(),
             smiles: record.smiles.clone(),
-            distance: neighbors.distances[i],
-            similarity,
+            distance: neighbors.distances[*i],
+            similarity: similarities[*i],
         });
-    }
-
-    if query.is_some() {
-        // Descending similarity, with embedding distance breaking ties.
-        hits.sort_by(|a, b| {
-            b.similarity.unwrap_or(0.0).total_cmp(&a.similarity.unwrap_or(0.0))
-                .then(a.distance.total_cmp(&b.distance))
-        });
-    }
-
-    let rerank_micros = started.elapsed().as_nanos() as f64 / 1000.0;
-
-    if let Some(n) = num_neighbors {
-        hits.truncate(n);
     }
 
     return QueryResponse {

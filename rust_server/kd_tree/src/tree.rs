@@ -1,6 +1,6 @@
 //! Implementation of kd-tree creation and querying
 use crate::data::{Descriptor, CompoundRecord, CompoundIndex};
-use crate::database::{Database, ImmutDatabase};
+use crate::database::{Database, DatabaseRecord, ImmutDatabase};
 use crate::node::{InternalNode, PagePointer};
 use crate::page::RecordPage;
 use crate::layout;
@@ -115,11 +115,12 @@ impl ImmutTree {
     }
     pub fn get_nearest_neighbors(&self, query_descriptor: &Descriptor, n: usize) -> NearestNeighbors {
 
-        let top_hits = self.get_top_hits(query_descriptor, n);
+        return NearestNeighbors::from_top_hits(self.get_top_hits(query_descriptor, n));
+    }
 
-        let nearest_neighbors = NearestNeighbors::from_top_hits(top_hits, &self.database);
-
-        return nearest_neighbors;
+    /// SMILES and identifiers for the hits actually being served.
+    pub fn records_at(&self, indexes: &[CompoundIndex]) -> Vec<Option<DatabaseRecord>> {
+        return indexes.iter().map(|index| self.database.query(index)).collect();
     }
 
     /// The `n` nearest neighbors of `query_descriptor`.
@@ -183,9 +184,7 @@ impl ImmutTree {
                                 continue;
                             }
 
-                            let record = page.get_record_at(offset).unwrap();
-
-                            hits.try_add(squared, &record);
+                            hits.try_add(squared, page.index_at(offset));
                         }
 
                         hits.scan_nanos += scan_started.elapsed().as_nanos() as u64;
@@ -408,10 +407,10 @@ pub struct Tree {
     pub config: TreeConfig,
 }
 
+/// No SMILES: fetching them for every retrieved candidate costs k reads to serve 8.
 #[derive(Debug, Serialize)]
 pub struct NearestNeighbors {
     pub distances: Vec<f32>,
-    pub records: Vec<Option<CompoundRecord>>,
     /// Record indexes, for looking a hit up in a store keyed by them.
     pub indexes: Vec<CompoundIndex>,
     pub record_pages_visited: usize,
@@ -427,34 +426,19 @@ pub struct NearestNeighbors {
 
 impl NearestNeighbors {
 
-    fn from_top_hits(top_hits: TopHits, database: &ImmutDatabase) -> Self {
+    fn from_top_hits(top_hits: TopHits) -> Self {
 
         let mut distances: Vec<f32> = Vec::new();
-        let mut records: Vec<Option<CompoundRecord>> = Vec::new();
         let mut indexes: Vec<CompoundIndex> = Vec::new();
 
         // Sorted ascending, and only as many as were found, so k > n is not a panic.
         for candidate in top_hits.hits.into_sorted_vec() {
-
-                distances.push(candidate.squared_distance.sqrt());
-                indexes.push(candidate.record.index);
-
-                records.push(match database.query(&candidate.record.index) {
-                    Some(entry) => Some(CompoundRecord {
-                        smiles: entry.smiles.clone(),
-                        compound_identifier: entry.identifier.clone(),
-                        descriptor: candidate.record.descriptor.clone(),
-                        length: candidate.record.length,
-                    }),
-                    // Indexed record missing from the database: drop the hit, not the query.
-                    None => None,
-                });
-
+            distances.push(candidate.squared_distance.sqrt());
+            indexes.push(candidate.index);
         }
 
         return Self {
             distances,
-            records,
             indexes,
             record_pages_visited: top_hits.record_pages_visited,
             record_pages_pruned: top_hits.record_pages_pruned,
@@ -474,7 +458,7 @@ impl NearestNeighbors {
 #[derive(Debug)]
 struct Candidate {
     squared_distance: f32,
-    record: TreeRecord,
+    index: CompoundIndex,
 }
 
 impl PartialEq for Candidate {
@@ -532,7 +516,7 @@ impl TopHits {
         }
     }
 
-    pub fn try_add(&mut self, squared_distance: f32, record: &TreeRecord) {
+    pub fn try_add(&mut self, squared_distance: f32, index: CompoundIndex) {
 
         if self.max_length == 0 {
             return;
@@ -541,10 +525,10 @@ impl TopHits {
         let started = Instant::now();
 
         if self.hits.len() < self.max_length {
-            self.hits.push(Candidate { squared_distance, record: record.clone() });
+            self.hits.push(Candidate { squared_distance, index });
         } else if squared_distance < self.hits.peek().expect("a full heap has a root").squared_distance {
             self.hits.pop();
-            self.hits.push(Candidate { squared_distance, record: record.clone() });
+            self.hits.push(Candidate { squared_distance, index });
         }
 
         self.insert_nanos += started.elapsed().as_nanos() as u64;

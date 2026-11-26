@@ -115,6 +115,23 @@ help: it moves the same bytes.
 
 ## Serving
 
+- **Rank before fetching SMILES.** Fetching a `db.db` entry for all k hits to
+  serve 8 cost 2.6 ms of a 7.1 ms query at k=1024. Ranking on the fingerprint
+  column first and fetching only what is served drops database lookups from
+  1,024 to 8.
+- Removing the descriptor clone from the heap and the record materialization
+  from the scan took in-tree time from 5.05 to 3.93 ms on its own; only the
+  8-byte record index is needed while scanning.
+- Together, **k=1024 went from 7.76 ms to 4.46 ms (43%)** and k=128 from 2.14
+  to 1.74 ms.
+
+| k | served | wall | in-tree | rank |
+|---|---|---|---|---|
+| 128 | 8 | 1.74 ms | 1.50 ms | 36 us |
+| 128 | 128 | 2.07 ms | 1.49 ms | 36 us |
+| 1024 | 8 | **4.46 ms** | 3.93 ms | 263 us |
+| 1024 | 1024 | 7.10 ms | 3.93 ms | 268 us |
+
 - **Concurrency scales**: at k=1024, 139 qps on one client to 2,975 on 32
   (21.3x on 32 cores), median 6.8 to 9.4 ms, p99 13.8 to 30.5 ms, no errors.
   Nothing in the query path serializes. The k=128 plateau at ~5,500 qps is
@@ -123,7 +140,9 @@ help: it moves the same bytes.
   Warming only `record` and `fingerprints` left the first query into a cold
   region of the SMILES database at **2,396 ms** against 8 ms in-tree: one disk
   read per hit, 1,024 of them. Warmed, the same queries take 6-21 ms.
-- Re-ranking 1,024 candidates against the stored fingerprints costs 0.5-0.8 ms,
+- Prefaulting all 35.5 GB takes **12 s** on an uncontended `/work`; a 377 s
+  reading on the same files was NFS contention, not a real cost.
+- Re-ranking 1,024 candidates against the stored fingerprints costs 0.3 ms,
   against ~30 ms when it parsed SMILES per query.
 
 ## Metrics that did not work

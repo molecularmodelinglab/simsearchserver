@@ -73,6 +73,7 @@ fn brute_force_top_k(
 }
 
 fn assert_is_true_knn(
+    tree: &ImmutTree,
     nn: &NearestNeighbors,
     records: &[CompoundRecord],
     query: &Descriptor,
@@ -81,13 +82,13 @@ fn assert_is_true_knn(
 
     let (expected_ids, expected_dists) = brute_force_top_k(records, query, k);
 
-    let mut got_ids: Vec<String> = nn
-        .records
+    let mut got_ids: Vec<String> = tree
+        .records_at(&nn.indexes)
         .iter()
         .map(|r| {
             r.as_ref()
-                .expect("every hit should carry a record")
-                .compound_identifier
+                .expect("every hit should resolve in the database")
+                .identifier
                 .to_string()
         })
         .collect();
@@ -185,7 +186,7 @@ fn returns_the_true_nearest_neighbors() {
             let query = Descriptor::random(&mut rng, desc_length);
             let nn = tree.get_nearest_neighbors(&query, 10);
 
-            assert_is_true_knn(&nn, &records, &query, 10);
+            assert_is_true_knn(&tree, &nn, &records, &query, 10);
         }
     }
 }
@@ -205,7 +206,7 @@ fn the_bounds_avoid_most_of_the_records() {
         let query = Descriptor::random(&mut rng, desc_length);
         let nn = tree.get_nearest_neighbors(&query, 10);
 
-        assert_is_true_knn(&nn, &records, &query, 10);
+        assert_is_true_knn(&tree, &nn, &records, &query, 10);
 
         // Which bound rejected varies with the data; that work was avoided does not.
         assert!(nn.records_scanned * 2 < records.len(),
@@ -228,7 +229,7 @@ fn a_record_is_its_own_nearest_neighbor() {
 
         assert_eq!(nn.distances[0], 0.0);
         assert_eq!(
-            nn.records[0].as_ref().unwrap().compound_identifier.to_string(),
+            tree.records_at(&nn.indexes)[0].as_ref().unwrap().identifier.to_string(),
             record.compound_identifier.to_string(),
         );
     }
@@ -247,7 +248,7 @@ fn returns_every_record_when_k_exceeds_the_tree() {
     let nn = tree.get_nearest_neighbors(&query, 40);
 
     assert_eq!(nn.distances.len(), 40);
-    assert_is_true_knn(&nn, &records, &query, 40);
+    assert_is_true_knn(&tree, &nn, &records, &query, 40);
 }
 
 #[test]
@@ -263,7 +264,7 @@ fn returns_a_short_list_when_k_exceeds_the_record_count() {
     let nn = tree.get_nearest_neighbors(&query, 200);
 
     assert_eq!(nn.distances.len(), 30, "asked for 200 of 30 records");
-    assert_is_true_knn(&nn, &records, &query, 30);
+    assert_is_true_knn(&tree, &nn, &records, &query, 30);
 }
 
 /// Build a tree, then overwrite the first byte of one of its files.
@@ -352,7 +353,7 @@ fn matches_brute_force_on_the_stored_fixture() {
 
     for record in records.iter().take(20) {
         let nn = tree.get_nearest_neighbors(&record.descriptor, 10);
-        assert_is_true_knn(&nn, &records, &record.descriptor, 10);
+        assert_is_true_knn(&tree, &nn, &records, &record.descriptor, 10);
     }
 }
 

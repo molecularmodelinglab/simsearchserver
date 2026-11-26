@@ -1,7 +1,7 @@
 //! A page is a byte array holding either internal nodes or compound records.
 
 use crate::tree::{TreeRecord};
-use crate::data::{Descriptor};
+use crate::data::{CompoundIndex, Descriptor};
 use crate::layout;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -20,6 +20,17 @@ pub fn page_tail(data: &[u8]) -> usize {
         .expect("tail field is TAIL_SIZE bytes");
 
     return u32::from_le_bytes(bytes) as usize;
+}
+
+/// Record index alone, without materializing a descriptor.
+#[inline]
+pub fn record_index(data: &[u8], offset: usize, desc_length: usize) -> CompoundIndex {
+    let slice = record_slice(data, offset, desc_length);
+    let bytes = slice[layout::INDEX_START..layout::INDEX_START + layout::INDEX_SIZE]
+        .try_into()
+        .expect("index field is INDEX_SIZE bytes");
+
+    return u64::from_le_bytes(bytes);
 }
 
 /// Byte range of the record at `offset` within the page
@@ -151,6 +162,11 @@ impl<'a> RecordPageRef<'a> {
         }
 
         return TreeRecord::from_slice(record_slice(self.data, offset, self.desc_length), self.desc_length);
+    }
+
+    #[inline]
+    pub fn index_at(&self, offset: usize) -> CompoundIndex {
+        return record_index(self.data, offset, self.desc_length);
     }
 }
 
