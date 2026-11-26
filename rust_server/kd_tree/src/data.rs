@@ -14,7 +14,6 @@ pub type CompoundIndex = u64;
 pub const IDENTIFIER_SIZE: usize = 128;
 
 pub const MAX_SMILES_LENGTH: usize = 200;
-pub const MAX_IDENTIFIER_LENGTH: usize = IDENTIFIER_SIZE;
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct CompoundRecord {
@@ -45,16 +44,14 @@ impl CompoundRecord {
         return tree_record;
     }
 
-    pub fn random(length: usize) -> Self {
+    pub fn random(rng: &mut impl Rng, length: usize) -> Self {
 
-        let smiles: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(20)
-            .map(char::from)
+        let smiles: String = (0..20)
+            .map(|_| char::from(rng.sample(&Alphanumeric)))
             .collect();
 
-        let compound_identifier = CompoundIdentifier::random();
-        let descriptor = Descriptor::random(length);
+        let compound_identifier = CompoundIdentifier::random(rng);
+        let descriptor = Descriptor::random(rng, length);
 
         return Self {
             smiles,
@@ -69,7 +66,6 @@ impl CompoundRecord {
 pub struct Descriptor {
     pub data: Vec<f32>,
     pub length: usize,
-    //pub data: [f32; N],
 }
 
 impl Descriptor {
@@ -87,13 +83,9 @@ impl Descriptor {
     
     }
 
-    pub fn random(length: usize) -> Self {
+    pub fn random(rng: &mut impl Rng, length: usize) -> Self {
 
-        use rand::{Rng, thread_rng};
-        use rand::distributions::Uniform;
-
-        let mut rng = thread_rng();
-        let side = Uniform::new(-1.0, 1.0);
+        let side = rand::distributions::Uniform::new(-1.0, 1.0);
 
         let random_vec: Vec::<f32> = (0..length).map(|_| rng.sample(side)).collect();
         return Self { data: random_vec, length};
@@ -108,22 +100,9 @@ impl Descriptor {
         }
     }
 
-    pub fn yaml(&self) -> String {
-
-        let mut s = "[".to_string();
-        for (i, item) in self.data.iter().enumerate() {
-            if i != 0 { s += ","; }
-            s += &format!("{:.3}", item);
-        }
-        s += "]";
-
-        return s;
-    }
-
 }
 
 #[derive(PartialEq, Clone, Serialize)]
-//pub struct CompoundIdentifier(pub [u8; IDENTIFIER_SIZE]);
 pub struct CompoundIdentifier(pub String);
 
 impl CompoundIdentifier {
@@ -168,19 +147,8 @@ impl CompoundIdentifier {
 
     }
 
-    pub fn from_ascii_array(data: &[u8], offset: usize, length: usize) -> Self {
+    pub fn random(rng: &mut impl Rng) -> Self {
 
-        let bytes = &data[offset..offset + length];
-
-        return Self::_from_arr(bytes);
-
-
-    }
-
-
-    pub fn random() -> Self {
-
-        let mut rng = rand::thread_rng();
         let mut bytes = [0u8; IDENTIFIER_SIZE];
 
 
