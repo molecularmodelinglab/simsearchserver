@@ -1,7 +1,4 @@
-//! Holds structs and methods for representing nodes (both internal and leaf) of kd tree.
-//!
-//! Structs can be sent to and from fixed-length byte arrays to be swapped back and forth from disk
-//!
+//! Internal nodes, converted to and from fixed-length byte arrays on disk.
 
 
 use crate::data::{Parser};
@@ -23,10 +20,6 @@ impl fmt::Display for PagePointer {
 
     // This trait requires `fmt` with this exact signature.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Write strictly the first element into the supplied output
-        // stream: `f`. Returns `fmt::Result` which indicates whether the
-        // operation succeeded or failed. Note that `write!` uses syntax which
-        // is very similar to `println!`.
         match self {
             PagePointer::Node(node_offset) => {
                 write!(f, "NODE {:?}|{:?}", PageType::Node, node_offset)

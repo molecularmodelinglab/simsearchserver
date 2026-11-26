@@ -52,9 +52,6 @@ pub const SPLIT_VALUE_SIZE: usize = 4;
 pub const NODE_SIZE: usize = SPLIT_VALUE_OFFSET + SPLIT_VALUE_SIZE;
 
 
-//for TreeRecord
-//TODO: make generic over different descriptor lengths
-//
 pub const INDEX_START: usize = 0;
 pub const INDEX_SIZE: usize = 8;
 

@@ -10,10 +10,7 @@ use serde::Serialize;
 
 pub type CompoundIndex = u64;
 
-/// Longest identifier accepted. Since the database stores entries at variable
-/// length this costs nothing on disk; it only bounds a scratch array here.
-///
-/// Enamine REAL identifiers look like `s_4____461206____12103258`
+/// Longest identifier accepted; bounds a scratch array, not the stored size.
 pub const IDENTIFIER_SIZE: usize = 128;
 
 pub const MAX_SMILES_LENGTH: usize = 200;
@@ -213,15 +210,8 @@ impl CompoundIdentifier {
 
 
 
-// To use the `{}` marker, the trait `fmt::Display` must be implemented
-// manually for the type.
 impl fmt::Debug for CompoundIdentifier {
-    // This trait requires `fmt` with this exact signature.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Write strictly the first element into the supplied output
-        // stream: `f`. Returns `fmt::Result` which indicates whether the
-        // operation succeeded or failed. Note that `write!` uses syntax which
-        // is very similar to `println!`.
         write!(f, "{}", self.to_string())
     }
 }

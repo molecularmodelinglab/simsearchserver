@@ -192,10 +192,7 @@ impl ImmutTree {
         return nearest_neighbors;
     }
 
-    ///Returns the `n` nearest neighbors of the provided `query_descriptor`
-    ///
-    ///Performance should worsen as `n` grows larger, as fewer branches of the tree can be pruned
-    ///with more distant already-found points
+    /// The `n` nearest neighbors of `query_descriptor`.
     fn get_top_hits(&self, query_descriptor: &Descriptor, n: usize) -> TopHits {
 
         let mut hits = TopHits::new(n);
@@ -455,11 +452,7 @@ impl TreeConfig {
 
 }
 
-/// Struct to represent the kd-tree
-///
-/// Can be either for reading or just querying given a directory on disk. Internal nodes and leaf
-/// nodes are stored in separate files and paged separately.
-///
+/// A kd-tree on disk: internal nodes and leaf pages in separate files.
 #[derive(Debug)]
 pub struct Tree {
     pub node_handler: FastNodePager,
@@ -563,9 +556,7 @@ impl NearestNeighbors {
 }
 
 
-///struct for keeping N- top closest points
-///
-///handles distance sorting and truncating to N items
+/// The `n` closest records seen so far, kept sorted.
 #[derive(Debug)]
 pub struct TopHits {
     pub max_length: usize,
@@ -601,9 +592,7 @@ impl TopHits {
         }
     }
 
-    ///Internal method for adding a record to the list
-    ///
-    ///Undefined if called without checking if we can via `try_add`
+    /// Undefined unless `try_add` has checked the distance first.
     fn _add(&mut self, distance: f32, record: &TreeRecord, page_pointer: &PagePointer) -> Result<(), String> {
         let mut insert_index: Option<usize> = None;
         for (i, item) in self.squared_distances.iter().enumerate() {
@@ -641,11 +630,7 @@ impl TopHits {
     }
 
 
-    ///# Returns
-    ///
-    ///the highest squared distance of the list (the Nth, where N=`max_length`)
-    ///
-    ///Should be constant time access, it's just looking at the back of the vector?
+    /// Distance of the worst kept hit, which is the pruning threshold.
     pub fn get_highest_squared_dist(&self) -> f32 {
 
         return self.squared_distances[self.max_length - 1];
@@ -927,10 +912,7 @@ impl Tree {
     }
 
 
-    ///Adds the records to the tree. Descends down the tree until a leaf node is found, and appends
-    ///the records to that node. If this fills the node, the node is split at its median and two
-    ///half-filled leaf nodes are created. A new internal node is created to point to these two
-    ///children.
+    /// Appends to the leaf the descriptor belongs in, splitting it when full.
     pub fn add_record(&mut self, record: &CompoundRecord) -> Result<(), String> {
 
         let index = self.database.add_compound_record(record)?;
@@ -954,7 +936,7 @@ impl Tree {
                     let res = page.add_record(&tree_record);
                     match res {
                         Ok(_) => {},
-                        Err(_e) => {self.print_record_page(page); panic!();},
+                        Err(e) => panic!("could not add a record to a leaf page: {}", e),
                     }
 
                     match page.is_full() {
@@ -1140,17 +1122,10 @@ impl Tree {
         }
     }
 
-    ///Internal method to take a single full RecordPage, find its median at the "next" axis, and
-    ///split the records along that median. This is really the only place where new internal nodes
-    ///are created.
+    /// Splits a full page in two and links them under a new internal node.
     pub fn split(&mut self, page: RecordPage, this_pointer: &PagePointer, parent_pointer: &PagePointer, last_was_left: bool) -> Result<(), String> {
 
 
-        //TODO: handle most of the values along the split axis being identical
-        //randomly choose left or right?
-
-
-        //determine the split axis
         let parent_node: Option<InternalNode> = match &parent_pointer {
             PagePointer::Leaf(_) => None,
             PagePointer::Node(index) => {
@@ -1162,35 +1137,49 @@ impl Tree {
             }
         };
 
-
-        let split_axis = match &parent_node {
-            Some(x) => (x.split_axis + 1) % self.config.desc_length,
-            None => 0,
-        };
-
-
-        //determine split value
         let n_records = page.len();
+
+        // Cycling axes by depth can pick one holding a single repeated value.
+        let mut split_axis = 0;
+        let mut widest = f32::NEG_INFINITY;
+
+        for axis in 0..self.config.desc_length {
+
+            let mut low = f32::INFINITY;
+            let mut high = f32::NEG_INFINITY;
+
+            for offset in 0..n_records {
+                let value = page.descriptor_component_at(offset, axis);
+                low = low.min(value);
+                high = high.max(value);
+            }
+
+            if high - low > widest {
+                widest = high - low;
+                split_axis = axis;
+            }
+        }
 
         let mut values: Vec<f32> = (0..n_records)
             .map(|offset| page.descriptor_component_at(offset, split_axis))
             .collect();
 
-        //because f32 doesn't like being compared
-        values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        values.sort_by(|a, b| a.partial_cmp(b).expect("descriptor values are finite"));
 
-        let median = match values.len() % 2 {
-            0 => {
-                let idx_b: usize  = values.len() / 2;
-                let idx_a = idx_b - 1;
+        let largest = values[n_records - 1];
 
-                (values[idx_a] + values[idx_b] as f32) / 2.0
-            },
-            _ => {
-                let idx: usize  = values.len() / 2;
-                values[idx]
-            },
-        };
+        // A median equal to the largest value would leave the right page empty.
+        let mut median = values[n_records / 2];
+
+        if median >= largest {
+            median = match values.iter().rev().find(|value| **value < largest) {
+                Some(value) => *value,
+                None => return Err(format!(
+                    "cannot split a page whose {} records share one descriptor value on \
+                     every axis; the page size is too small for this many duplicates",
+                    n_records)),
+            };
+        }
 
         //make new left record page at current offset
         let mut left_record_page = RecordPage::new(self.config.record_page_length, self.config.desc_length);

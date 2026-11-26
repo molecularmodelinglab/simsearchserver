@@ -1,14 +1,10 @@
 //! Vector nearest-neighbor search service over a kd-tree built by `builder`.
 //!
-//! Knows nothing about SMILES or embedding models: callers embed their query
-//! and send the resulting vector.
+//! Knows nothing about SMILES: callers send an embedded vector.
 //!
-//! - `GET  /health`            - liveness, plus the descriptor length this index expects
-//! - `GET  /nn/{k}/{v0,v1,..}` - k nearest neighbors of a comma-separated vector
-//! - `POST /nn/{k}`            - same, with body `[v0, v1, ...]` or `{"descriptor": [...]}`
-//!
-//! Prefer `POST` from client code; a high-dimensional descriptor in a URL runs
-//! into path-length limits.
+//! - `GET  /health`
+//! - `GET  /nn/{k}/{v0,v1,..}`
+//! - `POST /nn/{k}` with body `[v0, ...]` or `{"descriptor": [...]}`, preferred
 
 use kd_tree::tree::{ImmutTree, NearestNeighbors};
 use kd_tree::data::Descriptor;

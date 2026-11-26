@@ -41,9 +41,7 @@ fn bounds_at(data: &[u8], axis: usize) -> (f32, f32) {
     return (min, max);
 }
 
-/// Squared distance from `query` to the nearest point of the page's bounding
-/// box: zero inside it, and a lower bound on the distance to every record on
-/// the page. An empty page has an inverted box and so reports infinity.
+/// Lower bound on the distance to any record on the page; infinite when empty.
 #[inline]
 pub fn squared_distance_to_bounds(data: &[u8], query: &Descriptor) -> f32 {
 
@@ -76,8 +74,7 @@ fn extend_bounds(data: &mut [u8], descriptor: &[f32]) {
     }
 }
 
-/// Squared Euclidean distance between `query` and the descriptor stored in
-/// `record`, read straight from the page bytes
+/// Squared Euclidean distance to the descriptor stored in `record`.
 #[inline]
 pub fn squared_distance(record: &[u8], query: &Descriptor) -> f32 {
 

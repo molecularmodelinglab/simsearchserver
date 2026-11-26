@@ -262,3 +262,32 @@ fn matches_brute_force_on_the_stored_fixture() {
         assert_is_true_knn(&nn, &records, &record.descriptor, 10);
     }
 }
+
+#[test]
+fn builds_and_searches_a_coarsely_quantized_space() {
+
+    // Few distinct values per axis, which is what breaks a depth-cycling split.
+    let desc_length = 8;
+
+    let mut records: Vec<CompoundRecord> = Vec::new();
+    for _ in 0..6000 {
+        let mut record = CompoundRecord::random(desc_length);
+        for value in record.descriptor.data.iter_mut() {
+            *value = value.round();
+        }
+        records.push(record);
+    }
+
+    let tree = build_tree(&records, desc_length, "quantized");
+
+    for _ in 0..10 {
+        let query = Descriptor::random(desc_length);
+        let nn = tree.get_nearest_neighbors(&query, 10);
+
+        let (_, expected) = brute_force_top_k(&records, &query, 10);
+        for i in 0..10 {
+            assert!((nn.distances[i] - expected[i]).abs() < 1e-5,
+                    "rank {}: tree {} vs brute force {}", i, nn.distances[i], expected[i]);
+        }
+    }
+}

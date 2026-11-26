@@ -1,12 +1,7 @@
-//! SMILES and identifier storage, keyed by the record index the tree stores.
+//! SMILES and identifier storage, keyed by record index.
 //!
-//! Two files:
-//!
-//! - `db.db`     magic, entry count, then packed entries
-//! - `db.db.idx` magic, entry count, then `n + 1` byte offsets into `db.db`
-//!
-//! An entry is `[u16 id_len][u16 smiles_len][id][smiles]`. The offset table
-//! gives random access by index; the lengths keep each entry self-describing.
+//! `db.db` packs `[u16 id_len][u16 smiles_len][id][smiles]`; `db.db.idx` holds
+//! `n + 1` byte offsets into it for random access.
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Seek, SeekFrom, Write};
