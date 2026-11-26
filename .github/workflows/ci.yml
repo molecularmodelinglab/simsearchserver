@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, refactor]
+  pull_request:
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust_server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust_server/target
+          key: cargo-${{ hashFiles('rust_server/**/Cargo.lock', 'rust_server/**/Cargo.toml') }}
+
+      # Without this the fixture tests skip silently instead of running.
+      - name: Generate test fixtures
+        run: python3 scripts/generate_test_fixtures.py
+
+      # Warnings are denied through [workspace.lints] in Cargo.toml.
+      - name: Build
+        run: cargo build --locked
+
+      - name: Test
+        run: cargo test --locked
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Installing the project would pull SALSA and torch, unused by these tests.
+      - name: Install
+        run: pip install pytest rdkit numpy
+
+      - name: Test
+        run: python -m pytest tests/ -q
