@@ -1,4 +1,5 @@
 use kd_tree::data::{CompoundIdentifier, Descriptor, CompoundRecord, IDENTIFIER_SIZE, MAX_SMILES_LENGTH};
+use kd_tree::fingerprints::{FingerprintWriter, path_in};
 
 use kdam::tqdm;
 use kd_tree::tree;
@@ -54,6 +55,47 @@ struct BuildFromFileArgs {
     ///Stop after this many records (for timing runs on a subset)
     #[clap(long)]
     limit: Option<usize>,
+
+    ///Directory of `<shard>.fp` files to store alongside the index
+    #[clap(long)]
+    fingerprints: Option<String>,
+
+    ///Prepended to every compound identifier, to keep datasets distinct
+    #[clap(long, default_value = "")]
+    id_prefix: String,
+}
+
+/// One shard's fingerprints, indexed by its row number.
+struct ShardFingerprints {
+    data: Vec<u8>,
+    bytes_per_record: usize,
+}
+
+impl ShardFingerprints {
+
+    /// Width comes from the file size, so the manifest need not be parsed.
+    fn load(directory: &str, source: &str, rows: usize) -> Self {
+        let stem = Path::new(source).file_stem()
+            .expect("source has no filename").to_string_lossy();
+        let path = format!("{}/{}.fp", directory, stem);
+
+        let data = std::fs::read(&path)
+            .unwrap_or_else(|e| panic!("could not read {}: {}", path, e));
+
+        if rows == 0 || data.len() % rows != 0 {
+            panic!("{} is {} bytes, not a whole number of records across {} rows",
+                   path, data.len(), rows);
+        }
+
+        let bytes_per_record = data.len() / rows;
+
+        return Self { data, bytes_per_record };
+    }
+
+    fn row(&self, index: usize) -> &[u8] {
+        let start = index * self.bytes_per_record;
+        return &self.data[start..start + self.bytes_per_record];
+    }
 }
 
 #[derive(Debug, Args, Clone)]
@@ -106,10 +148,12 @@ fn add_record(
     log_file: &mut File,
     stats: &mut BuildStats,
     desc_length: usize,
-    stem: &str,
+    prefix: &str,
     smiles: &str,
     id_val: &str,
     descriptor_values: Vec<f32>,
+    fingerprint: Option<&[u8]>,
+    writer: Option<&mut FingerprintWriter>,
 ) {
 
     if descriptor_values.len() != desc_length {
@@ -119,7 +163,7 @@ fn add_record(
         return;
     }
 
-    let id_string = format!("{}{}", stem, id_val);
+    let id_string = format!("{}{}", prefix, id_val);
 
     match validate(smiles, &id_string) {
         Ok(_) => {},
@@ -146,6 +190,12 @@ fn add_record(
         },
     }
 
+    // Written here rather than per source row, so a skipped record cannot
+    // shift every fingerprint after it.
+    if let (Some(bytes), Some(writer)) = (fingerprint, writer) {
+        writer.append(bytes).expect("could not append a fingerprint");
+    }
+
     stats.success += 1;
 
     if (stats.success % 1000000 == 0) && (stats.success != 0) {
@@ -162,13 +212,12 @@ fn log_error(log_file: &mut File, stats: &mut BuildStats, message: &str) {
     let _ = log_file.write_all(format!("{}\n", message).as_bytes());
 }
 
-/// Dataset prefix, taken from the leading underscore-delimited part of the
-/// filename, so records from different source files stay distinguishable.
-fn stem_of(filename: &str) -> String {
-    return filename
-        .split('/').last().unwrap_or(filename)
-        .split('_').next().unwrap_or("")
-        .to_string();
+fn parquet_rows(filename: &str) -> usize {
+    let file = File::open(filename).expect(&format!("could not open {}", filename));
+
+    return ParquetRecordBatchReaderBuilder::try_new(file)
+        .expect(&format!("could not read parquet metadata from {}", filename))
+        .metadata().file_metadata().num_rows() as usize;
 }
 
 fn build_from_files(args: &BuildFromFileArgs) {
@@ -193,17 +242,35 @@ fn build_from_files(args: &BuildFromFileArgs) {
             .expect("could not open build log");
 
     let mut stats = BuildStats { success: 0, errors: 0, start: Instant::now() };
+    let mut writer: Option<FingerprintWriter> = None;
 
     'files: for filename in tqdm!(args.filenames.iter()) {
 
-        let stem = stem_of(filename);
-
-        println!("{} (prefix {:?})", &filename, &stem);
+        println!("{}", &filename);
 
         if filename.ends_with(".parquet") {
-            ingest_parquet(filename, &stem, &mut tree, &mut log_file, &mut stats, desc_length, args.limit);
+
+            let shard = args.fingerprints.as_ref().map(|directory| {
+                let rows = parquet_rows(filename);
+                let loaded = ShardFingerprints::load(directory, filename, rows);
+
+                if writer.is_none() {
+                    writer = Some(
+                        FingerprintWriter::create(&path_in(&config.directory),
+                                                  loaded.bytes_per_record)
+                            .expect("could not create the fingerprint file"));
+                }
+
+                loaded
+            });
+
+            ingest_parquet(filename, &args.id_prefix, &mut tree, &mut log_file, &mut stats,
+                           desc_length, args.limit, shard.as_ref(), &mut writer);
         } else {
-            ingest_csv(filename, &stem, &mut tree, &mut log_file, &mut stats, desc_length, args.limit);
+            if args.fingerprints.is_some() {
+                panic!("--fingerprints needs parquet input; {} is not parquet", filename);
+            }
+            ingest_csv(filename, &args.id_prefix, &mut tree, &mut log_file, &mut stats, desc_length, args.limit);
         }
 
         if let Some(limit) = args.limit {
@@ -216,6 +283,14 @@ fn build_from_files(args: &BuildFromFileArgs) {
 
     tree.flush();
 
+    if let Some(writer) = writer {
+        let written = writer.finish().expect("could not finish the fingerprint file");
+        if written != stats.success as u64 {
+            panic!("wrote {} fingerprints for {} records", written, stats.success);
+        }
+        println!("{} fingerprints stored alongside the index", written);
+    }
+
     let elapsed = stats.start.elapsed().as_secs_f64();
 
     println!(
@@ -227,12 +302,14 @@ fn build_from_files(args: &BuildFromFileArgs) {
 /// Reads `ID`, `SMILES` and `dim_0..dim_{n-1}` columns from a parquet file.
 fn ingest_parquet(
     filename: &str,
-    stem: &str,
+    prefix: &str,
     tree: &mut tree::Tree,
     log_file: &mut File,
     stats: &mut BuildStats,
     desc_length: usize,
     limit: Option<usize>,
+    shard: Option<&ShardFingerprints>,
+    writer: &mut Option<FingerprintWriter>,
 ) {
 
     let file = File::open(filename).expect(&format!("could not open {}", filename));
@@ -278,6 +355,8 @@ fn ingest_parquet(
         .build()
         .expect("could not build parquet reader");
 
+    let mut row_in_file = 0usize;
+
     for batch in reader {
 
         let batch = batch.expect("could not read parquet batch");
@@ -296,6 +375,9 @@ fn ingest_parquet(
             .collect();
 
         for row in 0..batch.num_rows() {
+
+            let at = row_in_file;
+            row_in_file += 1;
 
             if let Some(limit) = limit {
                 if stats.success >= limit { return; }
@@ -320,15 +402,15 @@ fn ingest_parquet(
             }
 
             add_record(
-                tree, log_file, stats, desc_length, stem,
+                tree, log_file, stats, desc_length, prefix,
                 smiles_col[row].unwrap(), ids[row].unwrap(), values,
+                shard.map(|s| s.row(at)), writer.as_mut(),
             );
         }
     }
 }
 
-/// Reads a string column as `Option<&str>` per row, accepting either
-/// `Utf8` or `LargeUtf8` (pyarrow writes `large_string` by default).
+/// Accepts `LargeUtf8`, which is what pyarrow writes by default.
 fn string_column<'a>(
     batch: &'a arrow_array::RecordBatch,
     name: &str,
@@ -356,7 +438,7 @@ fn string_column<'a>(
 /// Reads `smiles,id,dim_0..dim_{n-1}` rows, skipping one header line.
 fn ingest_csv(
     filename: &str,
-    stem: &str,
+    prefix: &str,
     tree: &mut tree::Tree,
     log_file: &mut File,
     stats: &mut BuildStats,
@@ -405,7 +487,8 @@ fn ingest_csv(
             },
         };
 
-        add_record(tree, log_file, stats, desc_length, stem, smiles, id_val, descriptor_values);
+        add_record(tree, log_file, stats, desc_length, prefix, smiles, id_val,
+                   descriptor_values, None, None);
     }
 }
 
