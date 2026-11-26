@@ -12,17 +12,14 @@ pub const PTR_SIZE: usize = size_of::<usize>();
 
 pub struct Value (pub usize);
 
-/// Converts an array of length len(usize) to a usize as a BigEndian integer.
-/// TODO: switch to using byteorder here as well
 impl TryFrom<[u8; PTR_SIZE]> for Value {
     type Error = Error;
 
     fn try_from(arr: [u8; PTR_SIZE]) -> Result<Self, Self::Error> {
-        Ok(Self(usize::from_be_bytes(arr)))
+        Ok(Self(usize::from_le_bytes(arr)))
     }
 }
 
-/// Converts an array of length len(usize) to a usize as a BigEndian integer.
 impl TryFrom<[u8; 1]> for Value {
     type Error = Error;
 
@@ -62,17 +59,15 @@ pub const PAGE_TYPE_OFFSET: usize = 0;
 pub const PAGE_TYPE_SIZE: usize = 1;
 
 pub const TAIL_OFFSET: usize = PAGE_TYPE_OFFSET + PAGE_TYPE_SIZE;
-pub const TAIL_SIZE: usize = 4; //2 bytes supports up to 65535 records, but 4 is easier to implement lol
+pub const TAIL_SIZE: usize = 4;
 
 pub const IS_EMPTY_OFFSET: usize = TAIL_OFFSET + TAIL_SIZE;
 pub const IS_EMPTY_SIZE: usize = 1;
 
-/// Pads the page header from 6 to 8 bytes so records start on an 8-byte
-/// boundary.
+/// Aligns records to an 8-byte boundary.
 pub const PAGE_HEADER_PADDING: usize = 2;
 
-/// Per-axis `[min, max]` of the descriptors on a leaf page, as interleaved
-/// f32 pairs, so a page can be skipped without scanning its records.
+/// Interleaved f32 pairs, so a page is skipped without scanning its records.
 pub const BOUNDS_OFFSET: usize = IS_EMPTY_OFFSET + IS_EMPTY_SIZE + PAGE_HEADER_PADDING;
 
 pub const fn bounds_size(desc_length: usize) -> usize {
@@ -83,15 +78,23 @@ pub const fn page_data_start(desc_length: usize) -> usize {
     return BOUNDS_OFFSET + bounds_size(desc_length);
 }
 
-/// On-disk format revision for the `record` and `node` files.
-///
-/// 1: 6-byte page header, big-endian floats
-/// 2: 8-byte page header, little-endian floats
-/// 3: per-axis bounding box in the leaf page header
-pub const FORMAT_VERSION: u32 = 3;
+/// On-disk format revision, stamped into every file of an index.
+pub const FORMAT_VERSION: u32 = 1;
 
-//for whole file
-pub const HEADER_CURSOR_START: usize = 0;
+/// Rejects a file passed in the wrong position.
+pub const RECORD_FILE_MAGIC: [u8; MAGIC_SIZE] = *b"KDTRECRD";
+pub const NODE_FILE_MAGIC: [u8; MAGIC_SIZE] = *b"KDTNODES";
+
+pub const MAGIC_OFFSET: usize = 0;
+pub const MAGIC_SIZE: usize = 8;
+
+pub const VERSION_OFFSET: usize = MAGIC_OFFSET + MAGIC_SIZE;
+pub const VERSION_SIZE: usize = 4;
+
+/// Pads the file header so the cursor lands on an 8-byte boundary.
+pub const FILE_HEADER_PADDING: usize = 4;
+
+pub const HEADER_CURSOR_START: usize = VERSION_OFFSET + VERSION_SIZE + FILE_HEADER_PADDING;
 pub const HEADER_CURSOR_SIZE: usize = PTR_SIZE;
 
 pub const FILE_DATA_START: usize = HEADER_CURSOR_START + HEADER_CURSOR_SIZE;

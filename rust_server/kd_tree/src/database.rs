@@ -1,7 +1,4 @@
 //! SMILES and identifier storage, keyed by record index.
-//!
-//! `db.db` packs `[u16 id_len][u16 smiles_len][id][smiles]`; `db.db.idx` holds
-//! `n + 1` byte offsets into it for random access.
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufWriter, Seek, SeekFrom, Write};
@@ -12,12 +9,13 @@ use memmap2::{Advice, Mmap, MmapOptions};
 
 use crate::data::{CompoundRecord, CompoundIdentifier};
 
-/// `b"KDTDB003"`. Bumped from the fixed-width layout so an index built by an
-/// older version fails loudly instead of being read as garbage.
-pub const DB_MAGIC: [u8; 8] = *b"KDTDB003";
-pub const IDX_MAGIC: [u8; 8] = *b"KDTIX003";
+/// Version is a separate field so every file of an index carries one number.
+pub const DB_MAGIC: [u8; 8] = *b"KDTDBASE";
+pub const IDX_MAGIC: [u8; 8] = *b"KDTOFFST";
 
-pub const HEADER_SIZE: usize = 16; // magic + u64 count
+pub const HEADER_SIZE: usize = 24; // magic + u32 version + padding + u64 count
+const VERSION_AT: usize = 8;
+const COUNT_AT: usize = 16;
 pub const ENTRY_HEADER_SIZE: usize = 4; // two u16 lengths
 
 fn index_path(db_path: &str) -> String {
@@ -99,19 +97,15 @@ impl DatabaseRecord {
     }
 
     #[cfg(test)]
-    fn random() -> Self {
+    fn random(rng: &mut impl rand::Rng) -> Self {
 
-        use rand::{distributions::Alphanumeric, Rng};
-
-        let smiles: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(20)
-            .map(char::from)
+        let smiles: String = (0..20)
+            .map(|_| char::from(rng.sample(&rand::distributions::Alphanumeric)))
             .collect();
 
         return DatabaseRecord {
             smiles,
-            identifier: CompoundIdentifier::random(),
+            identifier: CompoundIdentifier::random(rng),
         };
     }
 }
@@ -126,13 +120,24 @@ fn read_header(fd: &File, expected_magic: &[u8; 8], filename: &str) -> u64 {
 
     if &header[0..8] != expected_magic {
         panic!(
-            "{} has magic {:?}, expected {:?}. An index built before the \
-             variable-length database format has to be rebuilt.",
-            filename, &header[0..8], expected_magic,
+            "{} starts with {:?}, not {:?}: this is not the file it was expected \
+             to be, or it predates the magic number and has to be rebuilt.",
+            filename, String::from_utf8_lossy(&header[0..8]),
+            String::from_utf8_lossy(expected_magic),
         );
     }
 
-    return u64::from_le_bytes(header[8..16].try_into().expect("count is 8 bytes"));
+    let version = u32::from_le_bytes(
+        header[VERSION_AT..VERSION_AT + 4].try_into().expect("version is 4 bytes"));
+    if version != crate::layout::FORMAT_VERSION {
+        panic!(
+            "{} is format version {}, but this build reads version {}. Rebuild the index.",
+            filename, version, crate::layout::FORMAT_VERSION,
+        );
+    }
+
+    return u64::from_le_bytes(
+        header[COUNT_AT..COUNT_AT + 8].try_into().expect("count is 8 bytes"));
 }
 
 /// Read-only database, served from memory maps.
@@ -255,10 +260,17 @@ impl Database {
         let mut offsets = BufWriter::with_capacity(1 << 20, create(&index_path(filename)));
 
         // Counts are placeholders until `flush`.
+        let version = crate::layout::FORMAT_VERSION.to_le_bytes();
+        let padding = [0u8; COUNT_AT - VERSION_AT - 4];
+
         entries.write_all(&DB_MAGIC).unwrap();
+        entries.write_all(&version).unwrap();
+        entries.write_all(&padding).unwrap();
         entries.write_all(&0u64.to_le_bytes()).unwrap();
 
         offsets.write_all(&IDX_MAGIC).unwrap();
+        offsets.write_all(&version).unwrap();
+        offsets.write_all(&padding).unwrap();
         offsets.write_all(&0u64.to_le_bytes()).unwrap();
 
         // Offset table holds n+1 entries; the first is where entry 0 begins.
@@ -299,7 +311,6 @@ impl Database {
             );
         }
 
-        // offset[num_entries] is where the next entry would start
         let mut cursor_bytes = [0u8; 8];
         let at = (HEADER_SIZE + (num_entries as usize) * 8) as u64;
         offsets_fd
@@ -364,7 +375,7 @@ impl Database {
         let count = self.num_entries.to_le_bytes();
 
         for writer in [self.entries.get_mut(), self.offsets.get_mut()] {
-            writer.seek(SeekFrom::Start(8)).expect("could not seek to count");
+            writer.seek(SeekFrom::Start(COUNT_AT as u64)).expect("could not seek to count");
             writer.write_all(&count).expect("could not write count");
             writer.flush().expect("could not flush count");
         }
@@ -406,10 +417,11 @@ mod tests {
 
         let mut database = Database::new(filename);
 
+        let mut rng = <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(20260101);
         let mut entries: Vec<DatabaseRecord> = Vec::new();
 
         for _ in 0..10000 {
-            entries.push(DatabaseRecord::random());
+            entries.push(DatabaseRecord::random(&mut rng));
         }
 
         let mut reported_entries: Vec<(u64, DatabaseRecord)> = Vec::new();
