@@ -5,7 +5,7 @@ use crate::data::{Parser};
 use crate::page::PageType;
 use crate::layout;
 
-use byteorder::{ByteOrder, BigEndian, LittleEndian};
+use byteorder::{ByteOrder, LittleEndian};
 use std::fmt;
 
 use std::convert::TryInto;
@@ -18,7 +18,6 @@ pub enum PagePointer {
 
 impl fmt::Display for PagePointer {
 
-    // This trait requires `fmt` with this exact signature.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             PagePointer::Node(node_offset) => {
@@ -31,12 +30,6 @@ impl fmt::Display for PagePointer {
     }
 }
 
-
-#[derive(Debug, PartialEq)]
-pub enum NodeType{
-    Internal,
-    Leaf,
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct InternalNode {
@@ -60,17 +53,6 @@ impl InternalNode {
         };
 
         return node
-    }
-
-    pub fn pretty(&self) -> String {
-
-        return format!("SA: {:?} SV: {:?}
-                            LC: {}
-                            RC: {}",
-                        self.split_axis,
-                        self.split_value,
-                        self.left_child_pointer,
-                        self.right_child_pointer)
     }
 
     pub fn from_slice(node_slice: &[u8]) -> Result<InternalNode, String> {
@@ -114,7 +96,7 @@ impl InternalNode {
             PagePointer::Node(x) => (1, x.try_into().unwrap()),
             PagePointer::Leaf(x) => (2, x.try_into().unwrap()),
         };
-        BigEndian::write_u64(slice, value);
+        LittleEndian::write_u64(slice, value);
 
 
         arr[layout::LEFT_CHILD_TYPE_START] = node_type as u8;
@@ -125,7 +107,7 @@ impl InternalNode {
             PagePointer::Node(x) => (1, x.try_into().unwrap()),
             PagePointer::Leaf(x) => (2, x.try_into().unwrap()),
         };
-        BigEndian::write_u64(slice, value);
+        LittleEndian::write_u64(slice, value);
 
         arr[layout::RIGHT_CHILD_TYPE_START] = node_type as u8;
 

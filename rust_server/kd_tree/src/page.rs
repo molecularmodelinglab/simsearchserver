@@ -10,8 +10,7 @@ pub enum PageType {
     Leaf = 2,
 }
 
-// Byte-level accessors shared by `RecordPage` and `RecordPageRef`, working on
-// page bytes directly so the query path never allocates.
+// Work on page bytes directly so the query path never allocates.
 
 /// Number of records written to this page
 #[inline]
@@ -20,7 +19,7 @@ pub fn page_tail(data: &[u8]) -> usize {
         .try_into()
         .expect("tail field is TAIL_SIZE bytes");
 
-    return u32::from_be_bytes(bytes) as usize;
+    return u32::from_le_bytes(bytes) as usize;
 }
 
 /// Byte range of the record at `offset` within the page
@@ -78,13 +77,11 @@ fn extend_bounds(data: &mut [u8], descriptor: &[f32]) {
 #[inline]
 pub fn squared_distance(record: &[u8], query: &Descriptor) -> f32 {
 
-    // Sliced once rather than indexed per component, which would emit a bounds
-    // check per component per record.
+    // Sliced once; indexing per component emits a bounds check each time.
     let start = layout::DESCRIPTOR_START;
     let bytes = &record[start..start + query.length * 4];
 
-    // Float addition is not associative, so a single running sum would serialize
-    // the loop; four lanes let it vectorize.
+    // Float addition is not associative, so a single running sum cannot vectorize.
     let mut acc = [0.0f32; 4];
 
     let mut values = bytes.chunks_exact(16);
@@ -110,7 +107,6 @@ pub fn squared_distance(record: &[u8], query: &Descriptor) -> f32 {
 
     let mut sum = acc[0] + acc[1] + acc[2] + acc[3];
 
-    // Descriptor lengths that are not a multiple of four finish here.
     for (v, q) in values.remainder().chunks_exact(4).zip(queries.remainder().iter()) {
         let value = f32::from_le_bytes(v.try_into().expect("chunks_exact(4) yields 4 bytes"));
         let delta = q - value;
@@ -246,7 +242,6 @@ impl RecordPage {
         let start = layout::page_data_start(self.desc_length) + (self.tail.unwrap() * record.get_record_size());
         let size = record.get_record_size();
 
-        // Written straight into the page
         record.write_to(&mut self.data[start..start + size]);
 
         extend_bounds(&mut self.data, &record.descriptor.data);
@@ -258,8 +253,7 @@ impl RecordPage {
 
         let coerced_tail: u32 = self.tail.unwrap().try_into().unwrap();
 
-        //ensure tail value is updated
-        self.data[layout::TAIL_OFFSET..layout::TAIL_OFFSET + layout::TAIL_SIZE].copy_from_slice(&coerced_tail.to_be_bytes());
+        self.data[layout::TAIL_OFFSET..layout::TAIL_OFFSET + layout::TAIL_SIZE].copy_from_slice(&coerced_tail.to_le_bytes());
 
         
         Ok(())
@@ -320,7 +314,7 @@ impl RecordPage {
 
         let coerced_tail: u32 = self.tail.unwrap().try_into().unwrap();
         self.data[layout::TAIL_OFFSET..layout::TAIL_OFFSET + layout::TAIL_SIZE]
-            .copy_from_slice(&coerced_tail.to_be_bytes());
+            .copy_from_slice(&coerced_tail.to_le_bytes());
 
         return Ok(());
     }
@@ -346,6 +340,11 @@ impl RecordPage {
 mod tests {
 
     use super::*;
+    use rand::SeedableRng;
+
+    fn seeded() -> rand::rngs::StdRng {
+        return rand::rngs::StdRng::seed_from_u64(20260101);
+    }
 
     #[test]
     fn quick_test_new_leafpage_works() {
@@ -381,15 +380,16 @@ mod tests {
     #[test]
     fn bounds_contain_every_record_on_the_page() {
 
+        let mut rng = seeded();
         let n = 8;
         let mut page = RecordPage::new(4096, n);
 
-        assert_eq!(page.squared_distance_to_bounds(&Descriptor::random(n)), f32::INFINITY,
+        assert_eq!(page.squared_distance_to_bounds(&Descriptor::random(&mut rng, n)), f32::INFINITY,
                    "an empty page must bound nothing");
 
         let mut records: Vec<TreeRecord> = Vec::new();
         for _ in 0..20 {
-            let record = TreeRecord { index: 0, descriptor: Descriptor::random(n), length: n };
+            let record = TreeRecord { index: 0, descriptor: Descriptor::random(&mut rng, n), length: n };
             page.add_record(&record).unwrap();
             records.push(record);
         }
@@ -400,7 +400,7 @@ mod tests {
         }
 
         for _ in 0..50 {
-            let query = Descriptor::random(n);
+            let query = Descriptor::random(&mut rng, n);
             let bound = page.squared_distance_to_bounds(&query);
 
             let nearest = (0..page.len())
@@ -415,12 +415,13 @@ mod tests {
     #[test]
     fn copied_records_extend_the_bounds() {
 
+        let mut rng = seeded();
         let n = 8;
         let mut source = RecordPage::new(4096, n);
 
         for _ in 0..10 {
             source.add_record(&TreeRecord {
-                index: 0, descriptor: Descriptor::random(n), length: n,
+                index: 0, descriptor: Descriptor::random(&mut rng, n), length: n,
             }).unwrap();
         }
 
