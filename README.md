@@ -49,6 +49,40 @@ python -m venv .venv
 
 Model weights download and cache automatically on first use.
 
+For a production host, name its microarchitecture rather than using `native`,
+which bakes in whatever CPU happened to build it:
+
+```bash
+cargo build --release --config 'build.rustflags=["-C","target-cpu=znver4"]'
+```
+
+This is not the default because such a binary faults on an older CPU, and it
+is not faster at the dimensions served here — the scan walks one record at a
+time, so the vector unit goes unused either way.
+
+## Preparing a library
+
+One config drives embedding, projection and fingerprinting, so the stages
+cannot disagree about which model or dimension was used:
+
+```yaml
+output: data/prepared
+corpus:      {input: data/smiles/}
+embedding:   {model: salsa16}
+projection:  {method: pca, dim: 10}     # method: none skips it
+fingerprint: {type: atompair, bits: 512}
+index:       {directory: data/index/prod}
+```
+
+```bash
+simsearch prepare config.yaml            # embed, project, fingerprint
+simsearch project config.yaml            # or one stage at a time
+simsearch embed config.yaml --shard 3 --of 27   # for a slurm array
+```
+
+Stages skip work already done, so a partial run can be resubmitted. `prepare`
+ends by writing `index.yaml` and printing the builder command for it.
+
 ## Building an index
 
 Input is parquet (preferred) or CSV with an `ID` column, a `SMILES` column, and
@@ -59,7 +93,8 @@ writes:
 salsa-lit embed molecules.parquet -m salsa16 -o embeddings.parquet
 ```
 
-Then build. `desc_length` must match the embedding dimension:
+Then build. `desc_length` must match the embedding dimension, and
+`--fingerprints` attaches the prepared fingerprint column:
 
 ```bash
 cat > config.yaml <<EOF
@@ -176,6 +211,19 @@ curl -X POST localhost:3000/nn/10 -H 'Content-Type: application/json' \
 curl 'localhost:3000/nn/10/0.1,0.2,...'      # convenience form for curl
 curl localhost:3000/health
 ```
+
+Sending the query's fingerprint has the server re-rank the retrieved set
+against its stored fingerprints and return `num_neighbors` hits, each with a
+`similarity`. This is the serving path: retrieve wide by embedding, rank by
+structure, with no RDKit in the request.
+
+```bash
+curl -X POST localhost:3000/nn/1024 -H 'Content-Type: application/json' \
+     -d '{"descriptor":[...], "fingerprint":[1,0,...], "num_neighbors":8}'
+```
+
+`/health` reports `fingerprint_bytes` when a fingerprint file is present. An
+index built without one still serves, in embedding order.
 
 ## Tests and benchmarks
 

@@ -11,6 +11,7 @@ kd_tree/test_data
 *cache*
 *.venv*
 __pycache__
+*.egg-info
 out
 data/
 logs/

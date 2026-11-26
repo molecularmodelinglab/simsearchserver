@@ -24,8 +24,7 @@ def write_fixture(path, n_records, dim, rng):
         handle.write(header + "\n")
 
         for i in range(n_records):
-            # `CompoundIdentifier::from_string` asserts length <= 50 and the
-            # type is ASCII-only, so keep identifiers short and plain.
+            # `CompoundIdentifier::from_string` asserts ASCII and length <= 50.
             identifier = f"TESTCMPD{i:08d}"
 
             # Uniform over [-1, 1), matching `Descriptor::random`.

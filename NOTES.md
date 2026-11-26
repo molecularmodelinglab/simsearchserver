@@ -1,99 +1,142 @@
 # Findings
 
-Measured on 161,642,203 Enamine REAL compounds, warm, format v3.
-Ground truth is a supermutant set: chains of five consecutive single graph
-edits, so recall at edit depth *d* is "did the *d*-edit relative come back".
+161,408,959 Enamine REAL compounds plus 233,244 supermutants, warm, format v1.
+Recall is the depth-1 GED relative appearing in the top 5 after re-ranking.
+Latency is retrieval only unless stated. The supermutants are in the scoring
+indexes so their relatives are retrievable, and out of a shipping index.
 
-## The embedding retrieves well and ranks poorly
+**Shipping: salsa16 to PCA-10, retrieve k=1024, atom pairs 512-bit
+(`countSimulation=False`, Tanimoto), return 8. fp32, page 16384.**
+98.0% depth-1, 55.8% depth-2, 7.76 ms.
 
-The depth-1 relative is in the **top 5 by embedding distance 21%** of the time,
-but is **somewhere in the retrieved 1024 72%** of the time. Re-ranking those
-candidates structurally recovers almost all of it.
+## Retrieve wide, rank structurally
 
-| retrieve k | ceiling | after re-rank | latency |
-|---|---|---|---|
-| 128 | 48.9% | 48.7% | 2.1 ms |
-| 512 | 62.9% | 62.5% | 5.8 ms |
-| **1024** | **71.6%** | **71.1%** | **7.5 ms** |
-| 4096 | 87.6% | 86.7% | 81.5 ms |
+The embedding retrieves well and ranks badly. Ranking by embedding distance
+gives 21.3% at every k; re-ranking the retrieved set tracks the ceiling within
+a point, at every k and dimension measured.
 
-Ranking by distance gives 21% at every k — retrieving more never helps on its
-own. **Retrieve wide, rank structurally, show few.**
+**Raising k beats raising dimension.** PCA-10 at k=1024 scores 98.0% in 7.8 ms;
+PCA-12 at k=128 scores 91.5% in 2.9 ms; native salsa16 at k=128 needs 29.9 ms
+for 94.3%.
 
-## k beats dimension
+## Dimension
 
-| | salsa8 | salsa16 |
-|---|---|---|
-| k=8 | 0.29 ms | 10.45 ms |
-| k=128 | 1.12 ms | 38.41 ms |
-| k=1024 | 7.46 ms | 87.50 ms |
-| depth-1 after re-rank, k=1024 | 71% | ~93% |
+Latency columns are the current engine; recall is unaffected by it.
 
-Raising k is far cheaper than raising dimension. The gap narrows with k (36x at
-k=8, 12x at k=1024) because salsa8's cost grows 26x from k=8 to k=1024 while
-salsa16's grows 8.4x. salsa8 at k=1024 ships.
+| config | k=128 | k=1024 | lat k=128 | lat k=1024 |
+|---|---|---|---|---|
+| salsa8 native | 24.6% | 71.1% | — | — |
+| **PCA-10 of salsa16** | 82.7% | **98.0%** | 2.1 ms | **7.8 ms** |
+| PCA-12 of salsa16 | 91.5% | 98.3% | 2.9 ms | 9.3 ms |
+| salsa16 native | 94.3% | 98.7% | 29.9 ms | 80.8 ms |
+| PCA-16 of salsa24 | 96.0% | 98.5% | 32.0 ms | 102.7 ms |
+| salsa24 native | 97.4% | 98.4% | 56.0 ms | 195.9 ms |
 
-## Fingerprint and metric for re-ranking
+- Depth-2 is where the dimensions separate: 55.8% at PCA-10 against 58.7% at
+  PCA-12, both at k=1024, where depth-1 differs by 0.3.
 
-Swept 13 fingerprints x 5 metrics on fixed candidate sets.
+- **Recall tracks retained variance, not source-model quality**, across
+  dimensions. It does *not* discriminate between bases at a fixed dimension:
+  refitting the PCA on a stratified sample raised retention from 98.4% to
+  99.1% at d=12 and moved recall by less than the sampling error. Breaks below
+  ~78% retention, where absolute dimension binds.
+- The corpus is **sorted by molecular size** (17 heavy atoms in shard 0, 35 in
+  shard 80), so a fit sampled from a prefix sees one band. That cost 30 points
+  of retained variance at d=8 and nothing measurable at d>=10.
+- **A bigger source compresses worse at a given d**, spreading information
+  wider: salsa16 collapses after component 9, salsa24 after 12, so salsa24 to
+  10 keeps only 89.6% and scores 61.0%.
+- **At matched d, compression beats training**: PCA-16 of salsa24 beats native
+  salsa16 by 1.7 points at k=128. A trained salsa10 would most likely lose to
+  PCA-10 of salsa16.
+- Effective dimensionality drives cost: at equal d the richer space is slower.
 
-- **Atom pairs beat Morgan**, replicated on both models: +1.2 points at depth 1
-  and +5.3 at depth 2 on salsa16.
-- **Width does not matter**: 512 bits equals 4096. Clashes disturb similarity
-  values but not the order of the top few. 512 bits is 60 GB at 1B.
-- **Morgan radius 2 is the optimum**, not 3 or 4. Larger radius over-specifies
-  and near-analogs stop sharing bits.
-- **Tanimoto**, not query-biased Tversky: identical at k=128, but Tversky loses
-  7 points at k=4096, where "covers the query" admits large molecules that
-  contain the query and much else. Tanimoto and Dice are order-equivalent by
-  construction, so they can never rank differently.
-- Fusing Morgan with atom pairs is **worse** than atom pairs alone.
+## Re-ranking fingerprint
+
+Swept 13 fingerprints x 5 metrics. **Atom pairs, 512 bits, Tanimoto.**
+
+- Atom pairs beat Morgan: +1.2 depth-1, +5.3 depth-2 on salsa16.
+- Width is irrelevant: 512 bits equals 4096, and is 60 GB at 1B.
+- Morgan radius 2 beats 3 and 4; larger over-specifies. Fusing the two is worse
+  than atom pairs alone, and non-uniform bit allocation loses to uniform.
+- Tanimoto over query-biased Tversky: equal at k=128, +7 at k=4096. Tanimoto
+  and Dice are order-equivalent by construction.
+- `countSimulation=False` generates 23% faster at equal recall.
+
+## Quantization is not worth it at this density
+
+Post-hoc scalar quantization of PCA-10, query in fp32: int8 costs 9.5 points at
+k=128 (83.3% to 73.8%), int4 costs 18. **Precision must beat the spacing of
+competitors, not the scale of the space.** Consecutive ranks near 128 differ by
+~3e-4 while int8 displaces a vector by 4.3e-3, fifteen ranks' worth; int12 is
+~1x the gap and int16 0.06x, so **int16 should be lossless and int8 is not**.
+Bits needed grow with library density. It also costs speed: int8 visits 32,056
+pages against fp32's 3,426, since a displaced query fails more bounds tests.
 
 ## Where query time goes
 
-At k=1024: 7.8 ms retrieve, 30 ms re-rank, 38 ms end to end. Re-ranking is
-dominated by SMILES parsing, which is why it runs on RDKit's thread pool
-(`MultithreadedSmilesMolSupplier`, 6.2x over `MolFromSmiles` in a loop).
+PCA-10, k=1024, in-tree 5.05 ms: scan 65%, page fetch 13.5%, node descent 13%,
+frontier heap 8.5%. Of the scan, the bounded max-heap insert is 7.7%.
 
-Both parsing and fingerprinting recompute per query something fixed at build
-time; a stored fingerprint column would remove ~29 of those 38 ms.
+A **page fetch costs ~355 ns at every page size from 2048 to 32768**, so it is
+address translation, not reading: a 14 GB mapping needs ~3.5M page-table
+entries and the query path touches unrelated addresses. A record scan costs
+8 ns. **One fetch is worth forty scans**, which is what sets the page size.
 
-## Cold index is 600x slower
+Re-ranking is 30 ms at k=1024, dominated by SMILES parsing; a stored
+fingerprint column removes nearly all of it and takes RDKit out of the query
+path.
 
-4,575 ms per query cold against 7.6 ms warm. The server faults the record file
-in at startup (53 s for 8.9 GB). This needs `MADV_SEQUENTIAL` first — with the
-`MADV_RANDOM` used for querying, the prefault is 7x slower.
+AVX-512 changes nothing (`-C target-cpu=native`: 7.68 ms either way). The scan
+runs at ~7 GB/s, near single-core memory bandwidth, so struct-of-arrays cannot
+help: it moves the same bytes.
 
-## Page bounding boxes
+## Index structure
 
-A per-axis box in each leaf page header skips pages without reading their
-records: **66% of visited pages at dim 8, 91% at dim 16**, worth about 1.4x.
-It did not narrow the gap between the two models — both gained ~1.6x.
+- **Cold is 600x warm** (4,575 ms vs 7.6 ms at k=1024). Startup prefault takes
+  53 s for 8.9 GB, but only with `MADV_SEQUENTIAL` first; against the
+  `MADV_RANDOM` used for querying it is 7x slower.
+- **The frontier bound must accumulate per axis.** Priority by distance to the
+  last split plane alone visits 8,233 pages at k=128 and discards 6,449 of
+  them; the distance to the whole cell visits 1,815 and discards 116. Worth
+  **2.0x at k=128 and 1.8x at k=1024**, with no format change.
+- **A bounded max-heap for the top k.** The sorted-vector insert was 3.9 ms of
+  14 ms at k=1024; the heap is 0.4 ms.
+- **Page bounding boxes** mattered under the loose frontier bound (66% of
+  visits skipped at dim 8). With the accumulated bound only 6% are left to
+  reject.
+- **Page size 16384 is optimal**, re-confirmed after the bound change: smaller
+  pages cut records scanned 9x but lose on fetches and a deeper tree (7.4M
+  nodes at 2048 against 863k at 16384).
+- **Node-level bounding boxes are not worth it.** They exist to avoid touching
+  pages, and the accumulated bound already removed those touches.
+- **Splitting on the widest axis** replaced cycling by depth: slightly faster,
+  identical recall, and it is what makes duplicate-heavy data buildable.
 
 ## Metrics that did not work
 
-MCS and Tanimoto averaged over the top 5 **do not discriminate between models**
-at this scale (1.19x and 1.28x, against 2.04x for GED recall). They average
-over all hits and regress toward the library's background similarity, which at
-161M is high: even a mediocre embedding returns molecules sharing half their
-atoms. GED recall is a threshold test against one target, so it amplifies.
+MCS and Tanimoto averaged over the top 5 do not separate models at this scale
+(1.19x and 1.28x against 2.04x for GED recall): they regress toward the
+library's background similarity, which at 161M is high.
 
-## The depth-2 cliff is probably a training artifact
+## Open model-side question
 
-Re-ranking recovers ~98% of the depth-1 ceiling but only ~62% of depth-2, in
-both models. SALSA's contrastive training uses only 1-edit pairs, so the loss
-never constrains the ordering of 2-edit and 3-edit neighbors. Open question on
-the model side.
+Re-ranking recovers ~98% of the depth-1 ceiling but only ~62% of depth-2 in
+every model. SALSA's contrastive training uses only 1-edit pairs, so the loss
+never constrains 2-edit ordering. Higher dimensions keep improving depth-2
+(54.1% at d=10, 60.3% at d=16), which suggests multi-GED training data pays.
 
 ## Measurement discipline
 
-Two mistakes made repeatedly, both easy to repeat:
-
-1. **Microbenchmarks overstated in-situ gains by 1.75x-2.5x, three times.**
-   Treat them as hypotheses; confirm in the server.
-2. **Cold vs warm page cache dominates everything.** Warm with the exact
-   queries that will be timed, not a fixed prefix.
-
-Also: one cluster node was silently clock-throttled to 500 MHz against 4100 on
-the others, making every timing on it meaningless. Check the machine before
-believing a regression.
+- **Cheap probes mispredicted the in-situ result five times**: depth-ordering
+  correlation on salsa24, quantization distance error, top-10 overlap in a
+  200k pool, AVX-512 width, and retained variance across bases. Triage only.
+- **Microbenchmarks overstated gains 1.75-2.5x, three times.**
+- **Warm with the exact queries to be timed**, not a fixed prefix.
+- **Fixing the dominant cost promotes the next one.** The scan was 31% of query
+  time and dismissed; after the frontier bound it was 65% and unchanged in
+  absolute terms. Shares are not conclusions.
+- **Check a new measurement against a known one.** A 57 ms reading against a
+  known 8.1 ms exposed a wrong query projection, not a slow index.
+- **Run the tests in debug too.** Release wrapped a `len() - 1` underflow to
+  `usize::MAX` and wrapped it back on read; debug caught it.
