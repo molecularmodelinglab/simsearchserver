@@ -1,18 +1,24 @@
-//! End-to-end behavior of the tree through its public API: build, flush,
-//! reopen, query, and agree with brute force.
+//! End-to-end behavior through the public API.
 
 use std::fs::File;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+
 use kd_tree::data::{CompoundIdentifier, CompoundRecord, Descriptor};
 use kd_tree::tree::{ImmutTree, NearestNeighbors, Tree, TreeConfig};
 
 static COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-/// A directory no other test will touch. Cargo runs tests in parallel, so a
-/// shared path makes them clobber each other.
+/// Seeded per test, so a failure can be reproduced from the test name alone.
+fn seeded(name: &str) -> StdRng {
+    return StdRng::seed_from_u64(name.bytes().map(u64::from).sum());
+}
+
+/// Cargo runs tests in parallel, so a shared path would make them collide.
 fn scratch_directory(name: &str) -> String {
     let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
     let mut path: PathBuf = std::env::temp_dir();
@@ -103,12 +109,14 @@ fn assert_is_true_knn(
     assert_eq!(got_ids, expected_ids, "tree returned a different set of records than brute force");
 }
 
-fn random_records(n: usize, desc_length: usize) -> Vec<CompoundRecord> {
-    return (0..n).map(|_| CompoundRecord::random(desc_length)).collect();
+fn random_records(rng: &mut StdRng, n: usize, desc_length: usize) -> Vec<CompoundRecord> {
+    return (0..n).map(|_| CompoundRecord::random(rng, desc_length)).collect();
 }
 
 #[test]
 fn builds_a_tree_across_page_splits() {
+
+    let mut rng = seeded("builds_a_tree_across_page_splits");
 
     let directory = scratch_directory("build");
 
@@ -118,12 +126,14 @@ fn builds_a_tree_across_page_splits() {
     let mut tree = Tree::force_create_with_config(config);
 
     for _ in 0..2000 {
-        tree.add_record(&CompoundRecord::random(8)).unwrap();
+        tree.add_record(&CompoundRecord::random(&mut rng, 8)).unwrap();
     }
 }
 
 #[test]
 fn finds_records_that_were_added_and_not_ones_that_were_not() {
+
+    let mut rng = seeded("finds_records_that_were_added_and_not_ones_that_were_not");
 
     for desc_length in [8, 12, 16] {
 
@@ -135,10 +145,10 @@ fn finds_records_that_were_added_and_not_ones_that_were_not() {
 
         let mut tree = Tree::force_create_with_config(config);
 
-        let target = CompoundRecord::random(desc_length);
+        let target = CompoundRecord::random(&mut rng, desc_length);
 
         for _ in 0..2000 {
-            tree.add_record(&CompoundRecord::random(desc_length)).unwrap();
+            tree.add_record(&CompoundRecord::random(&mut rng, desc_length)).unwrap();
         }
 
         assert!(!tree.record_in_tree(&target).unwrap(),
@@ -150,7 +160,7 @@ fn finds_records_that_were_added_and_not_ones_that_were_not() {
 
         // Still findable once later inserts have split its page.
         for _ in 0..2000 {
-            tree.add_record(&CompoundRecord::random(desc_length)).unwrap();
+            tree.add_record(&CompoundRecord::random(&mut rng, desc_length)).unwrap();
         }
 
         assert!(tree.record_in_tree(&target).unwrap(),
@@ -163,33 +173,54 @@ fn finds_records_that_were_added_and_not_ones_that_were_not() {
 #[test]
 fn returns_the_true_nearest_neighbors() {
 
-    // Guards page bounding boxes in particular
+    let mut rng = seeded("returns_the_true_nearest_neighbors");
+
+    // Catches a bound that prunes too hard, which loses a true neighbor.
     for desc_length in [8, 16] {
 
-        let records = random_records(4000, desc_length);
+        let records = random_records(&mut rng, 4000, desc_length);
         let tree = build_tree(&records, desc_length, "knn");
 
-        let mut pruned_any = false;
-
         for _ in 0..20 {
-            let query = Descriptor::random(desc_length);
+            let query = Descriptor::random(&mut rng, desc_length);
             let nn = tree.get_nearest_neighbors(&query, 10);
 
-            pruned_any |= nn.record_pages_pruned > 0;
             assert_is_true_knn(&nn, &records, &query, 10);
         }
+    }
+}
 
-        assert!(pruned_any,
-                "dim {}: no page was pruned, so this proves nothing about the bounds",
-                desc_length);
+/// Catches the opposite failure: bounds that are correct but do no work.
+#[test]
+fn the_bounds_avoid_most_of_the_records() {
+
+    let mut rng = seeded("the_bounds_avoid_most_of_the_records");
+
+    // Uniform data is the worst case; 4,000 records at dim 16 prunes nothing.
+    let desc_length = 8;
+    let records = random_records(&mut rng, 50_000, desc_length);
+    let tree = build_tree(&records, desc_length, "pruning");
+
+    for _ in 0..20 {
+        let query = Descriptor::random(&mut rng, desc_length);
+        let nn = tree.get_nearest_neighbors(&query, 10);
+
+        assert_is_true_knn(&nn, &records, &query, 10);
+
+        // Which bound rejected varies with the data; that work was avoided does not.
+        assert!(nn.records_scanned * 2 < records.len(),
+                "scanned {} of {} records, so the bounds are barely working",
+                nn.records_scanned, records.len());
     }
 }
 
 #[test]
 fn a_record_is_its_own_nearest_neighbor() {
 
+    let mut rng = seeded("a_record_is_its_own_nearest_neighbor");
+
     let desc_length = 8;
-    let records = random_records(3000, desc_length);
+    let records = random_records(&mut rng, 3000, desc_length);
     let tree = build_tree(&records, desc_length, "self");
 
     for record in records.iter().take(25) {
@@ -206,15 +237,77 @@ fn a_record_is_its_own_nearest_neighbor() {
 #[test]
 fn returns_every_record_when_k_exceeds_the_tree() {
 
+    let mut rng = seeded("returns_every_record_when_k_exceeds_the_tree");
+
     let desc_length = 8;
-    let records = random_records(40, desc_length);
+    let records = random_records(&mut rng, 40, desc_length);
     let tree = build_tree(&records, desc_length, "small");
 
-    let query = Descriptor::random(desc_length);
+    let query = Descriptor::random(&mut rng, desc_length);
     let nn = tree.get_nearest_neighbors(&query, 40);
 
     assert_eq!(nn.distances.len(), 40);
     assert_is_true_knn(&nn, &records, &query, 40);
+}
+
+#[test]
+fn returns_a_short_list_when_k_exceeds_the_record_count() {
+
+    let mut rng = seeded("returns_a_short_list_when_k_exceeds_the_record_count");
+
+    let desc_length = 8;
+    let records = random_records(&mut rng, 30, desc_length);
+    let tree = build_tree(&records, desc_length, "short");
+
+    let query = Descriptor::random(&mut rng, desc_length);
+    let nn = tree.get_nearest_neighbors(&query, 200);
+
+    assert_eq!(nn.distances.len(), 30, "asked for 200 of 30 records");
+    assert_is_true_knn(&nn, &records, &query, 30);
+}
+
+/// Build a tree, then overwrite the first byte of one of its files.
+fn corrupt_magic(name: &str, filename: &str) -> String {
+
+    let mut rng = seeded("corrupt_magic");
+
+    let directory = scratch_directory(name);
+
+    let mut config = TreeConfig::default();
+    config.directory = directory.clone();
+
+    let mut tree = Tree::force_create_with_config(config);
+    for _ in 0..200 {
+        tree.add_record(&CompoundRecord::random(&mut rng, 8)).unwrap();
+    }
+    tree.flush();
+
+    let path = format!("{}/{}", directory, filename);
+    let mut file = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+    file.write_all(b"X").unwrap();
+
+    return directory;
+}
+
+#[test]
+#[should_panic(expected = "not the file it was expected to be")]
+fn rejects_a_record_file_with_the_wrong_magic() {
+    let directory = corrupt_magic("badrecord", "record");
+    ImmutTree::read_from_directory(directory);
+}
+
+#[test]
+#[should_panic(expected = "not the file it was expected to be")]
+fn rejects_a_node_file_with_the_wrong_magic() {
+    let directory = corrupt_magic("badnode", "node");
+    ImmutTree::read_from_directory(directory);
+}
+
+#[test]
+#[should_panic(expected = "not the file it was expected to be")]
+fn rejects_a_database_with_the_wrong_magic() {
+    let directory = corrupt_magic("baddb", "db.db");
+    ImmutTree::read_from_directory(directory);
 }
 
 /// A fixed dataset rather than random ones
@@ -266,12 +359,14 @@ fn matches_brute_force_on_the_stored_fixture() {
 #[test]
 fn builds_and_searches_a_coarsely_quantized_space() {
 
+    let mut rng = seeded("builds_and_searches_a_coarsely_quantized_space");
+
     // Few distinct values per axis, which is what breaks a depth-cycling split.
     let desc_length = 8;
 
     let mut records: Vec<CompoundRecord> = Vec::new();
     for _ in 0..6000 {
-        let mut record = CompoundRecord::random(desc_length);
+        let mut record = CompoundRecord::random(&mut rng, desc_length);
         for value in record.descriptor.data.iter_mut() {
             *value = value.round();
         }
@@ -281,7 +376,7 @@ fn builds_and_searches_a_coarsely_quantized_space() {
     let tree = build_tree(&records, desc_length, "quantized");
 
     for _ in 0..10 {
-        let query = Descriptor::random(desc_length);
+        let query = Descriptor::random(&mut rng, desc_length);
         let nn = tree.get_nearest_neighbors(&query, 10);
 
         let (_, expected) = brute_force_top_k(&records, &query, 10);
