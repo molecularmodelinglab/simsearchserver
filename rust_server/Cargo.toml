@@ -8,6 +8,11 @@ members = [
 	"server",
 ]
 
+# Denied here rather than through RUSTFLAGS, which would also apply to
+# dependencies and fail the build on an upstream warning.
+[workspace.lints.rust]
+warnings = "deny"
+
 [profile.release-with-debug]
 inherits = "release"
 debug = true
