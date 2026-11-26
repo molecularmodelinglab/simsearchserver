@@ -1,13 +1,8 @@
-//! Vector nearest-neighbor search service over a kd-tree built by `builder`.
-//!
-//! Knows nothing about SMILES: callers send an embedded vector.
-//!
-//! - `GET  /health`
-//! - `GET  /nn/{k}/{v0,v1,..}`
-//! - `POST /nn/{k}` with body `[v0, ...]` or `{"descriptor": [...]}`, preferred
+//! Nearest-neighbor service over a kd-tree; callers send a vector, not SMILES.
 
 use kd_tree::tree::{ImmutTree, NearestNeighbors};
 use kd_tree::data::Descriptor;
+use kd_tree::fingerprints::{self, FingerprintStore};
 
 use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
@@ -35,8 +30,7 @@ struct Args {
     #[arg(short, long, default_value_t = 3000)]
     port: u16,
 
-    /// Address to bind. Defaults to loopback; set to 0.0.0.0 to accept
-    /// off-host connections.
+    /// Defaults to loopback; set 0.0.0.0 to accept off-host connections.
     #[arg(long, default_value = "127.0.0.1")]
     host: IpAddr,
 
@@ -45,18 +39,32 @@ struct Args {
     no_warm: bool,
 }
 
+/// What a request is answered from.
+struct State {
+    tree: ImmutTree,
+    fingerprints: Option<FingerprintStore>,
+}
+
 #[derive(Deserialize)]
 #[serde(untagged)]
 enum QueryBody {
     Bare(Vec<f32>),
-    Wrapped { descriptor: Vec<f32> },
+    Wrapped {
+        descriptor: Vec<f32>,
+        /// The query's fingerprint; without it hits stay in embedding order.
+        #[serde(default)]
+        fingerprint: Option<Vec<u8>>,
+        #[serde(default)]
+        num_neighbors: Option<usize>,
+    },
 }
 
 impl QueryBody {
-    fn into_vec(self) -> Vec<f32> {
+    fn into_parts(self) -> (Vec<f32>, Option<Vec<u8>>, Option<usize>) {
         match self {
-            QueryBody::Bare(v) => v,
-            QueryBody::Wrapped { descriptor } => descriptor,
+            QueryBody::Bare(v) => (v, None, None),
+            QueryBody::Wrapped { descriptor, fingerprint, num_neighbors } =>
+                (descriptor, fingerprint, num_neighbors),
         }
     }
 }
@@ -66,6 +74,19 @@ struct Hit {
     identifier: String,
     smiles: String,
     distance: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    similarity: Option<f32>,
+}
+
+/// Microseconds; `insert` is counted inside `scan`, the remainder of `total` is the heap.
+#[derive(Serialize)]
+struct Timing {
+    page_fetch: f64,
+    scan: f64,
+    insert: f64,
+    node: f64,
+    rerank: f64,
+    total: f64,
 }
 
 #[derive(Serialize)]
@@ -74,6 +95,8 @@ struct QueryResponse {
     pages_visited: usize,
     pages_pruned: usize,
     nodes_visited: usize,
+    records_scanned: usize,
+    timing: Timing,
     hits: Vec<Hit>,
 }
 
@@ -82,6 +105,8 @@ struct HealthResponse {
     status: &'static str,
     desc_length: usize,
     num_records: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fingerprint_bytes: Option<usize>,
     num_internal_nodes: usize,
 }
 
@@ -120,8 +145,8 @@ fn json_response(status: StatusCode, body: String) -> Response<Body> {
         .expect("response with valid status and headers");
 }
 
-async fn handle_request(req: Request<Body>, tree: Arc<ImmutTree>) -> Result<Response<Body>, Infallible> {
-    let result = route(req, tree).await;
+async fn handle_request(req: Request<Body>, state: Arc<State>) -> Result<Response<Body>, Infallible> {
+    let result = route(req, state).await;
 
     let response = match result {
         Ok(response) => response,
@@ -131,7 +156,7 @@ async fn handle_request(req: Request<Body>, tree: Arc<ImmutTree>) -> Result<Resp
     return Ok(response);
 }
 
-async fn route(req: Request<Body>, tree: Arc<ImmutTree>) -> Result<Response<Body>, ApiError> {
+async fn route(req: Request<Body>, state: Arc<State>) -> Result<Response<Body>, ApiError> {
     let path = req.uri().path().to_string();
 
     // A path starts with '/', so the first split segment is always empty.
@@ -143,9 +168,9 @@ async fn route(req: Request<Body>, tree: Arc<ImmutTree>) -> Result<Response<Body
     };
 
     match (req.method(), head) {
-        (&Method::GET, "health") => handle_health(&tree),
-        (&Method::GET, "nn") => handle_nn_get(&segments, &tree),
-        (&Method::POST, "nn") => handle_nn_post(req, &segments, &tree).await,
+        (&Method::GET, "health") => handle_health(&state),
+        (&Method::GET, "nn") => handle_nn_get(&segments, &state),
+        (&Method::POST, "nn") => handle_nn_post(req, &segments, &state).await,
         (_, "health") | (_, "nn") => Err(ApiError {
             status: StatusCode::METHOD_NOT_ALLOWED,
             message: format!("method {} not allowed for /{}", req.method(), head),
@@ -157,12 +182,13 @@ async fn route(req: Request<Body>, tree: Arc<ImmutTree>) -> Result<Response<Body
     }
 }
 
-fn handle_health(tree: &ImmutTree) -> Result<Response<Body>, ApiError> {
+fn handle_health(state: &State) -> Result<Response<Body>, ApiError> {
     let body = HealthResponse {
         status: "ok",
-        desc_length: tree.config.desc_length,
-        num_records: tree.database.num_entries(),
-        num_internal_nodes: tree.node_handler.len(),
+        desc_length: state.tree.config.desc_length,
+        num_records: state.tree.database.num_entries(),
+        num_internal_nodes: state.tree.node_handler.len(),
+        fingerprint_bytes: state.fingerprints.as_ref().map(|s| s.bytes_per_record()),
     };
 
     let body = serde_json::to_string(&body)
@@ -171,7 +197,7 @@ fn handle_health(tree: &ImmutTree) -> Result<Response<Body>, ApiError> {
     return Ok(json_response(StatusCode::OK, body));
 }
 
-fn handle_nn_get(segments: &[&str], tree: &ImmutTree) -> Result<Response<Body>, ApiError> {
+fn handle_nn_get(segments: &[&str], state: &State) -> Result<Response<Body>, ApiError> {
     let k = match segments.get(1) {
         Some(s) => parse_k(s)?,
         None => return Err(ApiError::bad_request(
@@ -188,13 +214,13 @@ fn handle_nn_get(segments: &[&str], tree: &ImmutTree) -> Result<Response<Body>, 
 
     let values = parse_descriptor_csv(vector_str)?;
 
-    return run_query(values, k, tree);
+    return run_query(values, k, None, None, state);
 }
 
 async fn handle_nn_post(
     req: Request<Body>,
     segments: &[&str],
-    tree: &ImmutTree,
+    state: &State,
 ) -> Result<Response<Body>, ApiError> {
     let k = match segments.get(1) {
         Some(s) => parse_k(s)?,
@@ -219,7 +245,9 @@ async fn handle_nn_post(
         ))
     })?;
 
-    return run_query(parsed.into_vec(), k, tree);
+    let (values, fingerprint, num_neighbors) = parsed.into_parts();
+
+    return run_query(values, k, fingerprint, num_neighbors, state);
 }
 
 fn parse_k(s: &str) -> Result<usize, ApiError> {
@@ -255,8 +283,14 @@ fn parse_descriptor_csv(s: &str) -> Result<Vec<f32>, ApiError> {
     return Ok(values);
 }
 
-fn run_query(values: Vec<f32>, k: usize, tree: &ImmutTree) -> Result<Response<Body>, ApiError> {
-    let expected = tree.config.desc_length;
+fn run_query(
+    values: Vec<f32>,
+    k: usize,
+    fingerprint: Option<Vec<u8>>,
+    num_neighbors: Option<usize>,
+    state: &State,
+) -> Result<Response<Body>, ApiError> {
+    let expected = state.tree.config.desc_length;
 
     if values.len() != expected {
         return Err(ApiError::bad_request(format!(
@@ -273,31 +307,71 @@ fn run_query(values: Vec<f32>, k: usize, tree: &ImmutTree) -> Result<Response<Bo
         )));
     }
 
+    if let Some(bytes) = fingerprint.as_ref() {
+        match state.fingerprints.as_ref() {
+            None => return Err(ApiError::bad_request(
+                "a query fingerprint was sent but this index has no fingerprint file")),
+            Some(store) if store.bytes_per_record() != bytes.len() =>
+                return Err(ApiError::bad_request(format!(
+                    "query fingerprint is {} bytes but this index stores {}",
+                    bytes.len(), store.bytes_per_record()))),
+            Some(_) => {},
+        }
+    }
+
     let descriptor = Descriptor { data: values, length: expected };
 
-    let neighbors = tree.get_nearest_neighbors(&descriptor, k);
+    let neighbors = state.tree.get_nearest_neighbors(&descriptor, k);
 
-    let body = serde_json::to_string(&to_response(neighbors))
+    let body = serde_json::to_string(
+        &to_response(neighbors, fingerprint.as_deref(), num_neighbors, state))
         .map_err(|e| ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, message: e.to_string() })?;
 
     return Ok(json_response(StatusCode::OK, body));
 }
 
-fn to_response(neighbors: NearestNeighbors) -> QueryResponse {
+fn to_response(
+    neighbors: NearestNeighbors,
+    query: Option<&[u8]>,
+    num_neighbors: Option<usize>,
+    state: &State,
+) -> QueryResponse {
     let mut hits: Vec<Hit> = Vec::new();
+    let started = std::time::Instant::now();
 
-    for (distance, record) in neighbors.distances.iter().zip(neighbors.records.iter()) {
-        let record = match record {
+    for i in 0..neighbors.distances.len() {
+        let record = match &neighbors.records[i] {
             Some(r) => r,
             // Index and SMILES database disagree; skip rather than fail the query.
             None => continue,
         };
 
+        let similarity = match (query, state.fingerprints.as_ref()) {
+            (Some(query), Some(store)) => store.get(neighbors.indexes[i])
+                .map(|stored| fingerprints::tanimoto(query, stored)),
+            _ => None,
+        };
+
         hits.push(Hit {
             identifier: record.compound_identifier.to_string(),
             smiles: record.smiles.clone(),
-            distance: *distance,
+            distance: neighbors.distances[i],
+            similarity,
         });
+    }
+
+    if query.is_some() {
+        // Descending similarity, with embedding distance breaking ties.
+        hits.sort_by(|a, b| {
+            b.similarity.unwrap_or(0.0).total_cmp(&a.similarity.unwrap_or(0.0))
+                .then(a.distance.total_cmp(&b.distance))
+        });
+    }
+
+    let rerank_micros = started.elapsed().as_nanos() as f64 / 1000.0;
+
+    if let Some(n) = num_neighbors {
+        hits.truncate(n);
     }
 
     return QueryResponse {
@@ -305,6 +379,15 @@ fn to_response(neighbors: NearestNeighbors) -> QueryResponse {
         pages_visited: neighbors.record_pages_visited,
         pages_pruned: neighbors.record_pages_pruned,
         nodes_visited: neighbors.nodes_visited,
+        records_scanned: neighbors.records_scanned,
+        timing: Timing {
+            page_fetch: neighbors.page_fetch_nanos as f64 / 1000.0,
+            scan: neighbors.scan_nanos as f64 / 1000.0,
+            insert: neighbors.insert_nanos as f64 / 1000.0,
+            node: neighbors.node_nanos as f64 / 1000.0,
+            rerank: rerank_micros,
+            total: neighbors.total_nanos as f64 / 1000.0,
+        },
         hits,
     };
 }
@@ -314,7 +397,7 @@ pub async fn main() {
     let args = Args::parse();
 
     println!("Loading tree from {} ...", &args.dirname);
-    let tree = Arc::new(ImmutTree::read_from_directory(args.dirname.clone()));
+    let tree = ImmutTree::read_from_directory(args.dirname.clone());
     println!(
         "Loaded {} records, {} internal nodes, descriptor length {}",
         tree.database.num_entries(),
@@ -322,8 +405,26 @@ pub async fn main() {
         tree.config.desc_length,
     );
 
+    let fingerprint_path = fingerprints::path_in(&args.dirname);
+    let store = match std::path::Path::new(&fingerprint_path).exists() {
+        false => {
+            println!("No fingerprint file; hits will be served in embedding order");
+            None
+        },
+        true => {
+            let store = FingerprintStore::open(&fingerprint_path, tree.database.num_entries())
+                .expect("could not open the fingerprint file");
+            println!("Loaded {} fingerprints of {} bytes", store.len(), store.bytes_per_record());
+            Some(store)
+        },
+    };
+
     if !args.no_warm {
         let started = std::time::Instant::now();
+
+        if let Some(store) = store.as_ref() {
+            let _ = store.warm();
+        }
 
         match tree.record_handler.warm() {
             Ok(bytes) => {
@@ -336,12 +437,14 @@ pub async fn main() {
         }
     }
 
+    let state = Arc::new(State { tree, fingerprints: store });
+
     let make_svc = make_service_fn(move |_conn| {
-        let tree = Arc::clone(&tree);
+        let state = Arc::clone(&state);
 
         async move {
             Ok::<_, Infallible>(service_fn(move |req| {
-                handle_request(req, Arc::clone(&tree))
+                handle_request(req, Arc::clone(&state))
             }))
         }
     });
