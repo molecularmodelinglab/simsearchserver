@@ -6,7 +6,7 @@ embeddings, backed by a disk-resident kd-tree. Implements the approach in
 
 ## Architecture
 
-Three processes. The kd-tree server knows nothing about chemistry — it searches
+Two processes. The kd-tree server knows nothing about chemistry — it searches
 vectors. All chemistry (tokenization, canonicalization, embedding) lives in
 [SALSA](https://github.com/molecularmodelinglab/SALSA).
 
@@ -20,17 +20,16 @@ browser ──► simsearch_api ──► salsa model, in process (SMILES -> des
 | `rust_server/kd_tree` | the index: disk-paged kd-tree library |
 | `rust_server/builder` | builds an index from parquet or CSV embedding files |
 | `rust_server/server` | HTTP vector search over a built index |
-| `salsa_server` | embeds a SMILES string via the SALSA model |
 | `simsearch_api` | query service: embeds, projects, fingerprints, asks the index |
 | `web` | React frontend with Ketcher and RDKit-JS depiction |
 
-The web UI embeds its query first, then sends the **vector** to the kd-tree
-server. The kd-tree server never calls out to the embedding service.
+The query service embeds and projects first, then sends the **descriptor** to
+the kd-tree server, which never calls back out.
 
-Retrieval and ranking are separate: the index returns `MAX_NEIGHBORS`
-candidates and re-ranks them by atom-pair Tanimoto against its stored column,
-similarity before showing `NUM_NEIGHBORS`. The embedding retrieves well and
-ranks poorly, so this is worth roughly 3x in retrieval accuracy.
+Retrieval and ranking are separate: the index retrieves `max_neighbors`
+candidates and re-ranks them by atom-pair Tanimoto against its stored
+fingerprint column before serving `num_neighbors`. The embedding retrieves well
+and ranks poorly, so this is worth roughly 3x in retrieval accuracy.
 
 ## Install
 
@@ -169,7 +168,6 @@ threadpool, so prefer threads over workers.
 
 | Variable | Default | Used by |
 |---|---|---|
-| `SALSA_MODEL` | `salsa16` | `salsa_server` — a registry name (`salsa8`/`salsa16`/`salsa24`/`salsa32`) or a path |
 | `SIMSEARCH_API_CONFIG` | — | the query service's config file, required |
 | `HF_HOME` | — | model download cache |
 
@@ -212,14 +210,15 @@ at it and proxy `/api`. In development `npm run dev` proxies `/api` to port
 
 ## HTTP API
 
-`salsa_server` — SMILES travels in the body or query string, never the path,
+`simsearch_api` — SMILES travels in the query string or body, never the path,
 since SMILES contain `/` and `#`:
 
 ```bash
-curl -X POST localhost:5000/smiles/salsa16 -H 'Content-Type: application/json' \
-     -d '{"smiles":"C/C=C/C(=O)Oc1ccccc1"}'
-curl -G localhost:5000/smiles/salsa16 --data-urlencode 'smiles=CC#N'
-curl localhost:5000/health
+curl -G localhost:8000/api/search --data-urlencode 'smiles=CC#N' -d n=8
+curl -X POST localhost:8000/api/search -H 'Content-Type: application/json' \
+     -d '{"smiles":"C/C=C/C(=O)Oc1ccccc1","num_neighbors":8}'
+curl localhost:8000/api/libraries
+curl localhost:8000/api/health
 ```
 
 `rust_server` — a query vector must match the index's `desc_length`:

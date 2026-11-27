@@ -34,7 +34,7 @@ Repository = "https://github.com/molecularmodelinglab/simsearchserver"
 Paper = "https://arxiv.org/abs/2402.07970"
 
 [tool.setuptools]
-packages = ["simsearch", "simsearch_api", "salsa_server", "salsa_server.modeling"]
+packages = ["simsearch", "simsearch_api"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
