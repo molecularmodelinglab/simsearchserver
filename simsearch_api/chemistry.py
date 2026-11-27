@@ -16,7 +16,7 @@ FINGERPRINT_BITS = 512
 
 
 class InvalidSmiles(Exception):
-    """A SMILES RDKit could not parse."""
+    """A query the model cannot embed, with a reason worth showing."""
 
 
 class Chemistry:
@@ -24,8 +24,10 @@ class Chemistry:
 
     def __init__(self, settings):
         from salsa_lit.api.inference import embed_smiles, load_model
+        from salsa_lit.constants import MAX_SMI_LEN
 
         self._embed_smiles = embed_smiles
+        self.max_smiles_length = MAX_SMI_LEN
         self.model_name = settings["model"]
         self.revision = settings["revision"]
         self.device = settings["device"]
@@ -41,12 +43,22 @@ class Chemistry:
         self.dim = len(self.embed("CCO"))
 
     def parse(self, smiles):
-        """A molecule, or `InvalidSmiles`."""
+        """A molecule the model can embed, or `InvalidSmiles` saying why not."""
+
+        if len(smiles) > self.max_smiles_length:
+            raise InvalidSmiles(
+                f"SMILES is {len(smiles)} characters; this model embeds up to "
+                f"{self.max_smiles_length}")
 
         molecule = Chem.MolFromSmiles(smiles)
 
         if molecule is None:
             raise InvalidSmiles(f"could not parse {smiles!r} as a molecule")
+
+        if len(Chem.GetMolFrags(molecule)) > 1:
+            raise InvalidSmiles(
+                "this is a multi-fragment structure, such as a salt or mixture; "
+                "search the parent structure on its own")
 
         return molecule
 

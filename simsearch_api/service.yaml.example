@@ -1,6 +1,5 @@
 # Adding or changing a library is an edit here, never in code.
-host: 127.0.0.1
-port: 8000
+# Binding is uvicorn's --host and --port, not this file.
 
 embedding:
   model: salsa16
@@ -12,7 +11,7 @@ cache:
   max_entries: 5000
 
 limits:
-  max_smiles_length: 400
+  max_smiles_length: 150
   max_num_neighbors: 96
 
 libraries:

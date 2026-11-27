@@ -99,9 +99,11 @@ async def _search(smiles, library_name, num_neighbors):
     if not smiles:
         raise HTTPException(400, "no SMILES supplied")
 
-    if len(smiles) > limits["max_smiles_length"]:
+    longest = min(limits["max_smiles_length"], state.chemistry.max_smiles_length)
+
+    if len(smiles) > longest:
         raise HTTPException(400, f"SMILES is {len(smiles)} characters, "
-                                 f"the limit is {limits['max_smiles_length']}")
+                                 f"the limit is {longest}")
 
     library = _library_for(library_name)
     wanted = num_neighbors or library.num_neighbors
