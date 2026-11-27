@@ -3,12 +3,16 @@ let pending = null;
 
 export function rdkit() {
   if (!pending) {
-    pending = window
-      .initRDKitModule({ locateFile: () => '/RDKit_minimal.wasm' })
-      .catch((error) => {
-        pending = null;
-        throw error;
-      });
+    pending = (async () => {
+      if (typeof window.initRDKitModule !== 'function') {
+        throw new Error('RDKit did not load');
+      }
+
+      return window.initRDKitModule({ locateFile: () => '/RDKit_minimal.wasm' });
+    })().catch((error) => {
+      pending = null;
+      throw error;
+    });
   }
 
   return pending;
@@ -43,6 +47,25 @@ export async function depict(smiles, { width, height }) {
     cache.set(key, svg);
 
     return svg;
+  } finally {
+    molecule.delete();
+  }
+}
+
+/**
+ * Canonical SMILES from this RDKit build, so two strings for the same molecule
+ * compare equal. Both sides must come from here: canonical forms can differ
+ * between RDKit versions, so the server's canonical SMILES is not comparable.
+ */
+export function canonicalize(module, smiles) {
+  const molecule = module.get_mol(smiles);
+
+  if (!molecule) {
+    return null;
+  }
+
+  try {
+    return molecule.get_smiles();
   } finally {
     molecule.delete();
   }

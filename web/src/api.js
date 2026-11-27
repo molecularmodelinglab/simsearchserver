@@ -1,10 +1,36 @@
 // Relative paths only, so nginx or the service can serve this build.
+
+/** FastAPI sends `detail` as a string, or as a list of validation errors. */
+function describe(body, path, status) {
+  const detail = body?.detail;
+
+  if (typeof detail === 'string') {
+    return detail;
+  }
+
+  if (Array.isArray(detail) && detail.length) {
+    return detail.map((item) => {
+      const field = item.loc?.[item.loc.length - 1];
+      return field ? `${field}: ${item.msg}` : item.msg;
+    }).join('; ');
+  }
+
+  return `${path} returned ${status}`;
+}
+
 async function json(path, options) {
-  const response = await fetch(path, options);
+  let response;
+
+  try {
+    response = await fetch(path, options);
+  } catch {
+    throw new Error('Could not reach the search service. Is it running?');
+  }
+
   const body = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(body.detail || `${path} returned ${response.status}`);
+    throw new Error(describe(body, path, response.status));
   }
 
   return body;

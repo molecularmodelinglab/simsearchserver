@@ -195,7 +195,12 @@ async def search_post(body: SearchBody):
 async def libraries():
     """What can be searched, for the selector and its description."""
     return {"libraries": [library.describe() for library in state.libraries.values()],
-            "default": next(iter(state.libraries), None)}
+            "default": next(iter(state.libraries), None),
+            "limits": {
+                "max_num_neighbors": state.config["limits"]["max_num_neighbors"],
+                "max_smiles_length": min(state.config["limits"]["max_smiles_length"],
+                                         state.chemistry.max_smiles_length),
+            }}
 
 
 @app.get("/api/health")

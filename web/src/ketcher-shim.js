@@ -10,3 +10,9 @@ if (typeof window !== 'undefined' && typeof window.require === 'undefined') {
     throw new Error(`unsupported require(${name})`);
   };
 }
+
+// Ketcher's bundled Node polyfills read `process`. The production build
+// resolves those references, the dev server does not, so dev gets a stub.
+if (import.meta.env.DEV && typeof globalThis.process === 'undefined') {
+  globalThis.process = { env: {}, browser: true, nextTick: (fn, ...args) => queueMicrotask(() => fn(...args)) };
+}

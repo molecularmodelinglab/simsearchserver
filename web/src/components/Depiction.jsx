@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { depict } from '../rdkit';
 
-export default function Depiction({ smiles, width = 190, height = 150 }) {
+/**
+ * `width`/`height` set the drawing's resolution and aspect; the box itself is
+ * sized by CSS, and the SVG scales to fill it.
+ */
+export default function Depiction({ smiles, width = 188, height = 150, className = '' }) {
   const [svg, setSvg] = useState(null);
   const [failed, setFailed] = useState(false);
 
@@ -19,20 +23,22 @@ export default function Depiction({ smiles, width = 190, height = 150 }) {
     };
   }, [smiles, width, height]);
 
+  const style = { aspectRatio: `${width} / ${height}` };
+
   if (failed) {
-    return <div className="depiction depiction-failed" style={{ width, height }}>
+    return <div className={`depiction depiction-failed ${className}`} style={style}>
       no structure
     </div>;
   }
 
   if (!svg) {
-    return <div className="depiction skeleton" style={{ width, height }} />;
+    return <div className={`depiction skeleton ${className}`} style={style} />;
   }
 
   return (
     <div
-      className="depiction"
-      style={{ width, height }}
+      className={`depiction ${className}`}
+      style={style}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   );

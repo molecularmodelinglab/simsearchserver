@@ -3,9 +3,9 @@ import Depiction from './Depiction';
 import { rdkit } from '../rdkit';
 
 const SHOWN = [
-  ['MW', ['amw', 'exactmw'], (v) => v.toFixed(2)],
-  ['LogP', ['CrippenClogP'], (v) => v.toFixed(2)],
-  ['TPSA', ['tpsa'], (v) => v.toFixed(2)],
+  ['MW', ['amw', 'exactmw'], (v) => v.toFixed(1)],
+  ['cLogP', ['CrippenClogP'], (v) => v.toFixed(2)],
+  ['TPSA', ['tpsa'], (v) => v.toFixed(1)],
   ['HBA', ['NumHBA', 'lipinskiHBA'], (v) => String(v)],
   ['HBD', ['NumHBD', 'lipinskiHBD'], (v) => String(v)],
   ['Rot. bonds', ['NumRotatableBonds'], (v) => String(v)],
@@ -50,9 +50,9 @@ export default function QueryPanel({ smiles, canonical }) {
   }, [smiles]);
 
   return (
-    <div className="query-panel">
-      <div className="query-label">Query</div>
-      <Depiction smiles={smiles} width={200} height={160} />
+    <section className="panel query-panel" aria-label="Query">
+      <h2 className="panel-label">Query</h2>
+      <Depiction smiles={smiles} width={240} height={176} className="query-depiction" />
       <code className="query-smiles" title={canonical || smiles}>{canonical || smiles}</code>
       {properties.length > 0 && (
         <dl className="query-props">
@@ -64,6 +64,6 @@ export default function QueryPanel({ smiles, canonical }) {
           ))}
         </dl>
       )}
-    </div>
+    </section>
   );
 }

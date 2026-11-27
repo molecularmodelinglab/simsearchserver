@@ -1,9 +1,19 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SmallSA: Chemical Similarity Calculator</title>
+    <title>SmallSA · Chemical similarity search</title>
+    <meta name="description" content="Find a molecule, or its nearest neighbors, in billion-scale chemical libraries in milliseconds." />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <script>
+      // Set before first paint, so a saved dark theme does not flash light.
+      try {
+        if (localStorage.getItem('smallsa-theme') === 'dark') {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      } catch (e) {}
+    </script>
     <script defer src="/RDKit_minimal.js"></script>
   </head>
   <body>

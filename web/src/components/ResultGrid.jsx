@@ -2,31 +2,43 @@ import { useEffect, useState } from 'react';
 import ResultCard from './ResultCard';
 
 // Cards mount in batches so the first row appears before the last is drawn.
-const BATCH = 8;
+// The parent remounts this grid (via `key`) for each new result set, so the
+// batching restarts from the first row rather than from the old count.
+const BATCH = 12;
 
-export default function ResultGrid({ hits, onProgress }) {
+export default function ResultGrid({ hits, sort, exact }) {
   const [shown, setShown] = useState(BATCH);
 
   useEffect(() => {
-    setShown(BATCH);
-  }, [hits]);
-
-  useEffect(() => {
     if (shown >= hits.length) {
-      onProgress?.(hits.length);
-      return;
+      return undefined;
     }
 
-    onProgress?.(shown);
     const timer = setTimeout(() => setShown((n) => n + BATCH), 16);
 
     return () => clearTimeout(timer);
-  }, [shown, hits, onProgress]);
+  }, [shown, hits.length]);
 
   return (
     <div className="grid">
-      {hits.slice(0, shown).map((hit) => (
-        <ResultCard key={hit.identifier + hit.smiles} hit={hit} />
+      {hits.slice(0, shown).map((hit, i) => (
+        <ResultCard
+          key={hit.identifier + hit.smiles}
+          hit={hit}
+          rank={i + 1}
+          sort={sort}
+          exact={exact.has(hit.identifier)}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function SkeletonGrid({ count }) {
+  return (
+    <div className="grid" aria-hidden="true">
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} className="result skeleton-card" />
       ))}
     </div>
   );
