@@ -53,7 +53,9 @@ impl ImmutTree {
     pub fn read_from_directory(directory_name: String) -> Self {
 
         let config_filename = directory_name.clone() + "/config.yaml";
-        let config = TreeConfig::from_file(config_filename);
+        let mut config = TreeConfig::from_file(config_filename);
+
+        config.directory = directory_name.clone();
 
         config.check_format(&directory_name);
 
@@ -324,9 +326,16 @@ pub struct TreeConfig {
     pub num_records: Option<usize>,
     pub cache_limit: Option<f32>,
     pub format_version: Option<u32>,
+    #[serde(default = "now")]
+    pub built_at: String,
 }
 
 
+
+/// UTC, to the second, so one index's date can be compared with another's.
+fn now() -> String {
+    return chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+}
 
 impl TreeConfig {
 
@@ -338,6 +347,7 @@ impl TreeConfig {
             num_records: None,
             cache_limit: None,
             format_version: Some(layout::FORMAT_VERSION),
+            built_at: now(),
         }
     }
 
@@ -560,10 +570,11 @@ impl Tree {
     pub fn read_from_directory(directory_name: String) -> Self {
 
         let config_filename = directory_name.clone() + "/config.yaml";
-        let config = TreeConfig::from_file(config_filename);
+        let mut config = TreeConfig::from_file(config_filename);
+
+        config.directory = directory_name.clone();
 
         config.check_format(&directory_name);
-        dbg!(&config);
 
         let node_filename = config.get_node_filename();
         let record_filename = config.get_record_filename();
@@ -649,6 +660,7 @@ impl Tree {
     fn new(config: TreeConfig) -> Self {
         let mut config = config;
         config.format_version = Some(layout::FORMAT_VERSION);
+        config.built_at = now();
 
         let record_filename = config.get_record_filename();
         let config_filename = config.get_config_filename();

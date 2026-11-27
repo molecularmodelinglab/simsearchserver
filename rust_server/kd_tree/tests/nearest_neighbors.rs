@@ -267,6 +267,40 @@ fn returns_a_short_list_when_k_exceeds_the_record_count() {
     assert_is_true_knn(&tree, &nn, &records, &query, 30);
 }
 
+#[test]
+fn an_index_still_opens_after_it_is_moved() {
+
+    let mut rng = seeded("moved");
+    let desc_length = 8;
+    let records = random_records(&mut rng, 400, desc_length);
+
+    let built_at = scratch_directory("moved_from");
+    let opened_at = scratch_directory("moved_to");
+
+    let mut config = TreeConfig::default();
+    config.desc_length = desc_length;
+    config.directory = built_at.clone();
+
+    let mut tree = Tree::force_create_with_config(config);
+    for record in &records {
+        tree.add_record(record).unwrap();
+    }
+    tree.flush();
+    drop(tree);
+
+    // The path written into config.yaml no longer exists.
+    std::fs::rename(&built_at, &opened_at).expect("could not move the index");
+
+    let moved = ImmutTree::read_from_directory(opened_at);
+    assert!(!moved.config.built_at.is_empty(), "a built index should record its date");
+
+    let query = Descriptor::random(&mut rng, desc_length);
+    let nn = moved.get_nearest_neighbors(&query, 5);
+
+    assert_eq!(nn.distances.len(), 5, "a moved index should still answer");
+    assert_is_true_knn(&moved, &nn, &records, &query, 5);
+}
+
 /// Build a tree, then overwrite the first byte of one of its files.
 fn corrupt_magic(name: &str, filename: &str) -> String {
 

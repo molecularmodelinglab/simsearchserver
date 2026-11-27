@@ -23,6 +23,7 @@ class Library:
         self.desc_length = None
         self.num_records = None
         self.fingerprint_bytes = None
+        self.built_at = None
         self.digest = None
         self._mean = None
         self._components = None
@@ -35,6 +36,7 @@ class Library:
         self.desc_length = health["desc_length"]
         self.num_records = health["num_records"]
         self.fingerprint_bytes = health.get("fingerprint_bytes")
+        self.built_at = health.get("built_at")
 
         transform = await self._get(client, "/transform")
 
@@ -100,5 +102,6 @@ class Library:
             "num_records": self.num_records,
             "desc_length": self.desc_length,
             "has_fingerprints": bool(self.fingerprint_bytes),
+            "built_at": self.built_at,
             "transform_digest": self.digest,
         }

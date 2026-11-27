@@ -26,7 +26,10 @@ export default function Options({
           ))}
         </select>
         {chosen?.num_records ? (
-          <small>{chosen.num_records.toLocaleString()} compounds</small>
+          <small>
+            {chosen.num_records.toLocaleString()} compounds
+            {chosen.built_at && ` · indexed ${chosen.built_at.slice(0, 10)}`}
+          </small>
         ) : null}
       </label>
 

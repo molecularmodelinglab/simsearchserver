@@ -40,6 +40,7 @@ def index_facts(directory):
         "descriptor_length": built.get("desc_length"),
         "record_page_length": built.get("record_page_length"),
         "record_count": database_records(directory),
+        "built_at": built.get("built_at"),
     }
 
 
@@ -102,6 +103,7 @@ def finalize(config):
     source_records = sum(pq.ParquetFile(p).metadata.num_rows for p in sources)
 
     resolved = {
+        "built_at": facts["built_at"],
         "format_version": facts["format_version"],
         "descriptor_length": facts["descriptor_length"],
         "record_page_length": facts["record_page_length"],

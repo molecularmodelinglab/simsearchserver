@@ -177,6 +177,7 @@ struct HealthResponse {
     num_records: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     fingerprint_bytes: Option<usize>,
+    built_at: String,
     has_transform: bool,
     num_internal_nodes: usize,
 }
@@ -261,6 +262,7 @@ fn handle_health(state: &State) -> Result<Response<Body>, ApiError> {
         num_records: state.tree.database.num_entries(),
         num_internal_nodes: state.tree.node_handler.len(),
         fingerprint_bytes: state.fingerprints.as_ref().map(|s| s.bytes_per_record()),
+        built_at: state.tree.config.built_at.clone(),
         has_transform: state.transform.is_some(),
     };
 

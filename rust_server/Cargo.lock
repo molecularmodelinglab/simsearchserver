@@ -694,6 +694,7 @@ dependencies = [
  "ascii",
  "assert_approx_eq",
  "byteorder",
+ "chrono",
  "kdam",
  "memmap2",
  "rand",
