@@ -121,6 +121,12 @@ in-tree 5.05 to 3.93 ms. Together **k=1024 went 7.76 to 4.46 ms (43%)**, k=128
   against 8 ms in-tree — one disk read per hit, 1,024 of them. Warmed, 6-21 ms.
 - Prefaulting all 35.5 GB takes **12 s** on an uncontended `/work`. A 377 s
   reading was NFS contention.
+- **Hits are not deduplicated, and need not be.** 33.7% of the corpus carries
+  stereochemistry, and siblings are separate records with identical descriptors
+  and identical atom-pair similarity, so they tie. Measured over 500 queries at
+  k=1024 serving 8: 1.0% of queries return any sibling pair, 0.12% of served
+  slots, never a group above 2 (`scripts/stereo_duplicates.py`). Stereoisomers
+  are separately purchasable, so collapsing them would hide real compounds.
 
 ## On the production host
 

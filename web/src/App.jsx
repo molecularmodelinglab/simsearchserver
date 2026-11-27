@@ -138,6 +138,14 @@ export default function App() {
 
     try {
       const body = await search({ smiles: trimmed, library: lib, n });
+
+      // The server searches what it can and says so; here that is worth refusing.
+      if (body.query?.note) {
+        setError(`${body.query.note}.`);
+        setAsked(null);
+        return;
+      }
+
       setResult({ ...body, requested: n });
       setSearchId((id) => id + 1);
     } catch (e) {

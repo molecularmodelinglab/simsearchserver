@@ -60,7 +60,7 @@ def prepare(smiles_list, chemistry, blank_error="no SMILES supplied"):
             row.error = str(error)
             continue
 
-        key = row.prepared.canonical
+        key = row.prepared.key
         position = seen.get(key)
 
         if position is None:

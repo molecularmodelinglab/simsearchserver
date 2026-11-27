@@ -32,10 +32,11 @@ class ModelUnavailable(Exception):
 
 @dataclass(frozen=True)
 class Prepared:
-    """One validated query, and the stereochemistry-free form it dedups on."""
+    """One validated query: `canonical` is shown, `key` only dedups."""
 
     smiles: str
     canonical: str
+    key: str
     fingerprint: np.ndarray
     note: str | None = None
 
@@ -96,16 +97,17 @@ class Chemistry:
 
         if len(fragments) > 1:
             molecule = max(fragments, key=lambda fragment: fragment.GetNumHeavyAtoms())
-            note = "reduced to its largest fragment"
+            note = ("this is a multi-fragment structure, such as a salt or "
+                    "mixture; only its largest fragment was searched")
 
-        canonical = Chem.MolToSmiles(molecule, isomericSmiles=False)
+        key = Chem.MolToSmiles(molecule, isomericSmiles=False)
 
-        if len(canonical) > self.max_smiles_length:
+        if len(key) > self.max_smiles_length:
             raise InvalidSmiles(
-                f"the canonical form is {len(canonical)} characters; this model "
+                f"the canonical form is {len(key)} characters; this model "
                 f"embeds up to {self.max_smiles_length}")
 
-        return Prepared(smiles=smiles, canonical=canonical,
+        return Prepared(smiles=smiles, canonical=Chem.MolToSmiles(molecule), key=key,
                         fingerprint=self.fingerprint(molecule), note=note)
 
     def embed(self, smiles):

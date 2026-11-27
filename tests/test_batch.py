@@ -38,6 +38,21 @@ def test_stereoisomers_collapse_to_one_embedding(chemistry):
     assert len(set(result.assignment.values())) == 1
 
 
+def test_the_shown_form_keeps_stereo_and_the_dedup_key_drops_it(chemistry):
+    prepared = chemistry.prepare("C[C@H](N)C(=O)O")
+
+    assert "@" in prepared.canonical
+    assert "@" not in prepared.key
+
+
+def test_stereoisomers_are_shown_differently_though_they_dedup_together(chemistry):
+    result = batching.prepare(["C[C@H](N)C(=O)O", "C[C@@H](N)C(=O)O"], chemistry)
+
+    assert result.counts["unique"] == 1
+    shown = {row.prepared.canonical for row in result.rows}
+    assert len(shown) == 2
+
+
 def test_distinct_molecules_stay_distinct(chemistry):
     result = batching.prepare(["CCO", "CCN", "CCC"], chemistry)
 
@@ -55,7 +70,7 @@ def test_a_salt_is_reduced_to_its_largest_fragment(chemistry):
     row = result.rows[0]
 
     assert row.ok
-    assert row.prepared.note == "reduced to its largest fragment"
+    assert "largest fragment" in row.prepared.note
     assert "Na" not in row.prepared.canonical
 
 
@@ -186,7 +201,7 @@ def test_a_note_survives_into_the_result(served):
     answer = run(api._search_batch(api.BatchBody(
         smiles=["CC(=O)[O-].[Na+]"], library="fake")))
 
-    assert answer["results"][0]["note"] == "reduced to its largest fragment"
+    assert "largest fragment" in answer["results"][0]["note"]
 
 
 def test_over_the_batch_limit_is_refused(served):

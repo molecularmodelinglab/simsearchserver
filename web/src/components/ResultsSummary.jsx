@@ -56,8 +56,9 @@ export default function ResultsSummary({
       {timing && !searching && (
         <dl className="stats">
           <div><dt>Library</dt><dd>{libraryName}</dd></div>
-          <div><dt>Index search</dt><dd>{ms(timing.index_ms)}</dd></div>
+          <div><dt>Mol prep</dt><dd>{ms(timing.prepare_ms)}</dd></div>
           <div><dt>Embedding</dt><dd>{ms(timing.embed_ms)}</dd></div>
+          <div><dt>Index search</dt><dd>{ms(timing.index_ms)}</dd></div>
           <div>
             <dt>End to end</dt>
             <dd>{ms(timing.total_ms)}</dd>

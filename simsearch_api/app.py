@@ -150,7 +150,7 @@ async def _search(smiles, library_name, num_neighbors):
     prepared_at = time.perf_counter()
 
     # Inference holds the GIL, so it runs off the event loop.
-    embedding = await asyncio.to_thread(state.chemistry.embed, prepared.canonical)
+    embedding = await asyncio.to_thread(state.chemistry.embed, prepared.key)
     embedded_at = time.perf_counter()
 
     descriptor = library.project(embedding)
@@ -241,7 +241,7 @@ async def _search_batch(body):
         prepared_at = time.perf_counter()
 
         embeddings = await asyncio.to_thread(
-            state.chemistry.embed_many, [item.canonical for item in prepared.unique])
+            state.chemistry.embed_many, [item.key for item in prepared.unique])
         embedded_at = time.perf_counter()
 
         hits = []
