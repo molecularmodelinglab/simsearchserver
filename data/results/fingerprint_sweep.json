@@ -1,0 +1,1597 @@
+[
+  {
+    "label": "salsa8",
+    "retrieve": 128,
+    "display": 5,
+    "n": 1000,
+    "threads": 16,
+    "configs": [
+      {
+        "fingerprint": "morgan_r1_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 6816.1302672400025,
+        "gen_all_threads_per_s": 27498.77767482692,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.478,
+              0.182,
+              0.075
+            ],
+            "per_query_us": 238.9499954879284
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.478,
+              0.184,
+              0.077
+            ],
+            "per_query_us": 231.98467679321766
+          },
+          "tanimoto": {
+            "recall": [
+              0.48,
+              0.182,
+              0.075
+            ],
+            "per_query_us": 230.7128682732582
+          },
+          "dice": {
+            "recall": [
+              0.48,
+              0.182,
+              0.075
+            ],
+            "per_query_us": 241.48567393422127
+          },
+          "cosine": {
+            "recall": [
+              0.48,
+              0.182,
+              0.075
+            ],
+            "per_query_us": 225.25631450116634
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r2_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 4337.7992743325885,
+        "gen_all_threads_per_s": 51304.02170068419,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.487,
+              0.189,
+              0.077
+            ],
+            "per_query_us": 323.92988726496696
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.486,
+              0.188,
+              0.08
+            ],
+            "per_query_us": 280.9419706463814
+          },
+          "tanimoto": {
+            "recall": [
+              0.487,
+              0.189,
+              0.077
+            ],
+            "per_query_us": 233.88973623514175
+          },
+          "dice": {
+            "recall": [
+              0.487,
+              0.189,
+              0.077
+            ],
+            "per_query_us": 241.6714746505022
+          },
+          "cosine": {
+            "recall": [
+              0.487,
+              0.188,
+              0.077
+            ],
+            "per_query_us": 225.4923228174448
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r3_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 3367.494112325685,
+        "gen_all_threads_per_s": 38818.971651779546,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.488,
+              0.189,
+              0.074
+            ],
+            "per_query_us": 261.8058789521456
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.488,
+              0.189,
+              0.076
+            ],
+            "per_query_us": 232.36121982336044
+          },
+          "tanimoto": {
+            "recall": [
+              0.489,
+              0.187,
+              0.075
+            ],
+            "per_query_us": 237.82232031226158
+          },
+          "dice": {
+            "recall": [
+              0.489,
+              0.187,
+              0.075
+            ],
+            "per_query_us": 233.13060775399208
+          },
+          "cosine": {
+            "recall": [
+              0.489,
+              0.187,
+              0.075
+            ],
+            "per_query_us": 236.98610998690128
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r4_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 2870.1677744348094,
+        "gen_all_threads_per_s": 37554.25469075012,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.486,
+              0.189,
+              0.072
+            ],
+            "per_query_us": 265.8069059252739
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.485,
+              0.189,
+              0.073
+            ],
+            "per_query_us": 238.54533396661282
+          },
+          "tanimoto": {
+            "recall": [
+              0.486,
+              0.187,
+              0.072
+            ],
+            "per_query_us": 237.94903233647346
+          },
+          "dice": {
+            "recall": [
+              0.486,
+              0.187,
+              0.072
+            ],
+            "per_query_us": 231.85420036315918
+          },
+          "cosine": {
+            "recall": [
+              0.486,
+              0.187,
+              0.072
+            ],
+            "per_query_us": 236.13044060766697
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r3_512",
+        "bits": 512,
+        "bytes": 64,
+        "gen_1thread_per_s": 3425.2162781204493,
+        "gen_all_threads_per_s": 43408.34778779996,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.488,
+              0.187,
+              0.073
+            ],
+            "per_query_us": 240.6865917146206
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.488,
+              0.189,
+              0.073
+            ],
+            "per_query_us": 222.2710344940424
+          },
+          "tanimoto": {
+            "recall": [
+              0.489,
+              0.185,
+              0.072
+            ],
+            "per_query_us": 201.01975835859776
+          },
+          "dice": {
+            "recall": [
+              0.489,
+              0.185,
+              0.072
+            ],
+            "per_query_us": 210.56616492569447
+          },
+          "cosine": {
+            "recall": [
+              0.489,
+              0.185,
+              0.072
+            ],
+            "per_query_us": 196.88834249973297
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r3_1024",
+        "bits": 1024,
+        "bytes": 128,
+        "gen_1thread_per_s": 3386.212435161308,
+        "gen_all_threads_per_s": 41946.49468708587,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.488,
+              0.188,
+              0.073
+            ],
+            "per_query_us": 249.2884136736393
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.487,
+              0.188,
+              0.074
+            ],
+            "per_query_us": 219.1718239337206
+          },
+          "tanimoto": {
+            "recall": [
+              0.488,
+              0.186,
+              0.074
+            ],
+            "per_query_us": 214.84926529228687
+          },
+          "dice": {
+            "recall": [
+              0.488,
+              0.186,
+              0.074
+            ],
+            "per_query_us": 215.25332517921925
+          },
+          "cosine": {
+            "recall": [
+              0.488,
+              0.186,
+              0.074
+            ],
+            "per_query_us": 207.95384235680103
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r3_4096",
+        "bits": 4096,
+        "bytes": 512,
+        "gen_1thread_per_s": 3348.2914451389647,
+        "gen_all_threads_per_s": 39945.3395530012,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.488,
+              0.189,
+              0.075
+            ],
+            "per_query_us": 308.24291333556175
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.488,
+              0.188,
+              0.074
+            ],
+            "per_query_us": 274.04298074543476
+          },
+          "tanimoto": {
+            "recall": [
+              0.489,
+              0.186,
+              0.074
+            ],
+            "per_query_us": 281.98172338306904
+          },
+          "dice": {
+            "recall": [
+              0.489,
+              0.186,
+              0.074
+            ],
+            "per_query_us": 282.27474726736546
+          },
+          "cosine": {
+            "recall": [
+              0.489,
+              0.186,
+              0.074
+            ],
+            "per_query_us": 276.7333406955004
+          }
+        }
+      },
+      {
+        "fingerprint": "fcfp_r2_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 1091.53314293699,
+        "gen_all_threads_per_s": 14602.696319498194,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.462,
+              0.172,
+              0.066
+            ],
+            "per_query_us": 284.4770047813654
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.461,
+              0.169,
+              0.066
+            ],
+            "per_query_us": 262.60849833488464
+          },
+          "tanimoto": {
+            "recall": [
+              0.468,
+              0.172,
+              0.067
+            ],
+            "per_query_us": 255.01622632145882
+          },
+          "dice": {
+            "recall": [
+              0.468,
+              0.172,
+              0.067
+            ],
+            "per_query_us": 245.9351904690266
+          },
+          "cosine": {
+            "recall": [
+              0.467,
+              0.172,
+              0.067
+            ],
+            "per_query_us": 251.08222290873528
+          }
+        }
+      },
+      {
+        "fingerprint": "fcfp_r3_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 996.5485646836031,
+        "gen_all_threads_per_s": 13711.649514048928,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.474,
+              0.179,
+              0.064
+            ],
+            "per_query_us": 279.7992192208767
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.473,
+              0.18,
+              0.065
+            ],
+            "per_query_us": 250.75353682041168
+          },
+          "tanimoto": {
+            "recall": [
+              0.474,
+              0.181,
+              0.065
+            ],
+            "per_query_us": 246.48245982825756
+          },
+          "dice": {
+            "recall": [
+              0.474,
+              0.181,
+              0.065
+            ],
+            "per_query_us": 250.32156519591808
+          },
+          "cosine": {
+            "recall": [
+              0.474,
+              0.181,
+              0.065
+            ],
+            "per_query_us": 238.71423117816448
+          }
+        }
+      },
+      {
+        "fingerprint": "rdkit_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 151.2556254772413,
+        "gen_all_threads_per_s": 2242.255720709275,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.436,
+              0.169,
+              0.073
+            ],
+            "per_query_us": 308.8403381407261
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.443,
+              0.17,
+              0.073
+            ],
+            "per_query_us": 279.1709490120411
+          },
+          "tanimoto": {
+            "recall": [
+              0.451,
+              0.169,
+              0.073
+            ],
+            "per_query_us": 274.0557547658682
+          },
+          "dice": {
+            "recall": [
+              0.451,
+              0.169,
+              0.073
+            ],
+            "per_query_us": 271.3747974485159
+          },
+          "cosine": {
+            "recall": [
+              0.451,
+              0.169,
+              0.073
+            ],
+            "per_query_us": 265.4841523617506
+          }
+        }
+      },
+      {
+        "fingerprint": "atompair_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 1664.543497042617,
+        "gen_all_threads_per_s": 33028.675251259236,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.486,
+              0.205,
+              0.087
+            ],
+            "per_query_us": 314.56198543310165
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.486,
+              0.204,
+              0.088
+            ],
+            "per_query_us": 277.4755824357271
+          },
+          "tanimoto": {
+            "recall": [
+              0.489,
+              0.206,
+              0.09
+            ],
+            "per_query_us": 273.20983447134495
+          },
+          "dice": {
+            "recall": [
+              0.489,
+              0.206,
+              0.09
+            ],
+            "per_query_us": 275.92829801142216
+          },
+          "cosine": {
+            "recall": [
+              0.489,
+              0.207,
+              0.09
+            ],
+            "per_query_us": 270.10255493223667
+          }
+        }
+      },
+      {
+        "fingerprint": "torsion_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 1479.8170340039258,
+        "gen_all_threads_per_s": 22236.008125309432,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.484,
+              0.19,
+              0.081
+            ],
+            "per_query_us": 314.3340814858675
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.485,
+              0.186,
+              0.081
+            ],
+            "per_query_us": 276.9518531858921
+          },
+          "tanimoto": {
+            "recall": [
+              0.484,
+              0.181,
+              0.082
+            ],
+            "per_query_us": 254.96003963053224
+          },
+          "dice": {
+            "recall": [
+              0.484,
+              0.181,
+              0.082
+            ],
+            "per_query_us": 268.1351862847805
+          },
+          "cosine": {
+            "recall": [
+              0.484,
+              0.181,
+              0.082
+            ],
+            "per_query_us": 258.77418369054794
+          }
+        }
+      },
+      {
+        "fingerprint": "maccs_167",
+        "bits": 167,
+        "bytes": 20,
+        "gen_1thread_per_s": 258.23269803985846,
+        "gen_all_threads_per_s": NaN,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.409,
+              0.147,
+              0.051
+            ],
+            "per_query_us": 601.9864585250616
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.42,
+              0.153,
+              0.054
+            ],
+            "per_query_us": 215.67504294216633
+          },
+          "tanimoto": {
+            "recall": [
+              0.45,
+              0.161,
+              0.054
+            ],
+            "per_query_us": 205.67685551941395
+          },
+          "dice": {
+            "recall": [
+              0.45,
+              0.161,
+              0.054
+            ],
+            "per_query_us": 206.0687504708767
+          },
+          "cosine": {
+            "recall": [
+              0.449,
+              0.162,
+              0.054
+            ],
+            "per_query_us": 201.91373489797115
+          }
+        }
+      }
+    ]
+  },
+  {
+    "label": "salsa16",
+    "retrieve": 128,
+    "display": 5,
+    "n": 1000,
+    "threads": 16,
+    "configs": [
+      {
+        "fingerprint": "morgan_r1_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 6847.616656359503,
+        "gen_all_threads_per_s": 63236.80971844002,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.885,
+              0.318,
+              0.138
+            ],
+            "per_query_us": 248.63312952220437
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.884,
+              0.329,
+              0.136
+            ],
+            "per_query_us": 242.91439913213253
+          },
+          "tanimoto": {
+            "recall": [
+              0.897,
+              0.326,
+              0.142
+            ],
+            "per_query_us": 247.9028161615133
+          },
+          "dice": {
+            "recall": [
+              0.897,
+              0.326,
+              0.142
+            ],
+            "per_query_us": 237.96541430056095
+          },
+          "cosine": {
+            "recall": [
+              0.897,
+              0.326,
+              0.142
+            ],
+            "per_query_us": 255.42201474308968
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r2_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 4266.288039855287,
+        "gen_all_threads_per_s": 58974.60346671369,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.924,
+              0.346,
+              0.148
+            ],
+            "per_query_us": 253.68604436516762
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.925,
+              0.342,
+              0.145
+            ],
+            "per_query_us": 261.73766888678074
+          },
+          "tanimoto": {
+            "recall": [
+              0.932,
+              0.342,
+              0.145
+            ],
+            "per_query_us": 244.7734102606773
+          },
+          "dice": {
+            "recall": [
+              0.932,
+              0.342,
+              0.145
+            ],
+            "per_query_us": 258.8027250021696
+          },
+          "cosine": {
+            "recall": [
+              0.932,
+              0.343,
+              0.145
+            ],
+            "per_query_us": 239.80747163295746
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r3_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 3320.7093111613012,
+        "gen_all_threads_per_s": 41721.95244044331,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.928,
+              0.341,
+              0.14
+            ],
+            "per_query_us": 274.2216382175684
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.928,
+              0.339,
+              0.141
+            ],
+            "per_query_us": 260.6113124638796
+          },
+          "tanimoto": {
+            "recall": [
+              0.928,
+              0.336,
+              0.143
+            ],
+            "per_query_us": 242.8128719329834
+          },
+          "dice": {
+            "recall": [
+              0.928,
+              0.336,
+              0.143
+            ],
+            "per_query_us": 253.0505321919918
+          },
+          "cosine": {
+            "recall": [
+              0.928,
+              0.336,
+              0.143
+            ],
+            "per_query_us": 229.93011586368084
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r4_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 2867.3750514836606,
+        "gen_all_threads_per_s": 28103.115945157806,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.917,
+              0.334,
+              0.137
+            ],
+            "per_query_us": 246.58840522170067
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.913,
+              0.333,
+              0.137
+            ],
+            "per_query_us": 256.0956049710512
+          },
+          "tanimoto": {
+            "recall": [
+              0.915,
+              0.335,
+              0.136
+            ],
+            "per_query_us": 234.4489973038435
+          },
+          "dice": {
+            "recall": [
+              0.915,
+              0.335,
+              0.136
+            ],
+            "per_query_us": 235.18583178520203
+          },
+          "cosine": {
+            "recall": [
+              0.915,
+              0.334,
+              0.136
+            ],
+            "per_query_us": 250.05517899990085
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r3_512",
+        "bits": 512,
+        "bytes": 64,
+        "gen_1thread_per_s": 3299.748745521702,
+        "gen_all_threads_per_s": 36768.909440429714,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.921,
+              0.34,
+              0.137
+            ],
+            "per_query_us": 239.30457048118114
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.92,
+              0.339,
+              0.138
+            ],
+            "per_query_us": 205.8400008827448
+          },
+          "tanimoto": {
+            "recall": [
+              0.922,
+              0.34,
+              0.138
+            ],
+            "per_query_us": 196.8158259987831
+          },
+          "dice": {
+            "recall": [
+              0.922,
+              0.34,
+              0.138
+            ],
+            "per_query_us": 202.34792865812778
+          },
+          "cosine": {
+            "recall": [
+              0.92,
+              0.338,
+              0.138
+            ],
+            "per_query_us": 204.34500090777874
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r3_1024",
+        "bits": 1024,
+        "bytes": 128,
+        "gen_1thread_per_s": 3335.45477327536,
+        "gen_all_threads_per_s": 20829.492316604734,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.924,
+              0.34,
+              0.138
+            ],
+            "per_query_us": 246.70234695076945
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.924,
+              0.341,
+              0.142
+            ],
+            "per_query_us": 225.11125728487968
+          },
+          "tanimoto": {
+            "recall": [
+              0.926,
+              0.342,
+              0.141
+            ],
+            "per_query_us": 204.11769300699234
+          },
+          "dice": {
+            "recall": [
+              0.926,
+              0.342,
+              0.141
+            ],
+            "per_query_us": 225.39734654128551
+          },
+          "cosine": {
+            "recall": [
+              0.926,
+              0.341,
+              0.141
+            ],
+            "per_query_us": 207.28769712150097
+          }
+        }
+      },
+      {
+        "fingerprint": "morgan_r3_4096",
+        "bits": 4096,
+        "bytes": 512,
+        "gen_1thread_per_s": 3273.927344565784,
+        "gen_all_threads_per_s": 33924.80199723457,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.93,
+              0.337,
+              0.141
+            ],
+            "per_query_us": 263.7782283127308
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.931,
+              0.338,
+              0.142
+            ],
+            "per_query_us": 268.96232925355434
+          },
+          "tanimoto": {
+            "recall": [
+              0.929,
+              0.341,
+              0.141
+            ],
+            "per_query_us": 244.03024278581142
+          },
+          "dice": {
+            "recall": [
+              0.929,
+              0.341,
+              0.141
+            ],
+            "per_query_us": 262.68114522099495
+          },
+          "cosine": {
+            "recall": [
+              0.93,
+              0.341,
+              0.141
+            ],
+            "per_query_us": 245.26859261095524
+          }
+        }
+      },
+      {
+        "fingerprint": "fcfp_r2_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 1111.1345473607091,
+        "gen_all_threads_per_s": 14557.362535880275,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.824,
+              0.283,
+              0.122
+            ],
+            "per_query_us": 300.9284846484661
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.822,
+              0.281,
+              0.123
+            ],
+            "per_query_us": 253.03411111235621
+          },
+          "tanimoto": {
+            "recall": [
+              0.833,
+              0.285,
+              0.122
+            ],
+            "per_query_us": 261.6506237536669
+          },
+          "dice": {
+            "recall": [
+              0.833,
+              0.285,
+              0.122
+            ],
+            "per_query_us": 249.93265420198438
+          },
+          "cosine": {
+            "recall": [
+              0.833,
+              0.284,
+              0.123
+            ],
+            "per_query_us": 259.8382718861103
+          }
+        }
+      },
+      {
+        "fingerprint": "fcfp_r3_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 1010.4741112054883,
+        "gen_all_threads_per_s": 14414.336923471383,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.866,
+              0.312,
+              0.117
+            ],
+            "per_query_us": 291.2393696606159
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.864,
+              0.311,
+              0.117
+            ],
+            "per_query_us": 259.464668110013
+          },
+          "tanimoto": {
+            "recall": [
+              0.874,
+              0.311,
+              0.117
+            ],
+            "per_query_us": 247.4724184721708
+          },
+          "dice": {
+            "recall": [
+              0.874,
+              0.311,
+              0.117
+            ],
+            "per_query_us": 245.86835131049153
+          },
+          "cosine": {
+            "recall": [
+              0.874,
+              0.311,
+              0.117
+            ],
+            "per_query_us": 246.46433629095554
+          }
+        }
+      },
+      {
+        "fingerprint": "rdkit_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 152.3929751943673,
+        "gen_all_threads_per_s": 2221.127299888326,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.782,
+              0.308,
+              0.135
+            ],
+            "per_query_us": 329.8352286219597
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.803,
+              0.309,
+              0.138
+            ],
+            "per_query_us": 289.83048908412457
+          },
+          "tanimoto": {
+            "recall": [
+              0.824,
+              0.309,
+              0.135
+            ],
+            "per_query_us": 282.9145509749651
+          },
+          "dice": {
+            "recall": [
+              0.824,
+              0.309,
+              0.135
+            ],
+            "per_query_us": 280.9446435421705
+          },
+          "cosine": {
+            "recall": [
+              0.823,
+              0.311,
+              0.137
+            ],
+            "per_query_us": 275.5041681230068
+          }
+        }
+      },
+      {
+        "fingerprint": "atompair_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 1682.3949308773185,
+        "gen_all_threads_per_s": 20133.127572046553,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.934,
+              0.391,
+              0.176
+            ],
+            "per_query_us": 328.406585380435
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.937,
+              0.392,
+              0.178
+            ],
+            "per_query_us": 309.85360220074654
+          },
+          "tanimoto": {
+            "recall": [
+              0.944,
+              0.395,
+              0.181
+            ],
+            "per_query_us": 284.4139691442251
+          },
+          "dice": {
+            "recall": [
+              0.944,
+              0.395,
+              0.181
+            ],
+            "per_query_us": 302.88953706622124
+          },
+          "cosine": {
+            "recall": [
+              0.944,
+              0.395,
+              0.181
+            ],
+            "per_query_us": 280.13033233582973
+          }
+        }
+      },
+      {
+        "fingerprint": "torsion_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 1399.8569967950123,
+        "gen_all_threads_per_s": 17149.966885897007,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.917,
+              0.332,
+              0.151
+            ],
+            "per_query_us": 330.4810579866171
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.916,
+              0.332,
+              0.148
+            ],
+            "per_query_us": 277.5291856378317
+          },
+          "tanimoto": {
+            "recall": [
+              0.914,
+              0.335,
+              0.153
+            ],
+            "per_query_us": 290.1032231748104
+          },
+          "dice": {
+            "recall": [
+              0.914,
+              0.335,
+              0.153
+            ],
+            "per_query_us": 275.2356994897127
+          },
+          "cosine": {
+            "recall": [
+              0.915,
+              0.335,
+              0.153
+            ],
+            "per_query_us": 284.2800710350275
+          }
+        }
+      },
+      {
+        "fingerprint": "maccs_167",
+        "bits": 167,
+        "bytes": 20,
+        "gen_1thread_per_s": 262.4161797978872,
+        "gen_all_threads_per_s": NaN,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.661,
+              0.204,
+              0.093
+            ],
+            "per_query_us": 618.2935275137424
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.673,
+              0.202,
+              0.096
+            ],
+            "per_query_us": 217.85207837820053
+          },
+          "tanimoto": {
+            "recall": [
+              0.769,
+              0.227,
+              0.097
+            ],
+            "per_query_us": 206.96783624589443
+          },
+          "dice": {
+            "recall": [
+              0.769,
+              0.227,
+              0.097
+            ],
+            "per_query_us": 207.0220559835434
+          },
+          "cosine": {
+            "recall": [
+              0.771,
+              0.229,
+              0.096
+            ],
+            "per_query_us": 201.75746083259583
+          }
+        }
+      }
+    ]
+  },
+  {
+    "label": "salsa8_atompair",
+    "retrieve": 128,
+    "display": 5,
+    "n": 1000,
+    "threads": 16,
+    "configs": [
+      {
+        "fingerprint": "morgan_r2_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 4436.705496646606,
+        "gen_all_threads_per_s": 25110.91829053108,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.487,
+              0.189,
+              0.077
+            ],
+            "per_query_us": 248.17631021142006
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.486,
+              0.188,
+              0.08
+            ],
+            "per_query_us": 245.20403891801834
+          },
+          "tanimoto": {
+            "recall": [
+              0.487,
+              0.189,
+              0.077
+            ],
+            "per_query_us": 237.07792721688747
+          },
+          "dice": {
+            "recall": [
+              0.487,
+              0.189,
+              0.077
+            ],
+            "per_query_us": 243.77188459038734
+          },
+          "cosine": {
+            "recall": [
+              0.487,
+              0.188,
+              0.077
+            ],
+            "per_query_us": 241.78653582930565
+          }
+        }
+      },
+      {
+        "fingerprint": "atompair_512",
+        "bits": 512,
+        "bytes": 64,
+        "gen_1thread_per_s": 2019.8858836431368,
+        "gen_all_threads_per_s": 39741.06328456558,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.482,
+              0.198,
+              0.083
+            ],
+            "per_query_us": 241.62029847502708
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.486,
+              0.201,
+              0.084
+            ],
+            "per_query_us": 241.256020963192
+          },
+          "tanimoto": {
+            "recall": [
+              0.487,
+              0.206,
+              0.086
+            ],
+            "per_query_us": 225.00442527234554
+          },
+          "dice": {
+            "recall": [
+              0.487,
+              0.206,
+              0.086
+            ],
+            "per_query_us": 226.100891828537
+          },
+          "cosine": {
+            "recall": [
+              0.487,
+              0.206,
+              0.086
+            ],
+            "per_query_us": 224.63433817029
+          }
+        }
+      },
+      {
+        "fingerprint": "atompair_1024",
+        "bits": 1024,
+        "bytes": 128,
+        "gen_1thread_per_s": 2581.4520535187326,
+        "gen_all_threads_per_s": 35799.47681987814,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.485,
+              0.204,
+              0.086
+            ],
+            "per_query_us": 250.89223682880402
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.486,
+              0.204,
+              0.089
+            ],
+            "per_query_us": 229.5690942555666
+          },
+          "tanimoto": {
+            "recall": [
+              0.488,
+              0.206,
+              0.089
+            ],
+            "per_query_us": 225.0303030014038
+          },
+          "dice": {
+            "recall": [
+              0.488,
+              0.206,
+              0.089
+            ],
+            "per_query_us": 225.84577277302742
+          },
+          "cosine": {
+            "recall": [
+              0.488,
+              0.206,
+              0.089
+            ],
+            "per_query_us": 219.15452927350998
+          }
+        }
+      },
+      {
+        "fingerprint": "atompair_2048",
+        "bits": 2048,
+        "bytes": 256,
+        "gen_1thread_per_s": 2372.3127258654995,
+        "gen_all_threads_per_s": 30882.292251289568,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.486,
+              0.205,
+              0.087
+            ],
+            "per_query_us": 301.9330855458975
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.486,
+              0.204,
+              0.088
+            ],
+            "per_query_us": 287.15609572827816
+          },
+          "tanimoto": {
+            "recall": [
+              0.489,
+              0.206,
+              0.09
+            ],
+            "per_query_us": 281.69549256563187
+          },
+          "dice": {
+            "recall": [
+              0.489,
+              0.206,
+              0.09
+            ],
+            "per_query_us": 280.52160888910294
+          },
+          "cosine": {
+            "recall": [
+              0.489,
+              0.207,
+              0.09
+            ],
+            "per_query_us": 270.37277817726135
+          }
+        }
+      },
+      {
+        "fingerprint": "atompair_4096",
+        "bits": 4096,
+        "bytes": 512,
+        "gen_1thread_per_s": 2290.2303222305354,
+        "gen_all_threads_per_s": 31966.882872907776,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.486,
+              0.205,
+              0.087
+            ],
+            "per_query_us": 306.306354701519
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.487,
+              0.203,
+              0.089
+            ],
+            "per_query_us": 285.11851467192173
+          },
+          "tanimoto": {
+            "recall": [
+              0.489,
+              0.208,
+              0.091
+            ],
+            "per_query_us": 286.3547056913376
+          },
+          "dice": {
+            "recall": [
+              0.489,
+              0.208,
+              0.091
+            ],
+            "per_query_us": 284.73492711782455
+          },
+          "cosine": {
+            "recall": [
+              0.489,
+              0.208,
+              0.091
+            ],
+            "per_query_us": 277.7569480240345
+          }
+        }
+      },
+      {
+        "fingerprint": "fused_morgan_r2_atompair",
+        "bits": 4096,
+        "bytes": 512,
+        "gen_1thread_per_s": 1591.2060340406608,
+        "gen_all_threads_per_s": 19213.44243399814,
+        "metrics": {
+          "tversky_1.0_0.0": {
+            "recall": [
+              0.489,
+              0.201,
+              0.087
+            ],
+            "per_query_us": 761.3837514072657
+          },
+          "tversky_0.9_0.1": {
+            "recall": [
+              0.489,
+              0.202,
+              0.088
+            ],
+            "per_query_us": 454.54651676118374
+          },
+          "tanimoto": {
+            "recall": [
+              0.489,
+              0.2,
+              0.087
+            ],
+            "per_query_us": 450.89083537459373
+          },
+          "dice": {
+            "recall": [
+              0.489,
+              0.198,
+              0.087
+            ],
+            "per_query_us": 454.49292846024036
+          },
+          "cosine": {
+            "recall": [
+              0.489,
+              0.198,
+              0.087
+            ],
+            "per_query_us": 451.81640796363354
+          }
+        }
+      }
+    ]
+  }
+]

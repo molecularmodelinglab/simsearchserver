@@ -179,6 +179,25 @@ help: it moves the same bytes.
 | 32 | 14.7 | 2,173 |
 | 128 | 40.9 | 3,134 |
 
+## Bulk embedding peaks at batch 64
+
+Throughput is not monotonic in batch size, because every batch pads to its
+longest SMILES: past some point the padding costs more than the kernel launches
+it saves. Measured on an L40S over 40,000 REAL molecules (`scripts/batch_probe.py`):
+
+| batch | mol/s |
+|---|---|
+| 32 | 2,278 |
+| 48 | 2,665 |
+| **64** | **2,791** |
+| 96 | 2,761 |
+| 128 | 2,483 |
+| 256 | 2,683 |
+
+The 161M corpus was embedded at batch 1024 and averaged 2,700 mol/s, so the
+peak is worth about 10%. Sorting each shard by SMILES length would remove the
+padding waste altogether and let large batches win again -- untried.
+
 ## Metrics that did not work
 
 MCS and Tanimoto averaged over the top 5 do not separate models at this scale
