@@ -1,0 +1,24 @@
+# Adding or changing a library is an edit here, never in code.
+host: 127.0.0.1
+port: 8000
+
+embedding:
+  model: salsa16
+  revision: null
+  device: null
+
+cache:
+  ttl_seconds: 21600
+  max_entries: 5000
+
+limits:
+  max_smiles_length: 400
+  max_num_neighbors: 96
+
+libraries:
+  - name: real161m
+    display: "Enamine REAL (161M)"
+    description: "161,408,959 make-on-demand compounds from Enamine REAL"
+    url: http://127.0.0.1:3000
+    max_neighbors: 1024
+    num_neighbors: 8
