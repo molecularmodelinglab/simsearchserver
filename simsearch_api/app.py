@@ -76,6 +76,8 @@ async def lifespan(_app):
                  library.name, library.num_records, library.desc_length,
                  library.digest[:12])
 
+    mount_static()
+
     yield
 
     await state.client.aclose()
@@ -222,9 +224,13 @@ async def health():
 
 
 def mount_static():
-    """Serves the built frontend when one is configured."""
+    """Serves the built frontend, after the API routes so they still win."""
 
     directory = state.config.get("static_dir") if state.config else None
 
-    if directory:
-        app.mount("/", StaticFiles(directory=directory, html=True), name="web")
+    if not directory:
+        log.info("no static_dir; serving the API only")
+        return
+
+    app.mount("/", StaticFiles(directory=directory, html=True), name="web")
+    log.info("serving the frontend from %s", directory)
