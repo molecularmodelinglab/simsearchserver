@@ -250,3 +250,64 @@ def test_a_wrong_dimension_descriptor_is_refused(served):
 def test_an_index_without_a_projection_serves_no_transform(served):
     with pytest.raises(RuntimeError, match="404"):
         post(served["port"], "/transform", None)
+
+
+@needs_binaries
+def test_a_batch_matches_the_same_queries_run_one_at_a_time(served):
+    table, stored = served["table"], served["stored"]
+    rows = [0, 7, 13, 31, 44]
+
+    one_at_a_time = [
+        post(served["port"], "/nn/40", {
+            "descriptor": query_vector(table, row),
+            "fingerprint": [int(b) for b in stored[row]],
+            "num_neighbors": 5,
+        })
+        for row in rows
+    ]
+
+    batch = post(served["port"], "/nn/batch/40", {
+        "queries": [{"descriptor": query_vector(table, row),
+                     "fingerprint": [int(b) for b in stored[row]]}
+                    for row in rows],
+        "num_neighbors": 5,
+    })
+
+    assert batch["num_queries"] == len(rows)
+    assert len(batch["results"]) == len(rows)
+
+    for single, batched in zip(one_at_a_time, batch["results"]):
+        assert [hit["identifier"] for hit in batched["hits"]] == \
+               [hit["identifier"] for hit in single["hits"]]
+        assert [hit["similarity"] for hit in batched["hits"]] == \
+               [hit["similarity"] for hit in single["hits"]]
+
+
+@needs_binaries
+def test_batch_results_stay_in_the_order_submitted(served):
+    table = served["table"]
+    rows = [31, 2, 19, 7]
+
+    batch = post(served["port"], "/nn/batch/5", {
+        "queries": [{"descriptor": query_vector(table, row)} for row in rows],
+    })
+
+    for row, result in zip(rows, batch["results"]):
+        assert result["hits"][0]["identifier"] == f"CMPD{row:04d}"
+
+
+@needs_binaries
+def test_an_empty_batch_is_refused(served):
+    with pytest.raises(RuntimeError, match="400"):
+        post(served["port"], "/nn/batch/5", {"queries": []})
+
+
+@needs_binaries
+def test_one_bad_descriptor_refuses_the_whole_batch(served):
+    table = served["table"]
+
+    with pytest.raises(RuntimeError, match="400"):
+        post(served["port"], "/nn/batch/5", {"queries": [
+            {"descriptor": query_vector(table, 1)},
+            {"descriptor": [0.0] * (DIM + 2)},
+        ]})

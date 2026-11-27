@@ -124,6 +124,9 @@ validates against `config.resolved.yaml` and refuses to serve on a mismatch.
 
 **Keep it on loopback.** It has no authentication and a query costs real CPU.
 
+`--batch-threads` sets how many threads a batch query may use, defaulting to
+all but two cores so a batch cannot starve interactive queries.
+
 ### The query service
 
 Copy `simsearch_api/service.yaml.example` and edit it:
@@ -135,7 +138,12 @@ embedding:
   cache_dir: null       # set this if the default HF cache is not writable
 
 cache:   {ttl_seconds: 21600, max_entries: 5000}
-limits:  {max_smiles_length: 150, max_num_neighbors: 96}
+limits:
+  max_smiles_length: 150
+  max_num_neighbors: 96
+  max_batch_size: 10000     # POST /api/search/batch
+  batch_concurrency: 1      # a second batch gets 429, not a queue
+  batch_timeout_seconds: 300.0
 
 static_dir: /absolute/path/to/web/dist
 
@@ -173,6 +181,8 @@ During development `npm run dev` proxies `/api` to port 8000.
 curl localhost:8000/api/health      # model loaded, libraries reachable
 curl localhost:8000/api/libraries   # record counts and transform digests
 curl -G localhost:8000/api/search --data-urlencode 'smiles=CC#N' -d n=8
+curl -X POST localhost:8000/api/search/batch -H 'Content-Type: application/json' \
+     -d '{"smiles": ["CC#N", "c1ccccc1O"]}'
 ```
 
 Every search returns a `timing` block. On a 7950X with a GPU and a 161M index,

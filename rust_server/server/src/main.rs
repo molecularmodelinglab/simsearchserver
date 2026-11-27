@@ -15,9 +15,13 @@ use hyper::server::Server;
 use serde::{Deserialize, Serialize};
 
 use clap::Parser;
+use rayon::prelude::*;
 
 const MAX_NEIGHBORS: usize = 1024;
 const MAX_BODY_BYTES: usize = 1024 * 1024;
+
+const MAX_BATCH_QUERIES: usize = 10_000;
+const MAX_BATCH_BODY_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -37,6 +41,10 @@ struct Args {
     /// Skip faulting the record file into the page cache before serving
     #[arg(long)]
     no_warm: bool,
+
+    /// Threads for batch queries, defaulting to all but two cores
+    #[arg(long)]
+    batch_threads: Option<usize>,
 }
 
 /// What a request is answered from.
@@ -45,6 +53,7 @@ struct State {
     fingerprints: Option<FingerprintStore>,
     /// Served verbatim at `/transform`; the server does not interpret it.
     transform: Option<String>,
+    batch_pool: rayon::ThreadPool,
 }
 
 /// The subset of `config.resolved.yaml` the server can check for itself.
@@ -137,6 +146,28 @@ impl QueryBody {
                 (descriptor, fingerprint, num_neighbors),
         }
     }
+}
+
+#[derive(Deserialize)]
+struct BatchQuery {
+    descriptor: Vec<f32>,
+    #[serde(default)]
+    fingerprint: Option<Vec<u8>>,
+}
+
+#[derive(Deserialize)]
+struct BatchBody {
+    queries: Vec<BatchQuery>,
+    #[serde(default)]
+    num_neighbors: Option<usize>,
+}
+
+#[derive(Serialize)]
+struct BatchResponse {
+    num_queries: usize,
+    elapsed_ms: f64,
+    threads: usize,
+    results: Vec<QueryResponse>,
 }
 
 #[derive(Serialize)]
@@ -243,13 +274,16 @@ async fn route(req: Request<Body>, state: Arc<State>) -> Result<Response<Body>, 
         (&Method::GET, "health") => handle_health(&state),
         (&Method::GET, "transform") => handle_transform(&state),
         (&Method::GET, "nn") => handle_nn_get(&segments, &state),
+        (&Method::POST, "nn") if segments.get(1) == Some(&"batch") =>
+            handle_nn_batch_post(req, &segments, Arc::clone(&state)).await,
         (&Method::POST, "nn") => handle_nn_post(req, &segments, &state).await,
         (_, "health") | (_, "nn") | (_, "transform") => Err(ApiError {
             status: StatusCode::METHOD_NOT_ALLOWED,
             message: format!("method {} not allowed for /{}", req.method(), head),
         }),
         _ => Err(ApiError::not_found(format!(
-            "unknown endpoint {:?}; available: /health, /transform, /nn/{{k}}/{{vector}}, POST /nn/{{k}}",
+            "unknown endpoint {:?}; available: /health, /transform, /nn/{{k}}/{{vector}}, \
+             POST /nn/{{k}}, POST /nn/batch/{{k}}",
             path
         ))),
     }
@@ -333,6 +367,81 @@ async fn handle_nn_post(
     return run_query(values, k, fingerprint, num_neighbors, state);
 }
 
+async fn handle_nn_batch_post(
+    req: Request<Body>,
+    segments: &[&str],
+    state: Arc<State>,
+) -> Result<Response<Body>, ApiError> {
+    let k = match segments.get(2) {
+        Some(s) => parse_k(s)?,
+        None => return Err(ApiError::bad_request(
+            "missing neighbor count; expected POST /nn/batch/{k}")),
+    };
+
+    let body = hyper::body::to_bytes(req.into_body())
+        .await
+        .map_err(|e| ApiError::bad_request(format!("could not read request body: {}", e)))?;
+
+    if body.len() > MAX_BATCH_BODY_BYTES {
+        return Err(ApiError {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            message: format!("request body exceeds {} bytes", MAX_BATCH_BODY_BYTES),
+        });
+    }
+
+    let parsed: BatchBody = serde_json::from_slice(&body).map_err(|e| {
+        ApiError::bad_request(format!(
+            "could not parse JSON body as {{\"queries\": [{{\"descriptor\": [...]}}]}}: {}",
+            e
+        ))
+    })?;
+
+    if parsed.queries.is_empty() {
+        return Err(ApiError::bad_request("no queries supplied"));
+    }
+
+    if parsed.queries.len() > MAX_BATCH_QUERIES {
+        return Err(ApiError::bad_request(format!(
+            "{} queries exceeds the maximum of {}",
+            parsed.queries.len(), MAX_BATCH_QUERIES
+        )));
+    }
+
+    // CPU-bound, so it must not run on a runtime worker.
+    let answers = tokio::task::spawn_blocking(move || {
+        let threads = state.batch_pool.current_num_threads();
+        let started = std::time::Instant::now();
+        let num_neighbors = parsed.num_neighbors;
+
+        let results: Result<Vec<QueryResponse>, ApiError> = state.batch_pool.install(|| {
+            parsed
+                .queries
+                .into_par_iter()
+                .map(|query| {
+                    answer_query(query.descriptor, k, query.fingerprint, num_neighbors, &state)
+                })
+                .collect()
+        });
+
+        results.map(|results| BatchResponse {
+            num_queries: results.len(),
+            elapsed_ms: started.elapsed().as_secs_f64() * 1000.0,
+            threads,
+            results,
+        })
+    })
+    .await
+    .map_err(|e| ApiError {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        message: format!("batch query failed: {}", e),
+    })??;
+
+    let body = serde_json::to_string(&answers)
+        .map_err(|e| ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, message: e.to_string() })?;
+
+    return Ok(json_response(StatusCode::OK, body));
+}
+
 fn parse_k(s: &str) -> Result<usize, ApiError> {
     let k = s
         .parse::<usize>()
@@ -373,6 +482,21 @@ fn run_query(
     num_neighbors: Option<usize>,
     state: &State,
 ) -> Result<Response<Body>, ApiError> {
+    let answer = answer_query(values, k, fingerprint, num_neighbors, state)?;
+
+    let body = serde_json::to_string(&answer)
+        .map_err(|e| ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, message: e.to_string() })?;
+
+    return Ok(json_response(StatusCode::OK, body));
+}
+
+fn answer_query(
+    values: Vec<f32>,
+    k: usize,
+    fingerprint: Option<Vec<u8>>,
+    num_neighbors: Option<usize>,
+    state: &State,
+) -> Result<QueryResponse, ApiError> {
     let expected = state.tree.config.desc_length;
 
     if values.len() != expected {
@@ -406,11 +530,7 @@ fn run_query(
 
     let neighbors = state.tree.get_nearest_neighbors(&descriptor, k);
 
-    let body = serde_json::to_string(
-        &to_response(neighbors, fingerprint.as_deref(), num_neighbors, state))
-        .map_err(|e| ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, message: e.to_string() })?;
-
-    return Ok(json_response(StatusCode::OK, body));
+    return Ok(to_response(neighbors, fingerprint.as_deref(), num_neighbors, state));
 }
 
 fn to_response(
@@ -538,7 +658,20 @@ pub async fn main() {
         println!("Serving the projection at /transform");
     }
 
-    let state = Arc::new(State { tree, fingerprints: store, transform });
+    let threads = args.batch_threads.unwrap_or_else(|| {
+        let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+        cores.saturating_sub(2).max(1)
+    });
+
+    let batch_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .thread_name(|i| format!("batch-{}", i))
+        .build()
+        .expect("could not build the batch thread pool");
+
+    println!("Batch queries use {} threads", threads);
+
+    let state = Arc::new(State { tree, fingerprints: store, transform, batch_pool });
 
     let make_svc = make_service_fn(move |_conn| {
         let state = Arc::clone(&state);

@@ -62,15 +62,34 @@ curl localhost:8000/api/libraries
 curl localhost:8000/api/health
 ```
 
+Up to 10,000 structures can be searched in one call:
+
+```bash
+curl -X POST localhost:8000/api/search/batch \
+     -H 'Content-Type: application/json' \
+     -d '{"smiles": ["CC#N", "c1ccccc1O"], "num_neighbors": 8}'
+
+# `format: "csv"` returns one row per hit instead, for a dataframe
+curl -X POST localhost:8000/api/search/batch \
+     -H 'Content-Type: application/json' \
+     -d '{"smiles": ["CC#N"], "format": "csv"}' -o hits.csv
+```
+
 `rust_server` takes descriptors, not structures, and must be given a vector
 matching the index's dimension:
 
 ```bash
 curl -X POST localhost:3000/nn/1024 -H 'Content-Type: application/json' \
      -d '{"descriptor":[0.1, ...], "num_neighbors":8}'
+curl -X POST localhost:3000/nn/batch/1024 -H 'Content-Type: application/json' \
+     -d '{"queries":[{"descriptor":[0.1, ...]}], "num_neighbors":8}'
 curl localhost:3000/health
 curl localhost:3000/transform
 ```
+
+The batch form runs its queries across a thread pool, which is where a large
+submission gets its speed: the index is read-only, so queries need no
+coordination at all.
 
 ## Credits
 

@@ -13,7 +13,9 @@ DEFAULTS = {
     "embedding": {"model": "salsa16", "revision": None, "device": None,
                   "cache_dir": None},
     "cache": {"ttl_seconds": 21600, "max_entries": 5000},
-    "limits": {"max_smiles_length": 150, "max_num_neighbors": 96},
+    "limits": {"max_smiles_length": 150, "max_num_neighbors": 96,
+               "max_batch_size": 10000, "batch_concurrency": 1,
+               "batch_timeout_seconds": 300.0},
     "static_dir": None,
 }
 

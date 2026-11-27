@@ -94,6 +94,40 @@ class Library:
 
         return response.json()
 
+    async def search_batch(self, client, descriptors, fingerprints, num_neighbors, timeout):
+        """Ranked hits for many descriptors, in one round trip."""
+
+        queries = []
+
+        for descriptor, fingerprint in zip(descriptors, fingerprints):
+            query = {"descriptor": [float(x) for x in descriptor]}
+
+            if fingerprint is not None and self.fingerprint_bytes:
+                query["fingerprint"] = [int(b) for b in fingerprint]
+
+            queries.append(query)
+
+        try:
+            response = await client.post(
+                f"{self.url}/nn/batch/{self.max_neighbors}",
+                json={"queries": queries, "num_neighbors": num_neighbors},
+                timeout=timeout)
+        except Exception as error:
+            raise LibraryError(f"{self.name}: batch search failed: {error}")
+
+        if response.status_code != 200:
+            raise LibraryError(f"{self.name}: batch search returned "
+                               f"{response.status_code}: {response.text[:200]}")
+
+        answer = response.json()
+
+        if len(answer["results"]) != len(queries):
+            raise LibraryError(
+                f"{self.name}: sent {len(queries)} queries and got "
+                f"{len(answer['results'])} results back")
+
+        return answer
+
     def describe(self):
         return {
             "name": self.name,
