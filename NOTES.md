@@ -167,8 +167,17 @@ help: it moves the same bytes.
 - **The service saturates at ~152 qps**, flat from 4 clients up while latency
   grows linearly (26 ms at 4 clients, 104 ms at 16). That ceiling implies a
   **6.6 ms serialized section**, which is the model lock around inference.
-  Scaling past it needs several model replicas or request batching, not more
-  workers.
+- **Batch-1 inference wastes the GPU.** On an L40S, batch 32 costs 14.7 ms
+  against 8.3 ms for batch 1 — 1.8x the time for 32x the molecules, **18x the
+  throughput**; batch 128 reaches 26x. Dynamic batching is therefore the lever
+  for concurrency, not more workers and not MPS: the GPU is underused, not
+  contended, so sharing it better buys nothing.
+
+| batch | ms | mol/s |
+|---|---|---|
+| 1 | 8.3 | 120 |
+| 32 | 14.7 | 2,173 |
+| 128 | 40.9 | 3,134 |
 
 ## Metrics that did not work
 
