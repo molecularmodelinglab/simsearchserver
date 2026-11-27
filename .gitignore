@@ -8,7 +8,9 @@ kd_tree/test_data
 *.log
 *.lock
 !rust_server/Cargo.lock
-*cache*
+.pytest_cache/
+.cache/
+*.cache
 *.venv*
 __pycache__
 *.egg-info
