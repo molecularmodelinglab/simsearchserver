@@ -191,6 +191,37 @@ over workers there.
 The kd-tree server binds loopback by default; pass `--host 0.0.0.0` to accept
 off-host connections.
 
+## Web service
+
+The query service turns a SMILES into ranked analogs: it embeds with SALSA,
+projects with the index's own transform, fingerprints with RDKit and asks the
+kd-tree. Libraries are declared in its config, so adding one is an edit:
+
+```yaml
+libraries:
+  - name: real161m
+    display: "Enamine REAL (161M)"
+    url: http://127.0.0.1:3000
+```
+
+```bash
+SIMSEARCH_API_CONFIG=service.yaml \
+    python -m uvicorn simsearch_api.app:app --port 8000
+```
+
+It refuses to serve a library whose `/transform` is missing, because an
+unprojected query is the wrong dimension for the index.
+
+The frontend builds to static files served by the query service or by nginx:
+
+```bash
+cd web && npm install && npm run build   # dist/
+```
+
+Set `static_dir` to `web/dist` to serve both from one process, or point nginx
+at it and proxy `/api`. In development `npm run dev` proxies `/api` to port
+8000.
+
 ## HTTP API
 
 `salsa_server` — SMILES travels in the body or query string, never the path,
