@@ -11,8 +11,8 @@ vectors. All chemistry (tokenization, canonicalization, embedding) lives in
 [SALSA](https://github.com/molecularmodelinglab/SALSA).
 
 ```
-browser ──► python_web_server ──► salsa_server    (SMILES  -> embedding)
-             (Flask UI)       └─► rust_server     (vector  -> neighbors)
+browser ──► simsearch_api ──► salsa model, in process (SMILES -> descriptor)
+              (React, nginx)   └─► rust_server        (descriptor -> neighbors)
 ```
 
 | Component | What it does |
@@ -21,13 +21,14 @@ browser ──► python_web_server ──► salsa_server    (SMILES  -> embedd
 | `rust_server/builder` | builds an index from parquet or CSV embedding files |
 | `rust_server/server` | HTTP vector search over a built index |
 | `salsa_server` | embeds a SMILES string via the SALSA model |
-| `python_web_server` | Flask UI; orchestrates the two services above |
+| `simsearch_api` | query service: embeds, projects, fingerprints, asks the index |
+| `web` | React frontend with Ketcher and RDKit-JS depiction |
 
 The web UI embeds its query first, then sends the **vector** to the kd-tree
 server. The kd-tree server never calls out to the embedding service.
 
 Retrieval and ranking are separate: the index returns `MAX_NEIGHBORS`
-candidates, and `python_web_server` re-ranks them by atom-pair Tanimoto
+candidates and re-ranks them by atom-pair Tanimoto against its stored column,
 similarity before showing `NUM_NEIGHBORS`. The embedding retrieves well and
 ranks poorly, so this is worth roughly 3x in retrieval accuracy.
 
@@ -148,22 +149,12 @@ Development:
 All three run from the repository root.
 
 ```bash
-# embedding service
-FLASK_APP=salsa_server.main flask run --port 5000
-
-# kd-tree service
+# the index, loopback only: it has no authentication
 ./rust_server/target/release/server --dirname /path/to/index --port 3000
 
-# web UI
-FLASK_APP=python_web_server.main flask run --port 8000
-```
-
-Production:
-
-```bash
-gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5000 salsa_server.wsgi:app
-gunicorn --workers 4 --bind 127.0.0.1:8000 python_web_server.wsgi:app
-./rust_server/target/release/server --dirname /path/to/index --port 3000
+# the query service, which also serves the built frontend
+SIMSEARCH_API_CONFIG=service.yaml \
+    python -m uvicorn simsearch_api.app:app --port 8000
 ```
 
 The kd-tree server faults the record file into the page cache before it
@@ -171,22 +162,19 @@ accepts traffic, which takes about a minute per 10 GB. Skip it with
 `--no-warm` only for an index larger than memory: cold, queries are orders of
 magnitude slower.
 
-Each `salsa_server` worker loads its own copy of the model, so prefer threads
-over workers there.
+The query service holds one model behind a lock and runs inference in a
+threadpool, so prefer threads over workers.
 
 ### Configuration
 
 | Variable | Default | Used by |
 |---|---|---|
 | `SALSA_MODEL` | `salsa16` | `salsa_server` — a registry name (`salsa8`/`salsa16`/`salsa24`/`salsa32`) or a path |
-| `SALSA_URL` | `http://127.0.0.1:5000` | `python_web_server` |
-| `KDTREE_URL` | `http://127.0.0.1:3000` | `python_web_server` |
-| `MAX_NEIGHBORS` | `1024` | `python_web_server` — candidates retrieved from the index, before re-ranking |
-| `NUM_NEIGHBORS` | `8` | `python_web_server` — results returned after re-ranking. A power of two, so a full stereoisomer tie group comes back together |
-| `RERANK_FP_BITS` | `512` | `python_web_server` — atom-pair fingerprint width |
-| `RERANK_PARSE_THREADS` | all cores | `python_web_server` — lower it when serving concurrent queries |
-| `REQUEST_TIMEOUT` | `30` | `python_web_server` |
+| `SIMSEARCH_API_CONFIG` | — | the query service's config file, required |
 | `HF_HOME` | — | model download cache |
+
+Everything else — libraries, retrieval depth, cache lifetime, limits — lives in
+that config rather than the environment.
 
 The kd-tree server binds loopback by default; pass `--host 0.0.0.0` to accept
 off-host connections.

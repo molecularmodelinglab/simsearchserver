@@ -13,9 +13,9 @@ license = { file = "LICENSE" }
 dependencies = [
     "salsa-lit @ git+https://github.com/molecularmodelinglab/SALSA.git",
     "pyyaml",
-    "flask",
-    "gunicorn",
-    "mols2grid",
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
     "numpy",
     "pandas",
     "pyarrow",
@@ -34,10 +34,7 @@ Repository = "https://github.com/molecularmodelinglab/simsearchserver"
 Paper = "https://arxiv.org/abs/2402.07970"
 
 [tool.setuptools]
-packages = ["simsearch", "python_web_server", "salsa_server", "salsa_server.modeling"]
-
-[tool.setuptools.package-data]
-python_web_server = ["templates/*", "static/*"]
+packages = ["simsearch", "simsearch_api", "salsa_server", "salsa_server.modeling"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
