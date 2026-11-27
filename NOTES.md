@@ -145,6 +145,31 @@ help: it moves the same bytes.
 - Re-ranking 1,024 candidates against the stored fingerprints costs 0.3 ms,
   against ~30 ms when it parsed SMILES per query.
 
+## On the production host, measured
+
+7950X, 128 GB, local NVMe, one GPU, 161M index.
+
+| | |
+|---|---|
+| embed (GPU, one molecule) | 12.9 ms |
+| project + fingerprint | 0.17 ms |
+| index, warm | 3.0 ms |
+| **end to end, warm** | **17.8 ms** |
+
+- **Embedding is 72% of a query and a GPU barely helps**: 35 ms on CPU against
+  12.9 on GPU, because one molecule is a batch of one and the cost is kernel
+  launch, not compute. More GPU will not move it; `torch.compile`, CUDA graphs
+  or fp16 might.
+- **Cold is 168x warm** (502 ms against 3.0 ms at k=1024), decaying to 72x by
+  the fourth query as the page cache fills. An earlier estimate of ~30x was
+  wrong by five-fold. `MADV_RANDOM` is right for a warm index and wrong for a
+  cold one, since it disables readahead.
+- **The service saturates at ~152 qps**, flat from 4 clients up while latency
+  grows linearly (26 ms at 4 clients, 104 ms at 16). That ceiling implies a
+  **6.6 ms serialized section**, which is the model lock around inference.
+  Scaling past it needs several model replicas or request batching, not more
+  workers.
+
 ## Metrics that did not work
 
 MCS and Tanimoto averaged over the top 5 do not separate models at this scale
