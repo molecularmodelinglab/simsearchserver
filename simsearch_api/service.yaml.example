@@ -5,6 +5,9 @@ embedding:
   model: salsa16
   revision: null
   device: null
+  # Where model weights are cached. Null uses the Hugging Face default,
+  # which fails if ~/.cache/huggingface is not writable.
+  cache_dir: null
 
 cache:
   ttl_seconds: 21600

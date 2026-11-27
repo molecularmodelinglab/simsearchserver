@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import sys
 import time
 from contextlib import asynccontextmanager
 
@@ -14,7 +15,7 @@ from pydantic import BaseModel, Field
 
 from simsearch_api import config as cfg
 from simsearch_api.cache import ResultCache
-from simsearch_api.chemistry import Chemistry, InvalidSmiles
+from simsearch_api.chemistry import Chemistry, InvalidSmiles, ModelUnavailable
 from simsearch_api.libraries import Library, LibraryError
 
 CONFIG_ENV = "SIMSEARCH_API_CONFIG"
@@ -53,7 +54,11 @@ async def lifespan(_app):
     state.cache = ResultCache(**state.config["cache"])
     state.client = httpx.AsyncClient()
 
-    state.chemistry = Chemistry(state.config["embedding"])
+    try:
+        state.chemistry = Chemistry(state.config["embedding"])
+    except ModelUnavailable as error:
+        print(f"\nERROR: {error}\n", file=sys.stderr, flush=True)
+        raise
     log.info("loaded %s, embedding dimension %d",
              state.chemistry.model_name, state.chemistry.dim)
 

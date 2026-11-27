@@ -19,6 +19,10 @@ class InvalidSmiles(Exception):
     """A query the model cannot embed, with a reason worth showing."""
 
 
+class ModelUnavailable(Exception):
+    """The model could not be loaded, with the remedy named."""
+
+
 class Chemistry:
     """The SALSA model and the fingerprint generator, loaded once."""
 
@@ -31,9 +35,24 @@ class Chemistry:
         self.model_name = settings["model"]
         self.revision = settings["revision"]
         self.device = settings["device"]
+        self.cache_dir = settings["cache_dir"]
 
-        self._model = load_model(self.model_name, revision=self.revision,
-                                 map_location=self.device)
+        try:
+            self._model = load_model(self.model_name, revision=self.revision,
+                                     map_location=self.device,
+                                     cache_dir=self.cache_dir)
+        except PermissionError as error:
+            raise ModelUnavailable(
+                f"cannot write the model cache at {error.filename}. Either fix "
+                f"its ownership (it is often left root-owned by an earlier sudo "
+                f"run) or point embedding.cache_dir at a writable directory."
+            ) from error
+        except OSError as error:
+            raise ModelUnavailable(
+                f"could not load {self.model_name}: {error}. Set "
+                f"embedding.cache_dir to a writable directory, or pre-download "
+                f"the model with `salsa-lit download`."
+            ) from error
         # Inference is not reentrant, and one model is all a query needs.
         self._lock = threading.Lock()
 
