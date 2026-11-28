@@ -1,242 +1,696 @@
-use kd_tree::tree;
+//! Nearest-neighbor service over a kd-tree; callers send a vector, not SMILES.
+
+use kd_tree::tree::{ImmutTree, NearestNeighbors};
 use kd_tree::data::Descriptor;
+use kd_tree::fingerprints::{self, FingerprintStore};
 
 use std::convert::Infallible;
-use std::sync::{Arc, Mutex};
-
-use bytes::Bytes;
-
-//use rand::prelude::*;
+use std::net::{IpAddr, SocketAddr};
+use std::sync::Arc;
 
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Request, Response};
+use hyper::{Body, Method, Request, Response, StatusCode};
 use hyper::server::Server;
 
-use serde_yaml::Result;
-
-use reqwest::Error;
+use serde::{Deserialize, Serialize};
 
 use clap::Parser;
+use rayon::prelude::*;
+
+const MAX_NEIGHBORS: usize = 1024;
+const MAX_BODY_BYTES: usize = 1024 * 1024;
+
+const MAX_BATCH_QUERIES: usize = 10_000;
+const MAX_BATCH_BODY_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-
-    //Dirname containing tree
+    /// Directory containing the tree (config.yaml, node, record, db.db)
     #[arg(short, long)]
     dirname: String,
 
-    //Port to listen on
-    #[arg(short, long)]
-    port: Option<u16>,
-}
-async fn handle_request(req: Request<Body>, dirname: String) -> Result<Response<Body>> {
+    /// Port to listen on
+    #[arg(short, long, default_value_t = 3000)]
+    port: u16,
 
-    let path = req.uri().path().to_string();
-    dbg!(&path);
+    /// Defaults to loopback; set 0.0.0.0 to accept off-host connections.
+    #[arg(long, default_value = "127.0.0.1")]
+    host: IpAddr,
 
-    let mut items = path.split("/");
+    /// Skip faulting the record file into the page cache before serving
+    #[arg(long)]
+    no_warm: bool,
 
-    dbg!(&items);
-    let method = items.nth(1).unwrap();
-    dbg!(&path);
-    let retval = match method {
-
-        "nn" => dispatch_nn(req, &dirname).await,
-        //"range" => dispatch_range(req, dirname).await,
-        "test" => dispatch_test(&dirname).await,
-        _ => Ok(Response::new(Body::from("method not recognized".to_string().as_bytes().to_vec()))),
-    };
-    
-    dbg!(&retval);
-    return retval;
+    /// Threads for batch queries, defaulting to all but two cores
+    #[arg(long)]
+    batch_threads: Option<usize>,
 }
 
-async fn dispatch_test(dirname: &String) -> Result<Response<Body>> {
-
-    let tree = tree::ImmutTree::read_from_directory(dirname.clone());
-    let length = tree.config.desc_length;
-    let descriptor = Descriptor::random(length);
-
-    dbg!(&descriptor);
-
-    let nn = tree.get_nearest_neighbors(&descriptor, 10);
-    let s = serde_yaml::to_string(&nn).unwrap();
-    //let s = nn.to_yaml();
-
-    Ok(Response::new(Body::from(s.as_bytes().to_vec())))
+/// What a request is answered from.
+struct State {
+    tree: ImmutTree,
+    fingerprints: Option<FingerprintStore>,
+    /// Served verbatim at `/transform`; the server does not interpret it.
+    transform: Option<String>,
+    batch_pool: rayon::ThreadPool,
 }
-async fn dispatch_nn(req: Request<Body>, dirname: &String) -> Result<Response<Body>> {
 
-    let tree = tree::ImmutTree::read_from_directory(dirname.clone());
-    dbg!("in dispatch_nn");
-    let path = req.uri().path().to_string();
+/// The subset of `config.resolved.yaml` the server can check for itself.
+#[derive(Deserialize)]
+struct Resolved {
+    format_version: Option<u32>,
+    descriptor_length: Option<usize>,
+    record_count: Option<u64>,
+    fingerprint: Option<ResolvedFingerprint>,
+}
 
-    let mut items: Vec<String> = path.split("/").map(|x| x.to_string()).collect();
+#[derive(Deserialize)]
+struct ResolvedFingerprint {
+    bytes_per_record: Option<usize>,
+}
 
-    dbg!(&items);
-    let num_nn = items[2].clone();
+/// Refuses rather than answers, because a mismatch is wrong on every query.
+fn check_resolved(directory: &str, tree: &ImmutTree, store: Option<&FingerprintStore>) {
+    let path = format!("{}/config.resolved.yaml", directory);
 
-    let num_nn = num_nn.parse::<usize>().unwrap();
-    let smiles = items[3].clone();
-    match smiles.len() {
-        0 => return Ok(Response::new(Body::from("No SMILES supplied".to_string().as_bytes().to_vec()))),
-        _ => (),
+    let text = match std::fs::read_to_string(&path) {
+        Err(_) => {
+            println!("No config.resolved.yaml; nothing to validate against");
+            return;
+        },
+        Ok(text) => text,
     };
 
-    let smiles_request = format!("http://localhost:5000/smiles/salsa16/{}", smiles);
-    dbg!(&smiles_request);
+    let resolved: Resolved = serde_yaml::from_str(&text)
+        .unwrap_or_else(|e| panic!("could not parse {}: {}", path, e));
 
-    let response = reqwest::get(&smiles_request).await.unwrap();
-    dbg!(&response);
+    let mut wrong: Vec<String> = Vec::new();
 
-    match response.status() {
-        reqwest::StatusCode::OK => (),
-        _ => {
-            let message = response.text().await.unwrap();
-                return Ok(Response::new(Body::from(message.to_string().as_bytes().to_vec())));
-            }
-
-    }
-    let embedding = response.text().await.unwrap();
-    dbg!(&embedding);
-
-    let embedding: Vec<f32> = serde_json::from_str(&embedding).unwrap();
-    dbg!(&embedding);
-
-    let descriptor = Descriptor{ data: embedding.clone(), length: embedding.len()};
-
-    dbg!(&descriptor);
-
-    /*
-    let mut mg = tree.lock().unwrap();
-    let nn = mg.get_nearest_neighbors(&descriptor, num_nn);
-    */
-    let nn = tree.get_nearest_neighbors(&descriptor, num_nn);
-    let s = nn.to_yaml();
-
-    Ok(Response::new(Body::from(s.as_bytes().to_vec())))
-}
-
-async fn dispatch_range(req: Request<Body>, tree: Arc<Mutex<tree::ImmutTree>>) -> Result<Response<Body>> {
-
-    let path = req.uri().path().to_string();
-
-    let mut items = path.split("/");
-
-    Ok(Response::new(Body::from(path.as_bytes().to_vec())))
-
-}
-
-
-/*
-    let values = data_string.split(",").map(|x| x.parse::<f32>()).collect::<Vec<_>>();
-
-    let mut parsed_values: Vec<f32> = Vec::new();
-    for value in values.into_iter() {
-        matct p value {
-            Ok(v) => parsed_values.push(v),
-            Err(e) => return Ok(Response::new(Body::from("invalid descriptor".to_string().as_bytes().to_vec()))),
+    if let Some(version) = resolved.format_version {
+        if version != kd_tree::layout::FORMAT_VERSION {
+            wrong.push(format!("format_version {} against {}",
+                               version, kd_tree::layout::FORMAT_VERSION));
         }
     }
 
-    let mut mg = tree.lock().unwrap();
-
-    match parsed_values.len() == mg.config.desc_length {
-        true => (),
-        false => return Ok(Response::new(Body::from("invalid descriptor".to_string().as_bytes().to_vec()))),
+    if let Some(length) = resolved.descriptor_length {
+        if length != tree.config.desc_length {
+            wrong.push(format!("descriptor_length {} against {}",
+                               length, tree.config.desc_length));
+        }
     }
 
-    let descriptor = Descriptor{ data: parsed_values.clone(), length: parsed_values.len()};
-
-    let nn = mg.get_nearest_neighbors(&descriptor, num_nn);
-    let s = nn.to_yaml();
-
-    let mut data = "".to_string();
-    data += &format!("query: {:?}\n", "none");
-    data += &format!("embedding: {}\n", descriptor.yaml());
-    data += &format!("num nn: {:?}\n", num_nn);
-    data += "hits: \n";
-    data += &s;
-    data += "}";
-
-    //let data = "direct descriptor query not implemented".to_string();
-
-    Ok(Response::new(Body::from(data.as_bytes().to_vec())))
-
-}
-*/
-
-fn query_smiles(data_string: &String, tree: Arc<Mutex<tree::ImmutTree>>) -> Result<Response<Body>> {
-
-    let data = "direct smiles query not implemented".to_string();
-
-
-    Ok(Response::new(Body::from(data.as_bytes().to_vec())))
-
-}
-
-
-fn preprocess_smiles(smiles: &String) -> Result<()> {
-
-    //check max length
-    
-    //check valid characters
-    
-    //canonicalize
-
-    return Ok(());
-
-}
-
-fn get_smiles_embedding(smiles: &String, len: usize) -> Descriptor {
-
-    let res = preprocess_smiles(smiles);
-    match res {
-        Ok(_) => {},
-        Err(_) => { panic!();}
+    if let Some(count) = resolved.record_count {
+        if count != tree.database.num_entries() {
+            wrong.push(format!("record_count {} against {}",
+                               count, tree.database.num_entries()));
+        }
     }
 
-    return Descriptor::random(len);
+    let declared = resolved.fingerprint.as_ref().and_then(|f| f.bytes_per_record);
+    match (declared, store.map(|s| s.bytes_per_record())) {
+        (Some(a), Some(b)) if a != b =>
+            wrong.push(format!("fingerprint bytes_per_record {} against {}", a, b)),
+        (Some(a), None) =>
+            wrong.push(format!("fingerprint bytes_per_record {} but no fingerprint file", a)),
+        _ => {},
+    }
+
+    if !wrong.is_empty() {
+        panic!("{} does not describe this index: {}", path, wrong.join("; "));
+    }
+
+    println!("Validated against {}", path);
 }
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum QueryBody {
+    Bare(Vec<f32>),
+    Wrapped {
+        descriptor: Vec<f32>,
+        /// The query's fingerprint; without it hits stay in embedding order.
+        #[serde(default)]
+        fingerprint: Option<Vec<u8>>,
+        #[serde(default)]
+        num_neighbors: Option<usize>,
+    },
+}
+
+impl QueryBody {
+    fn into_parts(self) -> (Vec<f32>, Option<Vec<u8>>, Option<usize>) {
+        match self {
+            QueryBody::Bare(v) => (v, None, None),
+            QueryBody::Wrapped { descriptor, fingerprint, num_neighbors } =>
+                (descriptor, fingerprint, num_neighbors),
+        }
+    }
+}
+
+#[derive(Deserialize)]
+struct BatchQuery {
+    descriptor: Vec<f32>,
+    #[serde(default)]
+    fingerprint: Option<Vec<u8>>,
+}
+
+#[derive(Deserialize)]
+struct BatchBody {
+    queries: Vec<BatchQuery>,
+    #[serde(default)]
+    num_neighbors: Option<usize>,
+}
+
+#[derive(Serialize)]
+struct BatchResponse {
+    num_queries: usize,
+    elapsed_ms: f64,
+    threads: usize,
+    results: Vec<QueryResponse>,
+}
+
+#[derive(Serialize)]
+struct Hit {
+    identifier: String,
+    smiles: String,
+    distance: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    similarity: Option<f32>,
+}
+
+/// Microseconds; `insert` is counted inside `scan`, the remainder of `total` is the heap.
+#[derive(Serialize)]
+struct Timing {
+    page_fetch: f64,
+    scan: f64,
+    insert: f64,
+    node: f64,
+    rerank: f64,
+    total: f64,
+}
+
+#[derive(Serialize)]
+struct QueryResponse {
+    num_hits: usize,
+    pages_visited: usize,
+    pages_pruned: usize,
+    nodes_visited: usize,
+    records_scanned: usize,
+    timing: Timing,
+    hits: Vec<Hit>,
+}
+
+#[derive(Serialize)]
+struct HealthResponse {
+    status: &'static str,
+    desc_length: usize,
+    num_records: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fingerprint_bytes: Option<usize>,
+    built_at: String,
+    has_transform: bool,
+    num_internal_nodes: usize,
+}
+
+#[derive(Serialize)]
+struct ErrorResponse {
+    error: String,
+}
+
+struct ApiError {
+    status: StatusCode,
+    message: String,
+}
+
+impl ApiError {
+    fn bad_request(message: impl Into<String>) -> Self {
+        Self { status: StatusCode::BAD_REQUEST, message: message.into() }
+    }
+
+    fn not_found(message: impl Into<String>) -> Self {
+        Self { status: StatusCode::NOT_FOUND, message: message.into() }
+    }
+
+    fn into_response(self) -> Response<Body> {
+        let body = serde_json::to_string(&ErrorResponse { error: self.message })
+            .unwrap_or_else(|_| r#"{"error":"internal error"}"#.to_string());
+
+        return json_response(self.status, body);
+    }
+}
+
+fn json_response(status: StatusCode, body: String) -> Response<Body> {
+    return Response::builder()
+        .status(status)
+        .header("Content-Type", "application/json")
+        .body(Body::from(body))
+        .expect("response with valid status and headers");
+}
+
+async fn handle_request(req: Request<Body>, state: Arc<State>) -> Result<Response<Body>, Infallible> {
+    let result = route(req, state).await;
+
+    let response = match result {
+        Ok(response) => response,
+        Err(e) => e.into_response(),
+    };
+
+    return Ok(response);
+}
+
+async fn route(req: Request<Body>, state: Arc<State>) -> Result<Response<Body>, ApiError> {
+    let path = req.uri().path().to_string();
+
+    // A path starts with '/', so the first split segment is always empty.
+    let segments: Vec<&str> = path.split('/').skip(1).collect();
+
+    let head = match segments.first() {
+        Some(s) => *s,
+        None => return Err(ApiError::not_found("no path supplied")),
+    };
+
+    match (req.method(), head) {
+        (&Method::GET, "health") => handle_health(&state),
+        (&Method::GET, "transform") => handle_transform(&state),
+        (&Method::GET, "nn") => handle_nn_get(&segments, &state),
+        (&Method::POST, "nn") if segments.get(1) == Some(&"batch") =>
+            handle_nn_batch_post(req, &segments, Arc::clone(&state)).await,
+        (&Method::POST, "nn") => handle_nn_post(req, &segments, &state).await,
+        (_, "health") | (_, "nn") | (_, "transform") => Err(ApiError {
+            status: StatusCode::METHOD_NOT_ALLOWED,
+            message: format!("method {} not allowed for /{}", req.method(), head),
+        }),
+        _ => Err(ApiError::not_found(format!(
+            "unknown endpoint {:?}; available: /health, /transform, /nn/{{k}}/{{vector}}, \
+             POST /nn/{{k}}, POST /nn/batch/{{k}}",
+            path
+        ))),
+    }
+}
+
+fn handle_health(state: &State) -> Result<Response<Body>, ApiError> {
+    let body = HealthResponse {
+        status: "ok",
+        desc_length: state.tree.config.desc_length,
+        num_records: state.tree.database.num_entries(),
+        num_internal_nodes: state.tree.node_handler.len(),
+        fingerprint_bytes: state.fingerprints.as_ref().map(|s| s.bytes_per_record()),
+        built_at: state.tree.config.built_at.clone(),
+        has_transform: state.transform.is_some(),
+    };
+
+    let body = serde_json::to_string(&body)
+        .map_err(|e| ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, message: e.to_string() })?;
+
+    return Ok(json_response(StatusCode::OK, body));
+}
+
+fn handle_transform(state: &State) -> Result<Response<Body>, ApiError> {
+    return match state.transform.as_ref() {
+        Some(body) => Ok(json_response(StatusCode::OK, body.clone())),
+        None => Err(ApiError::not_found(
+            "this index ships no transform; it was built without a projection")),
+    };
+}
+
+fn handle_nn_get(segments: &[&str], state: &State) -> Result<Response<Body>, ApiError> {
+    let k = match segments.get(1) {
+        Some(s) => parse_k(s)?,
+        None => return Err(ApiError::bad_request(
+            "missing neighbor count; expected /nn/{k}/{comma-separated vector}",
+        )),
+    };
+
+    let vector_str = match segments.get(2) {
+        Some(s) if !s.is_empty() => *s,
+        _ => return Err(ApiError::bad_request(
+            "missing query vector; expected /nn/{k}/{comma-separated vector}",
+        )),
+    };
+
+    let values = parse_descriptor_csv(vector_str)?;
+
+    return run_query(values, k, None, None, state);
+}
+
+async fn handle_nn_post(
+    req: Request<Body>,
+    segments: &[&str],
+    state: &State,
+) -> Result<Response<Body>, ApiError> {
+    let k = match segments.get(1) {
+        Some(s) => parse_k(s)?,
+        None => return Err(ApiError::bad_request("missing neighbor count; expected POST /nn/{k}")),
+    };
+
+    let body = hyper::body::to_bytes(req.into_body())
+        .await
+        .map_err(|e| ApiError::bad_request(format!("could not read request body: {}", e)))?;
+
+    if body.len() > MAX_BODY_BYTES {
+        return Err(ApiError {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            message: format!("request body exceeds {} bytes", MAX_BODY_BYTES),
+        });
+    }
+
+    let parsed: QueryBody = serde_json::from_slice(&body).map_err(|e| {
+        ApiError::bad_request(format!(
+            "could not parse JSON body as a float array or {{\"descriptor\": [...]}}: {}",
+            e
+        ))
+    })?;
+
+    let (values, fingerprint, num_neighbors) = parsed.into_parts();
+
+    return run_query(values, k, fingerprint, num_neighbors, state);
+}
+
+async fn handle_nn_batch_post(
+    req: Request<Body>,
+    segments: &[&str],
+    state: Arc<State>,
+) -> Result<Response<Body>, ApiError> {
+    let k = match segments.get(2) {
+        Some(s) => parse_k(s)?,
+        None => return Err(ApiError::bad_request(
+            "missing neighbor count; expected POST /nn/batch/{k}")),
+    };
+
+    let body = hyper::body::to_bytes(req.into_body())
+        .await
+        .map_err(|e| ApiError::bad_request(format!("could not read request body: {}", e)))?;
+
+    if body.len() > MAX_BATCH_BODY_BYTES {
+        return Err(ApiError {
+            status: StatusCode::PAYLOAD_TOO_LARGE,
+            message: format!("request body exceeds {} bytes", MAX_BATCH_BODY_BYTES),
+        });
+    }
+
+    let parsed: BatchBody = serde_json::from_slice(&body).map_err(|e| {
+        ApiError::bad_request(format!(
+            "could not parse JSON body as {{\"queries\": [{{\"descriptor\": [...]}}]}}: {}",
+            e
+        ))
+    })?;
+
+    if parsed.queries.is_empty() {
+        return Err(ApiError::bad_request("no queries supplied"));
+    }
+
+    if parsed.queries.len() > MAX_BATCH_QUERIES {
+        return Err(ApiError::bad_request(format!(
+            "{} queries exceeds the maximum of {}",
+            parsed.queries.len(), MAX_BATCH_QUERIES
+        )));
+    }
+
+    // CPU-bound, so it must not run on a runtime worker.
+    let answers = tokio::task::spawn_blocking(move || {
+        let threads = state.batch_pool.current_num_threads();
+        let started = std::time::Instant::now();
+        let num_neighbors = parsed.num_neighbors;
+
+        let results: Result<Vec<QueryResponse>, ApiError> = state.batch_pool.install(|| {
+            parsed
+                .queries
+                .into_par_iter()
+                .map(|query| {
+                    answer_query(query.descriptor, k, query.fingerprint, num_neighbors, &state)
+                })
+                .collect()
+        });
+
+        results.map(|results| BatchResponse {
+            num_queries: results.len(),
+            elapsed_ms: started.elapsed().as_secs_f64() * 1000.0,
+            threads,
+            results,
+        })
+    })
+    .await
+    .map_err(|e| ApiError {
+        status: StatusCode::INTERNAL_SERVER_ERROR,
+        message: format!("batch query failed: {}", e),
+    })??;
+
+    let body = serde_json::to_string(&answers)
+        .map_err(|e| ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, message: e.to_string() })?;
+
+    return Ok(json_response(StatusCode::OK, body));
+}
+
+fn parse_k(s: &str) -> Result<usize, ApiError> {
+    let k = s
+        .parse::<usize>()
+        .map_err(|_| ApiError::bad_request(format!("neighbor count {:?} is not a positive integer", s)))?;
+
+    if k == 0 {
+        return Err(ApiError::bad_request("neighbor count must be at least 1"));
+    }
+
+    if k > MAX_NEIGHBORS {
+        return Err(ApiError::bad_request(format!(
+            "neighbor count {} exceeds the maximum of {}",
+            k, MAX_NEIGHBORS
+        )));
+    }
+
+    return Ok(k);
+}
+
+fn parse_descriptor_csv(s: &str) -> Result<Vec<f32>, ApiError> {
+    let mut values: Vec<f32> = Vec::new();
+
+    for (i, field) in s.split(',').enumerate() {
+        let value = field.trim().parse::<f32>().map_err(|_| {
+            ApiError::bad_request(format!("descriptor component {} ({:?}) is not a number", i, field))
+        })?;
+
+        values.push(value);
+    }
+
+    return Ok(values);
+}
+
+fn run_query(
+    values: Vec<f32>,
+    k: usize,
+    fingerprint: Option<Vec<u8>>,
+    num_neighbors: Option<usize>,
+    state: &State,
+) -> Result<Response<Body>, ApiError> {
+    let answer = answer_query(values, k, fingerprint, num_neighbors, state)?;
+
+    let body = serde_json::to_string(&answer)
+        .map_err(|e| ApiError { status: StatusCode::INTERNAL_SERVER_ERROR, message: e.to_string() })?;
+
+    return Ok(json_response(StatusCode::OK, body));
+}
+
+fn answer_query(
+    values: Vec<f32>,
+    k: usize,
+    fingerprint: Option<Vec<u8>>,
+    num_neighbors: Option<usize>,
+    state: &State,
+) -> Result<QueryResponse, ApiError> {
+    let expected = state.tree.config.desc_length;
+
+    if values.len() != expected {
+        return Err(ApiError::bad_request(format!(
+            "query descriptor has {} dimensions but this index was built for {}",
+            values.len(),
+            expected
+        )));
+    }
+
+    if let Some(i) = values.iter().position(|x| !x.is_finite()) {
+        return Err(ApiError::bad_request(format!(
+            "descriptor component {} is not a finite number",
+            i
+        )));
+    }
+
+    if let Some(bytes) = fingerprint.as_ref() {
+        match state.fingerprints.as_ref() {
+            None => return Err(ApiError::bad_request(
+                "a query fingerprint was sent but this index has no fingerprint file")),
+            Some(store) if store.bytes_per_record() != bytes.len() =>
+                return Err(ApiError::bad_request(format!(
+                    "query fingerprint is {} bytes but this index stores {}",
+                    bytes.len(), store.bytes_per_record()))),
+            Some(_) => {},
+        }
+    }
+
+    let descriptor = Descriptor { data: values, length: expected };
+
+    let neighbors = state.tree.get_nearest_neighbors(&descriptor, k);
+
+    return Ok(to_response(neighbors, fingerprint.as_deref(), num_neighbors, state));
+}
+
+fn to_response(
+    neighbors: NearestNeighbors,
+    query: Option<&[u8]>,
+    num_neighbors: Option<usize>,
+    state: &State,
+) -> QueryResponse {
+    let started = std::time::Instant::now();
+
+    // Ranked first, so the database is only asked for the hits served.
+    let mut order: Vec<usize> = (0..neighbors.indexes.len()).collect();
+    let mut similarities: Vec<Option<f32>> = vec![None; neighbors.indexes.len()];
+
+    if let (Some(query), Some(store)) = (query, state.fingerprints.as_ref()) {
+        for i in &order {
+            similarities[*i] = store.get(neighbors.indexes[*i])
+                .map(|stored| fingerprints::tanimoto(query, stored));
+        }
+
+        // Descending similarity, with embedding distance breaking ties.
+        order.sort_by(|a, b| {
+            similarities[*b].unwrap_or(0.0).total_cmp(&similarities[*a].unwrap_or(0.0))
+                .then(neighbors.distances[*a].total_cmp(&neighbors.distances[*b]))
+        });
+    }
+
+    if let Some(n) = num_neighbors {
+        order.truncate(n);
+    }
+
+    let rerank_micros = started.elapsed().as_nanos() as f64 / 1000.0;
+
+    let chosen: Vec<u64> = order.iter().map(|i| neighbors.indexes[*i]).collect();
+    let records = state.tree.records_at(&chosen);
+
+    let mut hits: Vec<Hit> = Vec::new();
+
+    for (slot, i) in order.iter().enumerate() {
+        let record = match &records[slot] {
+            Some(r) => r,
+            // Index and SMILES database disagree; skip rather than fail the query.
+            None => continue,
+        };
+
+        hits.push(Hit {
+            identifier: record.identifier.to_string(),
+            smiles: record.smiles.clone(),
+            distance: neighbors.distances[*i],
+            similarity: similarities[*i],
+        });
+    }
+
+    return QueryResponse {
+        num_hits: hits.len(),
+        pages_visited: neighbors.record_pages_visited,
+        pages_pruned: neighbors.record_pages_pruned,
+        nodes_visited: neighbors.nodes_visited,
+        records_scanned: neighbors.records_scanned,
+        timing: Timing {
+            page_fetch: neighbors.page_fetch_nanos as f64 / 1000.0,
+            scan: neighbors.scan_nanos as f64 / 1000.0,
+            insert: neighbors.insert_nanos as f64 / 1000.0,
+            node: neighbors.node_nanos as f64 / 1000.0,
+            rerank: rerank_micros,
+            total: neighbors.total_nanos as f64 / 1000.0,
+        },
+        hits,
+    };
+}
+
 #[tokio::main]
-pub async fn main() -> Result<()> {
-
+pub async fn main() {
     let args = Args::parse();
-    dbg!(&args);
 
-    let port = match args.port {
-        Some(p) => p,
-        None => 3000,
+    println!("Loading tree from {} ...", &args.dirname);
+    let tree = ImmutTree::read_from_directory(args.dirname.clone());
+    println!(
+        "Loaded {} records, {} internal nodes, descriptor length {}",
+        tree.database.num_entries(),
+        tree.node_handler.len(),
+        tree.config.desc_length,
+    );
+
+    let fingerprint_path = fingerprints::path_in(&args.dirname);
+    let store = match std::path::Path::new(&fingerprint_path).exists() {
+        false => {
+            println!("No fingerprint file; hits will be served in embedding order");
+            None
+        },
+        true => {
+            let store = FingerprintStore::open(&fingerprint_path, tree.database.num_entries())
+                .expect("could not open the fingerprint file");
+            println!("Loaded {} fingerprints of {} bytes", store.len(), store.bytes_per_record());
+            Some(store)
+        },
     };
 
+    if !args.no_warm {
+        let started = std::time::Instant::now();
+        let mut faulted = 0usize;
 
-    // For every connection, we must make a `Service` to handle all
-    // incoming HTTP requests on said connection.
-    let make_svc = make_service_fn(move |_conn| {
-        let dirname = args.dirname.clone();
-
-        // This is the `Service` that will handle the connection.
-        // `service_fn` is a helper to convert a function that
-        // returns a Response into a `Service`.
-        async move { Ok::<_, Infallible>(service_fn( move |req| {
-            //let tree = tree.clone();
-            handle_request(req, dirname.clone())
+        if let Some(store) = store.as_ref() {
+            faulted += store.warm().unwrap_or(0);
         }
-            ))}
+
+        faulted += tree.database.warm();
+
+        match tree.record_handler.warm() {
+            Ok(bytes) => {
+                faulted += bytes;
+                let gb = faulted as f64 / (1 << 30) as f64;
+                let seconds = started.elapsed().as_secs_f64();
+                println!("Warmed {:.1} GB in {:.1}s ({:.0} MB/s)",
+                         gb, seconds, gb * 1024.0 / seconds);
+            },
+            Err(e) => println!("Could not warm the record file: {:?}", e),
+        }
+    }
+
+    check_resolved(&args.dirname, &tree, store.as_ref());
+
+    let transform = std::fs::read_to_string(format!("{}/transform.json", args.dirname)).ok();
+    if transform.is_some() {
+        println!("Serving the projection at /transform");
+    }
+
+    let threads = args.batch_threads.unwrap_or_else(|| {
+        let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+        cores.saturating_sub(2).max(1)
     });
 
-    let addr = ([127, 0, 0, 1], port).into();
+    let batch_pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(threads)
+        .thread_name(|i| format!("batch-{}", i))
+        .build()
+        .expect("could not build the batch thread pool");
+
+    println!("Batch queries use {} threads", threads);
+
+    let state = Arc::new(State { tree, fingerprints: store, transform, batch_pool });
+
+    let make_svc = make_service_fn(move |_conn| {
+        let state = Arc::clone(&state);
+
+        async move {
+            Ok::<_, Infallible>(service_fn(move |req| {
+                handle_request(req, Arc::clone(&state))
+            }))
+        }
+    });
+
+    let addr = SocketAddr::new(args.host, args.port);
 
     let server = Server::bind(&addr).serve(make_svc);
 
-     //   .serve(move || {
-     //       let counter = counter.clone();
-     //       service_fn_ok(move |_req| use_counter(counter.clone()))
-
     println!("Listening on http://{}", addr);
 
-    server.await.unwrap();
-
-    Ok(())
+    if let Err(e) = server.await {
+        eprintln!("server error: {}", e);
+        std::process::exit(1);
+    }
 }

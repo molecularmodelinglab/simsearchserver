@@ -1,11 +1,17 @@
-[workspace] 
+[workspace]
+
+resolver = "2"
 
 members = [
 	"kd_tree",
 	"builder",
 	"server",
-	"query_test",
 ]
+
+# Denied here rather than through RUSTFLAGS, which would also apply to
+# dependencies and fail the build on an upstream warning.
+[workspace.lints.rust]
+warnings = "deny"
 
 [profile.release-with-debug]
 inherits = "release"

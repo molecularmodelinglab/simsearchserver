@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "simsearchserver"
+version = "0.2.0"
+description = "Chemical similarity search over low-dimensional molecular embeddings"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+
+dependencies = [
+    "salsa-lit @ git+https://github.com/molecularmodelinglab/SALSA.git",
+    "pyyaml",
+    "fastapi",
+    "uvicorn[standard]",
+    "httpx",
+    "numpy",
+    "pandas",
+    "pyarrow",
+    "rdkit",
+    "requests",
+]
+
+[project.scripts]
+simsearch = "simsearch.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.urls]
+Repository = "https://github.com/molecularmodelinglab/simsearchserver"
+Paper = "https://arxiv.org/abs/2402.07970"
+
+[tool.setuptools]
+packages = ["simsearch", "simsearch_api"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

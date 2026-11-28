@@ -1,4 +1,4 @@
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{ByteOrder, LittleEndian};
 use std::fmt;
 use ascii::AsciiString;
 use rand::{distributions::Alphanumeric, Rng};
@@ -10,11 +10,10 @@ use serde::Serialize;
 
 pub type CompoundIndex = u64;
 
-pub const IDENTIFIER_SIZE: usize = 50;
+/// Longest identifier accepted; bounds a scratch array, not the stored size.
+pub const IDENTIFIER_SIZE: usize = 128;
 
 pub const MAX_SMILES_LENGTH: usize = 200;
-//pub const MAX_IDENTIFIER_LENGTH: usize = 30;
-pub const MAX_IDENTIFIER_LENGTH: usize = IDENTIFIER_SIZE;
 
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub struct CompoundRecord {
@@ -27,7 +26,7 @@ pub struct CompoundRecord {
 impl CompoundRecord {
 
 
-    pub fn new(dataset_identifier: u8, smiles: String, compound_identifier: CompoundIdentifier, descriptor: Descriptor, length: usize) -> Self {
+    pub fn new(_dataset_identifier: u8, smiles: String, compound_identifier: CompoundIdentifier, descriptor: Descriptor, length: usize) -> Self {
 
         return Self {
             smiles,
@@ -45,16 +44,14 @@ impl CompoundRecord {
         return tree_record;
     }
 
-    pub fn random(length: usize) -> Self {
+    pub fn random(rng: &mut impl Rng, length: usize) -> Self {
 
-        let smiles: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(20)
-            .map(char::from)
+        let smiles: String = (0..20)
+            .map(|_| char::from(rng.sample(&Alphanumeric)))
             .collect();
 
-        let compound_identifier = CompoundIdentifier::random();
-        let descriptor = Descriptor::random(length);
+        let compound_identifier = CompoundIdentifier::random(rng);
+        let descriptor = Descriptor::random(rng, length);
 
         return Self {
             smiles,
@@ -69,7 +66,6 @@ impl CompoundRecord {
 pub struct Descriptor {
     pub data: Vec<f32>,
     pub length: usize,
-    //pub data: [f32; N],
 }
 
 impl Descriptor {
@@ -87,13 +83,9 @@ impl Descriptor {
     
     }
 
-    pub fn random(length: usize) -> Self {
+    pub fn random(rng: &mut impl Rng, length: usize) -> Self {
 
-        use rand::{Rng, thread_rng};
-        use rand::distributions::Uniform;
-
-        let mut rng = thread_rng();
-        let side = Uniform::new(-1.0, 1.0);
+        let side = rand::distributions::Uniform::new(-1.0, 1.0);
 
         let random_vec: Vec::<f32> = (0..length).map(|_| rng.sample(side)).collect();
         return Self { data: random_vec, length};
@@ -108,35 +100,9 @@ impl Descriptor {
         }
     }
 
-    pub fn yaml(&self) -> String {
-
-        let mut s = "[".to_string();
-        for (i, item) in self.data.iter().enumerate() {
-            if i != 0 { s += ","; }
-            s += &format!("{:.3}", item);
-        }
-        s += "]";
-
-        return s;
-    }
-
-    pub fn add_small_noise(&mut self) {
-
-        let mut rng = rand::thread_rng();
-        let noise: Vec<f32> = (0..self.length).map(|_| rng.gen_range(0.0..0.0001)).collect();
-
-        let mut result: Vec<f32> = vec![0.0; self.length];
-
-        for i in 0..self.length {
-            result[i] = self.data[i] + noise[i];
-        }
-
-        self.data = result;
-    }
 }
 
 #[derive(PartialEq, Clone, Serialize)]
-//pub struct CompoundIdentifier(pub [u8; IDENTIFIER_SIZE]);
 pub struct CompoundIdentifier(pub String);
 
 impl CompoundIdentifier {
@@ -181,19 +147,8 @@ impl CompoundIdentifier {
 
     }
 
-    pub fn from_ascii_array(data: &[u8], offset: usize, length: usize) -> Self {
+    pub fn random(rng: &mut impl Rng) -> Self {
 
-        let bytes = &data[offset..offset + length];
-
-        return Self::_from_arr(bytes);
-
-
-    }
-
-
-    pub fn random() -> Self {
-
-        let mut rng = rand::thread_rng();
         let mut bytes = [0u8; IDENTIFIER_SIZE];
 
 
@@ -223,15 +178,8 @@ impl CompoundIdentifier {
 
 
 
-// To use the `{}` marker, the trait `fmt::Display` must be implemented
-// manually for the type.
 impl fmt::Debug for CompoundIdentifier {
-    // This trait requires `fmt` with this exact signature.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Write strictly the first element into the supplied output
-        // stream: `f`. Returns `fmt::Result` which indicates whether the
-        // operation succeeded or failed. Note that `write!` uses syntax which
-        // is very similar to `println!`.
         write!(f, "{}", self.to_string())
     }
 }
@@ -265,7 +213,7 @@ impl Parser{
      pub fn get_f32_from_array(data: &[u8], offset: usize) -> Result<f32, Error> {
             let bytes = &data[offset..offset + 4];
             let known_size_array = coerce_f32(bytes);
-            let attempted_f32 = BigEndian::read_f32(&known_size_array);
+            let attempted_f32 = LittleEndian::read_f32(&known_size_array);
             Ok(attempted_f32)
         }
 
@@ -278,7 +226,7 @@ impl Parser{
             for _ in 0..length {
                 let bytes = &data[curr_offset..curr_offset + 4];
                 let known_size_array = coerce_f32(bytes);
-                let attempted_f32 = BigEndian::read_f32(&known_size_array);
+                let attempted_f32 = LittleEndian::read_f32(&known_size_array);
                 vec.push(attempted_f32);
                 curr_offset += 4;
             }

@@ -1,0 +1,31 @@
+# Adding or changing a library is an edit here, never in code.
+# Binding is uvicorn's --host and --port, not this file.
+
+embedding:
+  model: salsa16
+  revision: null
+  device: null
+  # Where model weights are cached. Null uses the Hugging Face default,
+  # which fails if ~/.cache/huggingface is not writable.
+  cache_dir: null
+
+cache:
+  ttl_seconds: 21600
+  max_entries: 5000
+
+limits:
+  max_smiles_length: 150
+  max_num_neighbors: 96
+  # POST /api/search/batch
+  max_batch_size: 10000
+  # A second concurrent batch gets 429 rather than queueing behind the first.
+  batch_concurrency: 1
+  batch_timeout_seconds: 300.0
+
+libraries:
+  - name: real161m
+    display: "Enamine REAL (161M)"
+    description: "161,408,959 make-on-demand compounds from Enamine REAL"
+    url: http://127.0.0.1:3000
+    max_neighbors: 1024
+    num_neighbors: 8

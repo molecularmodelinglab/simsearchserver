@@ -1,0 +1,128 @@
+[
+  {
+    "label": "salsa16_1m",
+    "index": "/work/users/e/n/enesk/simsearchserver/data/index/v2/salsa16_1m",
+    "desc_length": 16,
+    "startup_s": 0.013911008834838867,
+    "num_records": 1000000,
+    "internal_nodes": 6387,
+    "latency": {
+      "1": {
+        "median_ms": 0.20095054060220718,
+        "p95_ms": 0.22601336240768433,
+        "min_ms": 0.18808431923389435
+      },
+      "10": {
+        "median_ms": 3.949499689042568,
+        "p95_ms": 9.01869498193264,
+        "min_ms": 0.5751568824052811
+      },
+      "100": {
+        "median_ms": 10.613391175866127,
+        "p95_ms": 15.91455563902855,
+        "min_ms": 4.01734746992588
+      }
+    },
+    "recall": {
+      "1": {
+        "recall": 0.98,
+        "exact_sets": 49,
+        "queries": 50
+      },
+      "10": {
+        "recall": 1.0,
+        "exact_sets": 50,
+        "queries": 50
+      },
+      "100": {
+        "recall": 0.9992,
+        "exact_sets": 46,
+        "queries": 50
+      }
+    }
+  },
+  {
+    "label": "salsa16_2500k",
+    "index": "/work/users/e/n/enesk/simsearchserver/data/index/v2/salsa16_2500k",
+    "desc_length": 16,
+    "startup_s": 0.511951208114624,
+    "num_records": 2500000,
+    "internal_nodes": 15978,
+    "latency": {
+      "1": {
+        "median_ms": 0.20586047321558,
+        "p95_ms": 0.2330690622329712,
+        "min_ms": 0.19109994173049927
+      },
+      "10": {
+        "median_ms": 6.694348528981209,
+        "p95_ms": 17.33715459704399,
+        "min_ms": 0.6803590804338455
+      },
+      "100": {
+        "median_ms": 18.405146896839142,
+        "p95_ms": 31.911782920360565,
+        "min_ms": 5.413686856627464
+      }
+    },
+    "recall": {
+      "1": {
+        "recall": 1.0,
+        "exact_sets": 50,
+        "queries": 50
+      },
+      "10": {
+        "recall": 1.0,
+        "exact_sets": 50,
+        "queries": 50
+      },
+      "100": {
+        "recall": 0.9994,
+        "exact_sets": 47,
+        "queries": 50
+      }
+    }
+  },
+  {
+    "label": "salsa16_full",
+    "index": "/work/users/e/n/enesk/simsearchserver/data/index/v2/salsa16_full",
+    "desc_length": 16,
+    "startup_s": 0.5137078762054443,
+    "num_records": 4805556,
+    "internal_nodes": 30755,
+    "latency": {
+      "1": {
+        "median_ms": 0.20367000252008438,
+        "p95_ms": 0.2291891723871231,
+        "min_ms": 0.19038282334804535
+      },
+      "10": {
+        "median_ms": 10.86187083274126,
+        "p95_ms": 27.258971706032753,
+        "min_ms": 0.6190035492181778
+      },
+      "100": {
+        "median_ms": 29.041698202490807,
+        "p95_ms": 50.81961676478386,
+        "min_ms": 4.81061078608036
+      }
+    },
+    "recall": {
+      "1": {
+        "recall": 1.0,
+        "exact_sets": 50,
+        "queries": 50
+      },
+      "10": {
+        "recall": 0.998,
+        "exact_sets": 49,
+        "queries": 50
+      },
+      "100": {
+        "recall": 0.9992,
+        "exact_sets": 46,
+        "queries": 50
+      }
+    }
+  }
+]

@@ -1,16 +1,11 @@
-//! Holds structs and methods for representing nodes (both internal and leaf) of kd tree.
-//!
-//! Structs can be sent to and from fixed-length byte arrays to be swapped back and forth from disk
-//!
+//! Internal nodes, converted to and from fixed-length byte arrays on disk.
 
-use rand::prelude::*;
 
-use crate::error::Error;
 use crate::data::{Parser};
 use crate::page::PageType;
 use crate::layout;
 
-use byteorder::{ByteOrder, BigEndian};
+use byteorder::{ByteOrder, LittleEndian};
 use std::fmt;
 
 use std::convert::TryInto;
@@ -23,12 +18,7 @@ pub enum PagePointer {
 
 impl fmt::Display for PagePointer {
 
-    // This trait requires `fmt` with this exact signature.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        // Write strictly the first element into the supplied output
-        // stream: `f`. Returns `fmt::Result` which indicates whether the
-        // operation succeeded or failed. Note that `write!` uses syntax which
-        // is very similar to `println!`.
         match self {
             PagePointer::Node(node_offset) => {
                 write!(f, "NODE {:?}|{:?}", PageType::Node, node_offset)
@@ -40,12 +30,6 @@ impl fmt::Display for PagePointer {
     }
 }
 
-
-#[derive(Debug, PartialEq)]
-pub enum NodeType{
-    Internal,
-    Leaf,
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct InternalNode {
@@ -69,17 +53,6 @@ impl InternalNode {
         };
 
         return node
-    }
-
-    pub fn pretty(&self) -> String {
-
-        return format!("SA: {:?} SV: {:?}
-                            LC: {}
-                            RC: {}",
-                        self.split_axis,
-                        self.split_value,
-                        self.left_child_pointer,
-                        self.right_child_pointer)
     }
 
     pub fn from_slice(node_slice: &[u8]) -> Result<InternalNode, String> {
@@ -123,7 +96,7 @@ impl InternalNode {
             PagePointer::Node(x) => (1, x.try_into().unwrap()),
             PagePointer::Leaf(x) => (2, x.try_into().unwrap()),
         };
-        BigEndian::write_u64(slice, value);
+        LittleEndian::write_u64(slice, value);
 
 
         arr[layout::LEFT_CHILD_TYPE_START] = node_type as u8;
@@ -134,7 +107,7 @@ impl InternalNode {
             PagePointer::Node(x) => (1, x.try_into().unwrap()),
             PagePointer::Leaf(x) => (2, x.try_into().unwrap()),
         };
-        BigEndian::write_u64(slice, value);
+        LittleEndian::write_u64(slice, value);
 
         arr[layout::RIGHT_CHILD_TYPE_START] = node_type as u8;
 
@@ -142,7 +115,7 @@ impl InternalNode {
         arr[layout::SPLIT_AXIS_OFFSET] = self.split_axis as u8;
 
         let slice = &mut arr[layout::SPLIT_VALUE_OFFSET..layout::SPLIT_VALUE_OFFSET + layout::SPLIT_VALUE_SIZE];
-        BigEndian::write_f32(slice, self.split_value.try_into().unwrap());
+        LittleEndian::write_f32(slice, self.split_value.try_into().unwrap());
 
         return arr
     }

@@ -5,11 +5,13 @@ edition = "2021"
 
 [dependencies]
 kd_tree = { path = "../kd_tree" }
-hyper = {version = "0.14", features = ["full"]}
-tokio = {version = "*", features = ["full"]}
-bytes = "*"
-rand = "*"
-serde_json = "*"
-serde_yaml = "*"
-reqwest = "*"
+hyper = { version = "0.14", features = ["full"] }
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 clap = { version = "4.3.0", features = ["derive"] }
+serde_yaml = "0.9"
+rayon = "1.10"
+
+[lints]
+workspace = true

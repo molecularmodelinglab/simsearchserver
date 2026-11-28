@@ -7,6 +7,20 @@ kd_tree/test_data
 *.old
 *.log
 *.lock
-*cache*
+!rust_server/Cargo.lock
+.pytest_cache/
+.cache/
+*.cache
+*.venv*
+__pycache__
+*.egg-info
 out
+data/*
+!data/results/
+logs/
 
+# Frontend build artifacts
+node_modules
+web/dist
+web/public/RDKit_minimal.*
+.jobids_*

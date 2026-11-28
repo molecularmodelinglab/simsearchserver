@@ -1,0 +1,170 @@
+[
+  {
+    "label": "salsa16_1m",
+    "index": "/work/users/e/n/enesk/simsearchserver/data/index/v2/salsa16_1m",
+    "desc_length": 16,
+    "startup_s": 0.5128166675567627,
+    "num_records": 1000000,
+    "internal_nodes": 6387,
+    "latency": {
+      "1": {
+        "median_ms": 1.7122598364949226,
+        "p95_ms": 2.631884068250656,
+        "min_ms": 0.26737526059150696
+      },
+      "10": {
+        "median_ms": 8.813370950520039,
+        "p95_ms": 47.44073189795017,
+        "min_ms": 2.446712926030159
+      },
+      "100": {
+        "median_ms": 23.93281925469637,
+        "p95_ms": 37.756793200969696,
+        "min_ms": 11.038558557629585
+      }
+    },
+    "recall": {
+      "1": {
+        "recall": 0.98,
+        "exact_sets": 49,
+        "queries": 50
+      },
+      "10": {
+        "recall": 1.0,
+        "exact_sets": 50,
+        "queries": 50
+      },
+      "100": {
+        "recall": 0.9992,
+        "exact_sets": 46,
+        "queries": 50
+      }
+    }
+  },
+  {
+    "label": "salsa16_2500k",
+    "index": "/work/users/e/n/enesk/simsearchserver/data/index/v2/salsa16_2500k",
+    "desc_length": 16,
+    "startup_s": 0.5125918388366699,
+    "num_records": 2500000,
+    "internal_nodes": 15978,
+    "latency": {
+      "1": {
+        "median_ms": 1.608302816748619,
+        "p95_ms": 2.1644998341798782,
+        "min_ms": 0.2695489674806595
+      },
+      "10": {
+        "median_ms": 15.09065181016922,
+        "p95_ms": 222.31829911470413,
+        "min_ms": 3.2238904386758804
+      },
+      "100": {
+        "median_ms": 54.490271024405956,
+        "p95_ms": 84.47591587901115,
+        "min_ms": 13.669466599822044
+      }
+    },
+    "recall": {
+      "1": {
+        "recall": 1.0,
+        "exact_sets": 50,
+        "queries": 50
+      },
+      "10": {
+        "recall": 1.0,
+        "exact_sets": 50,
+        "queries": 50
+      },
+      "100": {
+        "recall": 0.9994,
+        "exact_sets": 47,
+        "queries": 50
+      }
+    }
+  },
+  {
+    "label": "salsa16_full",
+    "index": "/work/users/e/n/enesk/simsearchserver/data/index/v2/salsa16_full",
+    "desc_length": 16,
+    "startup_s": 0.5138955116271973,
+    "num_records": 4805556,
+    "internal_nodes": 30755,
+    "latency": {
+      "1": {
+        "median_ms": 1.710020937025547,
+        "p95_ms": 2.42692232131958,
+        "min_ms": 0.2627074718475342
+      },
+      "10": {
+        "median_ms": 24.337763898074627,
+        "p95_ms": 605.4299511015415,
+        "min_ms": 3.048606216907501
+      },
+      "100": {
+        "median_ms": 77.30029709637165,
+        "p95_ms": 108.8903620839119,
+        "min_ms": 13.615293428301811
+      }
+    },
+    "recall": {
+      "1": {
+        "recall": 1.0,
+        "exact_sets": 50,
+        "queries": 50
+      },
+      "10": {
+        "recall": 0.998,
+        "exact_sets": 49,
+        "queries": 50
+      },
+      "100": {
+        "recall": 0.9992,
+        "exact_sets": 46,
+        "queries": 50
+      }
+    }
+  },
+  {
+    "label": "salsa8_full",
+    "index": "/work/users/e/n/enesk/simsearchserver/data/index/v2/salsa8_full",
+    "desc_length": 8,
+    "startup_s": 0.513718843460083,
+    "num_records": 4805556,
+    "internal_nodes": 17055,
+    "latency": {
+      "1": {
+        "median_ms": 1.816735602915287,
+        "p95_ms": 3.094632178544998,
+        "min_ms": 0.26048533618450165
+      },
+      "10": {
+        "median_ms": 35.176265984773636,
+        "p95_ms": 91.8481145054102,
+        "min_ms": 0.5967579782009125
+      },
+      "100": {
+        "median_ms": 59.08263102173805,
+        "p95_ms": 107.95257613062859,
+        "min_ms": 1.709410920739174
+      }
+    },
+    "recall": {
+      "1": {
+        "recall": 1.0,
+        "exact_sets": 50,
+        "queries": 50
+      },
+      "10": {
+        "recall": 0.998,
+        "exact_sets": 49,
+        "queries": 50
+      },
+      "100": {
+        "recall": 0.999,
+        "exact_sets": 45,
+        "queries": 50
+      }
+    }
+  }
+]

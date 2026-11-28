@@ -1,0 +1,1491 @@
+[
+  {
+    "anchor": 141,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 141,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 141,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 141,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 269,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 269,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 269,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 269,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "anchor": 425,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 425,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 425,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 425,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 865,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 865,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 865,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 865,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      3
+    ]
+  },
+  {
+    "anchor": 1137,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 1137,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 1137,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 1137,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 1456,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 1456,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 1456,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 1456,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 1717,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      2,
+      3
+    ]
+  },
+  {
+    "anchor": 1717,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 1717,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      2
+    ]
+  },
+  {
+    "anchor": 1717,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 2096,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      2,
+      4
+    ]
+  },
+  {
+    "anchor": 2096,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  {
+    "anchor": 2096,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1,
+      2,
+      4
+    ]
+  },
+  {
+    "anchor": 2096,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  {
+    "anchor": 3789,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 3789,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 3789,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 3789,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 4053,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 4053,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 4053,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 4053,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 4499,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 4499,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 4499,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 4499,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "anchor": 6219,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 6219,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 6219,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 6219,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 8802,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 8802,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 8802,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 8802,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 8833,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 8833,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 8833,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 8833,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 12834,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 12834,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 12834,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 12834,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 13446,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 13446,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 13446,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 13446,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 13828,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 13828,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 13828,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 13828,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  {
+    "anchor": 14936,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 14936,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 14936,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 14936,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 15329,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 15329,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2,
+      4
+    ]
+  },
+  {
+    "anchor": 15329,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "anchor": 15329,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2,
+      3,
+      4,
+      5
+    ]
+  },
+  {
+    "anchor": 19628,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 19628,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 19628,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 19628,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 20085,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 20085,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 20085,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1,
+      3,
+      4
+    ]
+  },
+  {
+    "anchor": 20085,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2,
+      3
+    ]
+  },
+  {
+    "anchor": 21037,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 21037,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 21037,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 21037,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 23871,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 23871,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 23871,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 23871,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 24994,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 24994,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 24994,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 24994,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 25358,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 25358,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      3
+    ]
+  },
+  {
+    "anchor": 25358,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 25358,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      3
+    ]
+  },
+  {
+    "anchor": 26127,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 26127,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 26127,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 26127,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 26914,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 26914,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 26914,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 26914,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 27004,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 27004,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 27004,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 27004,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 27539,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 27539,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 27539,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 27539,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 27800,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 27800,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      2
+    ]
+  },
+  {
+    "anchor": 27800,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      2
+    ]
+  },
+  {
+    "anchor": 27800,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 30159,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 30159,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 30159,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 30159,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 30647,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 30647,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 30647,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 30647,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 31449,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 31449,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 31449,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 31449,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 31669,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 31669,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2,
+      3,
+      4
+    ]
+  },
+  {
+    "anchor": 31669,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 31669,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 32202,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 32202,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 32202,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 32202,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 32280,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 32280,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 32280,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 32280,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 33348,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 33348,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 33348,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 33348,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 33356,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 33356,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 33356,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 33356,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 36262,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 36262,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      4
+    ]
+  },
+  {
+    "anchor": 36262,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 36262,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 36281,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 36281,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 36281,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 36281,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 38034,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 38034,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 38034,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 38034,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 40429,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 40429,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 40429,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 40429,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 40574,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 40574,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 40574,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 40574,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 42119,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 42119,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 42119,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 42119,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 42291,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 42291,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 42291,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 42291,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 42656,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 42656,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 42656,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 42656,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      2
+    ]
+  },
+  {
+    "anchor": 42948,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 42948,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 42948,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 42948,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1,
+      4
+    ]
+  },
+  {
+    "anchor": 45365,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 45365,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 45365,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 45365,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 46484,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 46484,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 46484,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 46484,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 48235,
+    "model": "salsa8",
+    "ordering": "by distance",
+    "ged_found": []
+  },
+  {
+    "anchor": 48235,
+    "model": "salsa8",
+    "ordering": "reranked T(1,0)",
+    "ged_found": []
+  },
+  {
+    "anchor": 48235,
+    "model": "salsa16",
+    "ordering": "by distance",
+    "ged_found": [
+      1
+    ]
+  },
+  {
+    "anchor": 48235,
+    "model": "salsa16",
+    "ordering": "reranked T(1,0)",
+    "ged_found": [
+      1
+    ]
+  }
+]
