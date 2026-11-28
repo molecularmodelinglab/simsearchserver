@@ -69,7 +69,7 @@ you want to index directly.
 
 ```bash
 rust_server/target/release/builder build-from-files \
-    --filenames 'data/prepared/projection/*.parquet' \
+    --filenames data/prepared/projection/*.parquet \
     --config-filename data/prepared/index.yaml \
     --fingerprints data/prepared/fingerprint
 ```

@@ -195,6 +195,42 @@ production host, 10,000 should cost ~2 s in the index and ~2.4 s on the GPU.
   misaligns every row after the first. The service validates first, embeds with
   `filter_input=False`, and checks the returned count.
 
+## Brute force, priced
+
+Enamine In-Stock plus the supermutant set, 5,038,800 compounds, 1,000 anchor
+queries, recall is the depth-d relative in the top 5. GPU is one L40S; CPU is
+8 threads per task over a 100-task array. All five representations cover the
+same rows, joined on compound ID.
+
+| representation | width | GPU h/1M | CPU core-h/1M | GPU vs CPU | depth-1 | depth-2 |
+|---|---|---|---|---|---|---|
+| PCA-10 | 10 f32 | 0.25 | 91.1 | 364x | 0.500 | 0.142 |
+| salsa16 | 16 f32 | 0.42 | 113.8 | 271x | 0.655 | 0.190 |
+| salsa24 | 24 f32 | 0.50 | 131.0 | 262x | 0.654 | 0.168 |
+| Morgan | 512 bit | 1.11 | 305.6 | 275x | 0.682 | 0.210 |
+| **atom pairs** | 512 bit | 1.11 | 321.1 | 289x | **0.885** | **0.526** |
+| **kd-tree k=128** | 10 f32 | — | **0.325** | — | **0.917** | 0.508 |
+| kd-tree k=1024 | 10 f32 | — | 0.863 | — | 0.903 | 0.583 |
+
+**The index beats exhaustive atom-pair search on both axes at once**: 0.325
+core-hours per million queries against 321, and 91.7% depth-1 against 88.5%.
+Scanning all 5,038,800 compounds against the full library costs 1,618 core-hours
+or 5.6 GPU-hours by atom pairs, and 1.6 core-hours through the index — **988x**.
+One CPU core running the index also beats a whole L40S scanning atom pairs.
+
+- **Exhaustive embedding search is the worst of both.** PCA-10 brute force is
+  the cheapest scan and the least accurate thing measured, at 50.0% depth-1
+  against the index's 91.7% over the same vectors. Retrieval order is not
+  ranking order; the index plus re-ranking is not an approximation of the scan,
+  it is a better answer.
+- **salsa24 costs more than salsa16 and matches it** (0.654 against 0.655), as
+  at 161M.
+- **Optimal k moves with library size.** At 5M, k=128 beats k=1024 on depth-1
+  (91.7% against 90.3%) because a wider retrieval feeds the re-ranker more
+  distractors; at 161M k=1024 wins decisively (98.0% against 82.7%). Depth-2
+  still prefers the wider retrieval at both scales.
+- GPU is 262-364x a CPU core, widest for the narrowest vectors.
+
 ## Metrics that did not work
 
 MCS and Tanimoto averaged over the top 5 do not separate models at this scale
